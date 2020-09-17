@@ -57,6 +57,8 @@ private synchronized static void addCount() {
 
 （3）将结果写回内存。
 
+![image-20200915201437426](Java 并发编程.assets/image-20200904233001195.png)
+
 这个过程在多线程下就可能出现如下现象：
 
 ![image-20200915201437426](Java 并发编程.assets/image-20200915201437426.png)
