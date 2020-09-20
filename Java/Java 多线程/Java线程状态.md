@@ -174,6 +174,53 @@ Thread-2End------
 
    * 线程唤醒后需要竞争到锁（monitor）。
 
+#### 验证 notify 或interrupt 后的线程状态
+
+```java
+public class Uninterruptible {
+
+    public synchronized void test() {
+        System.out.println(Thread.currentThread().getName() + "进入同步代码块");
+        try {
+            this.wait();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+    public synchronized void test1() {
+        System.out.println(Thread.currentThread().getName() + "进入同步代码块");
+        this.notifyAll();
+        try {
+            Thread.sleep(88888);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        Uninterruptible u = new Uninterruptible();
+        Thread t1 = new Thread(() -> u.test());
+        t1.start();
+        Thread.sleep(1000);
+        Thread t2 = new Thread(() -> {
+            //t1.interrupt();
+            u.test1();
+        });
+        t2.start();
+
+        Thread.sleep(1000);
+        System.out.println(t1.getState());
+        System.out.println(t2.getState());
+    }
+}
+//Thread-0进入同步代码块
+//Thread-1进入同步代码块
+//BLOCKED
+//TIMED_WAITING
+```
+
+notify 或interrupt 后的线程t1均变为 BLOCKED 状态。
+
 ### Thread.sleep(long millis)
 
 Thread.sleep() 方法的作用是让当前线程暂停指定的时间（毫秒）， 使当前线程进入阻塞状态（其他阻塞），但不释放任何锁资源，一定时间后线程自动进入runnable状态。给其它线程执行机会的最佳方式 。
@@ -341,10 +388,6 @@ public class JoinTest {
 ```
 
 对比两段代码的执行结果很容易发现，在没有使用join方法之间，线程是并发执行的，而使用join方法后，所有线程是顺序执行的。 
-
-
-
-
 
 
 
