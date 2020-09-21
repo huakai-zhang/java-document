@@ -389,7 +389,74 @@ public class JoinTest {
 
 对比两段代码的执行结果很容易发现，在没有使用join方法之间，线程是并发执行的，而使用join方法后，所有线程是顺序执行的。 
 
+### t.interrupt()
 
+打断标记：线程是否被打断，true表示被打断了，false表示没有
 
+interrupt()方法用于中断线程
 
+1. 可以打断sleep、wait、join、IO阻塞等情况，将会抛出``InterruptedException`` 异常，但是打断后,线程的打断标记还是false
+2. 打断正常线程 ，线程不会真正被中断，但是线程的打断标记为true
+3. 等待获取锁的线程也不可被中断，参考“synchronized 不可被中断特性”
+
+interrupted()  获取线程的打断标记，调用后清空打断标记 即如果获取为true 调用后打断标记为false (不常用)
+
+isInterrupted()  获取线程的打断标记 ,调用后不会修改线程的打断标记
+
+```java
+// 打断正常线程 ，线程不会真正被中断
+public class InterruptionInJava {
+    public static void main(String[] args) throws InterruptedException {
+        Thread testThread = new Thread(() -> {
+            while(true){
+                if(Thread.currentThread().isInterrupted()){
+                    System.out.println("Yes,I am interruted,but I am still running");
+                }else{
+                    System.out.println("not yet interrupted");
+                }
+            }
+        });
+        testThread.start();
+        Thread.sleep(1000);
+		
+        testThread.interrupt();
+        System.out.println("main end");
+    }
+}
+// 使用 interrupt() + isInterrupted()来中断线程
+public class InterruptionInJava {
+    public static void main(String[] args) throws InterruptedException {
+        Thread testThread = new Thread(() -> {
+            while(!Thread.currentThread().isInterrupted()){
+                System.out.println("I am still running");
+            }
+            System.out.println("使用 interrupt() + isInterrupted()来中断线程，线程结束了");
+        });
+        testThread.start();
+        Thread.sleep(100);
+
+        testThread.interrupt();
+        Thread.sleep(100);
+        System.out.println("main end");
+    }
+}
+// 使用 interrupt() + InterruptedException来中断线程
+public class InterruptionInJava01 {
+    public static void main(String[] args) throws InterruptedException {
+        Thread testThread = new Thread(() -> {
+            try {
+                Thread.sleep(888888);
+            } catch (InterruptedException e) {
+                System.out.println("caught exception right now: "+e);
+            }
+        });
+        testThread.start();
+        Thread.sleep(10);
+
+        testThread.interrupt();
+        Thread.sleep(10);
+        System.out.println("main end");
+    }
+}
+```
 
