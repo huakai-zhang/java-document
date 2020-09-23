@@ -191,52 +191,118 @@ MySQL 中有专门负责优化SELECT语句的优化器模块，主要功能：�
 
 ``EXPLAIN(执行计划)`` 用EXPLAIN关键字可以模拟优化器执行SQL语句，从而知道MySQL是如何处理你的SQL语句的。
 
-分析你的查询语句或是结构的性能瓶颈。
+分析你的查询语句或是结构的性能瓶颈，主要功能：
 
-#### QEP
+* 表的读取顺序
+* 数据读取操作的操作类型
+* 哪些索引可以使用
+* 哪些索引被实际使用
+* 表之间的引用
+* 每张表有多少行被优化器查询
 
-Query Execution Plan 打印执行计划，加上 explain：
+``QEP(Query Execution Plan)`` 打印执行计划，加上 explain：
 
-```java
+```mysql
 EXPLAIN SELECT * FROM user
 ```
 
-先看一下在MySQL Explain功能中展示的各种信息的解释：
+![image-20200923195934590](mysql基础.assets/image-20200923195934590.png)
 
-- ID：Query Optimizer 所选定的执行计划中查询的序列号 
-- Select_type：所使用的查询类型，主要有以下这几种查询类型： 
+#### id
 
- <ul> 
-  - DEPENDENT SUBQUERY：子查询中内层的第一个 SELECT，依赖于外部查询的结果集 
-  - DEPENDENT UNION：子查询中的UNION， 且为UNION中从第二个SELECT开始的后面所有SELECT，同样依赖于外部查询的结果集 
-  - PRIMARY：子查询中的最外层查询，注意并不是主键查询 
-  - SIMPLE：除子查询或者UNION之外的其他查询 
-  - SUBQUERY：子查询内层查询的第一个SELECT, 结果不依赖于外部查询结果集 
-  - UNCACHEABLE SUBQUERY：结果集无法缓存的子查询 
-  - UNION：UNION语句中第二个SELECT开始的后面所有SELECT, 第一个SELECT为PRIMARY 
-  - UNION RESULT：UNION中的合并结果 
- </ul>  
+select 查询的序列号，包含一组数字，表示查询中执行select子句或操作表的顺序。
 
-- Table：显示这一步所访问的数据库中的表的名称 
-- Type：告诉我们对表所使用的访问方式，主要包含如下集中类型 
+id相同，执行顺序由上至下：
 
- <ul> 
-  - all：全表扫描 
-  - const：读常量，且最多只会有一条记录匹配,由于是常量，所以实际上只需要读一次 
-  - eq_ ref：最多只会有一条匹配结果，一般是通过主键或者唯一键索引来访问 
-  - fulltext 
-  - index：全索引扫描 
-  - index_ merge：查询中同时使用两个(或更多)索引，然后对索引结果进行merge之后再读取表数据 
-  - index_subquery：子查询中的返回结果字段组合是一-个索引(或索引组合)，但不是一个主键或者唯一索引 
-  - rang：索引范围扫描 
-  - ref: Join：语中被驱动表索引引用查询 
-  - ref_or_null：与ref的唯一区别就是在使用索引引用查询之外再增加一个空值的查询 
-  - system：系统表，表中只有一行数据 
-  - unique_ subquery：子查询中的返回结果字段组合是主键或者唯-约束 
+![image-20200923200411220](mysql基础.assets/image-20200923200411220.png)
+
+id不同，如果是子查询，id的序号会递增，id值越大优先级越高，越先被执行：
+
+![image-20200923200713777](mysql基础.assets/image-20200923200713777.png)
+
+id相同不同同时存在：
+
+![image-20200923201206002](mysql基础.assets/image-20200923201206002.png)
+
+id如果相同，可以认为是一组，从上往下执行；在所有组中，id值越大，优先级越高，越先执行。
+
+``derived 衍生``
+
+#### select_type
+
+查询的类型，主要用于区别普通查询、联合查询、子查询等的复杂查询，主要有以下这几种查询类型：
+
+* ``SIMPLE`` 简单的 select 查询，不包含子查询或 UNION
+* ``PRIMARY`` 查询中若包含任何复杂的子查询，最外层查询则被标记为PRIMARY 
+
+ - ``SUBQUERY``  在select 或 where 列表中包含了子查询
+ - ``DERIVED`` 在from列表中包含的子查询被标记为DETIVED，MySQL 会递归执行这些子查询，把结果放在临时表里 
+  - ``UNION`` 若第二个 select 出现在 UNION 之后，则被标记为 UNION；若UNION包含在FROM子句的子查询中，外层 select 将被标记为：DERIVED
+  - ``UNION RESULT`` 从 UNION 表获取结果的 select 
+
+#### table
+
+显示这一行的数据的表的名称 
+
+#### type
+
+访问类型，显示查询使用了何种类型。
+
+从最好到最差依次是：system>const>eq_ref>ref>range>index>ALL 
+
+一般来说，得保证查询至少达到range级别，最好能达到ref。
+
+
+  - ``system`` 表只有一行记录（等于系统表）这是const类型的特例，平时很少出现 
+
+  - ``const`` 表示通过索引一次就能找到（单表），const用于比较primary key 或者unique索引。因为只匹配一行数据，所以很快。如将逐渐置于where列表中，MySQL 就能将该查询转换为一个常量
+
+    ```mysql
+    EXPLAIN SELECT * FROM tb_emp
+    WHERE tb_emp.id = 1
+    ```
+
+  - ``eq_ ref`` 唯一性索引扫描，对于每个索引键，表中只会有一条匹配结果(对于前表的每一行，后表只有一行被扫描)，常见于主键或者唯一键索引扫描
+
+    ```mysql
+    EXPLAIN SELECT * FROM tb_emp,tb_dept
+    WHERE tb_emp.deptId = tb_dept.id
+    ```
+
+  - ``ref`` 非唯一索引扫描，返回匹配某个单独值的所有行。本质上也是一种索引访问，它返回所有匹配单个单独值的行，然而，它可能会找到多个符合条件的行，所以应该属于查找和扫描的混合体
+
+    ```mysql
+    # 为 name 列创建普通索引
+    EXPLAIN SELECT * FROM tb_emp
+    WHERE tb_emp.name = 'z3'
+    ```
+
+  - ``range`` 只检索给定范围的行，使用一个索引来选择行。key列显示使用了哪个索引。一般就是在你的where语句中出现了between、<、>、in等的查询，这种范围扫描索引扫描比全表扫描要好，因为他只需要开始索引的某一点，而结束语另一点，不用扫描全部索引（可能和最终得到数的结果有关，数量多为ALL）
+
+    ```mysql
+    # 为 deptId 列创建普通索引
+    EXPLAIN SELECT * FROM tb_emp
+    WHERE deptId > 3
+    ```
+
+  - ``index`` Full Index Scan,index与ALL区别为index类型只遍历索引树。这通常比ALL快，因为索引文件通常比数据文件小。
+
+    （也就是说虽然all和index都是读全表，但index是从索引中读取的，而all是从硬盘中读的）
+
+    ```mysql
+    EXPLAIN SELECT id FROM tb_emp
+    EXPLAIN SELECT deptId FROM tb_emp
+    ```
+
+  - ``all`` Full Table Scan，全表扫描 
+
   - 依次从好到差:system，const，eq_ref，ref，fulltext，ref_or_null， unique_subquery，index_subquery，range，index_merge，index，ALL 
- </ul>  
 
-- Possible_ _keys: 该查询可以利用的索引，如果没有任何索引可以使用，就会显示成null,这一项内容对于优化时候索引的调整非常重要 
+#### possible_ _keys
+
+该查询可以利用的索引，如果没有任何索引可以使用，就会显示成null,这一项内容对于优化时候索引的调整非常重要 
+
+
 - Key: MySQL Query Optimizer 从possible_ keys 中所选择使用的索引 
 - Key_ len: 被选中使用索引的索引键长度 
 - Ref:列出是通过常量(const) ，还是某个表的某个字段(如果是join)来过滤(通过key)的 
