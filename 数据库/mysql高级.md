@@ -290,6 +290,76 @@ BTree索引的数据结构如下：
 
 索引的选择性是指索引列中不同值的数目与表中记录数的比。如果一个表中有2000条记录，表索引列有1980个不同的值，那么这个索引的选择性就是1980/2000=0.99。一个索引的选择性越接近1，这个索引的效率就越高。
 
+### 1.6 索引优化
+
+#### 1.6.1 索引分析
+
+##### 单表
+
+```mysql
+CREATE TABLE `article` (
+  `id` int(10) NOT NULL AUTO_INCREMENT,
+  `author_id` int(10) NOT NULL,
+  `category_id` int(10) NOT NULL,
+  `views` int(10) NOT NULL,
+  `comments` int(10) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `content` text NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8;
+
+INSERT INTO `article` VALUES ('1', '1', '1', '1', '1', '1', '1');
+INSERT INTO `article` VALUES ('2', '2', '2', '2', '2', '2', '2');
+INSERT INTO `article` VALUES ('3', '1', '1', '3', '3', '3', '3');
+
+# 查询 category_id 为1且comments大于1的情况下，views最多的article_id
+EXPLAIN SELECT * FROM article WHERE category_id = 1 AND comments > 1 ORDER BY views DESC LIMIT 1;
+```
+
+![1600941194560](mysql高级.assets/1600941194560.png)
+
+type 是 ALL，最坏的情况。Extra 里还出现了 Using filesort，也是最坏的情况，优化是必须的。
+
+```mysql
+# 创建索引
+create index idx_article_cv on article(category_id,comments,views);
+# 查看索引
+SHOW INDEX FROM article;
+# 执行 EXPLAIN
+```
+
+![1600942382041](mysql高级.assets/1600942382041.png)
+
+![1600942251790](mysql高级.assets/1600942251790.png)
+
+extra 里仍然使用了 Using filesort，但是建立的索引为什么没用？
+
+这里因为按照BTree 索引的工作原理，先排序 category_id，如果遇到相同的category_id则再排序comments，如果遇到相同的comments则再排序 views。
+
+当 comments 字段在联合索引里处于中间位置时，因 comments > 1条件是一个范围（所谓 range），MySQL无法利用索引在对后面的 views 部分进行索引，即 range类型查询字段后面的索引无效。
+
+```mysql
+# 删除索引
+DROP INDEX idx_article_cv ON article;
+# 重新建立索引
+create index idx_article_cv on article(category_id,views);
+# 执行 EXPLAIN
+```
+
+![1600942630435](mysql高级.assets/1600942630435.png)
+
+可以看到，type变为了ref，extra中的using filesort消失了，结果非常理想。
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -300,30 +300,72 @@ id如果相同，可以认为是一组，从上往下执行；在所有组中，
 
 #### possible_ _keys
 
-该查询可以利用的索引，如果没有任何索引可以使用，就会显示成null,这一项内容对于优化时候索引的调整非常重要 
+显示可能应用在这张表中的索引，一个或多个。
+
+查询涉及到的字段上若存在索引，则该索引被列出，但不一定被查询实际使用。如果没有任何索引可以使用，就会显示成null。
+
+#### key
+
+实际使用的索引。如果为null则没有使用索引，查询中若使用了``覆盖索引``，则索引和查询的select字段重叠。
+
+#### key_ len
+
+表示索引中使用的字节数，可通过该列计算查询中使用的索引的长度。在不损失精确性的情况下，长度越短越好。
+
+key_len显示的值为索引最大可能长度，并非实际使用长度，即key_len是根据表定义计算而得，不是通过表内检索出的。
+
+#### ref
+
+显示索引``那一列``被使用了，如果可能的话，是一个常数。那些列或常量被用于查找索引列上的值。
+
+查询中与其他表关联的字段，外键关系建立索引。
+
+#### rows
+
+根据表统计信息及索引选用情况，大致估算出找到所需的记录所需要读取的行数。
+
+#### extra
+
+包含不适合在其他列中显示但十分重要的额外信息：
 
 
-- Key: MySQL Query Optimizer 从possible_ keys 中所选择使用的索引 
-- Key_ len: 被选中使用索引的索引键长度 
-- Ref:列出是通过常量(const) ，还是某个表的某个字段(如果是join)来过滤(通过key)的 
-- Rows: MySQL Query Opt imizer通过系统收集到的统计信息估算出来的结果集记录条数 
-- Extra: 查询中每一步实现的额外细节信息，主要可能会是以下内容： 
+  - ``using filesort`` 说明 MySQL 会对数据使用一个外部的索引排序，而不是按照表内的索引顺序进行读取。MySQL 中无法利用索引完成的排序操作称为``文件排序``。
 
- <ul> 
-  - Distinct: 查找distinct值，所以当mysql找到了第一条匹配的结果后，将停止该值的查询而转为后面其他值的查询 
-  - Full scan on NULL key:子查询中的一种优化方式，主要在遇到无法通过索引访问null值的使用使用 
-  - Impossible WHERE noticed after reading const tables: MySQL Query Optimizer 通过收集到的统计信息判断出不可能存在结果 
-  - No tables: Query语句中使用FROM DUAL或者不包含任何FROM子句 
-  - Not exists: 在某些左连接中MySQL Query Opt imizer 所通过改变原有Query 的组成而使用的优化方法，可以部分减少数据访问次数 
-  - Range checked for each record (index map: N): 通过MySQL官方手册的描述，当MySQL Query Optimizer 没有发现好的可以使用的索引的时候，如果发现如果来自前面的表的列值已知，可能部分索引可以使用。对前面的表的每个行组合，MySQL 检查是否可以使用range或index_merge 访问方法来索取行。 
-  - Select tables optimized away: 当我们使用某些聚合函数来访问存在索引的某个字段的时候，MySQL Query Optimizer会通过索引而直接一次定 位到所需的数据行完成整个查询。当然，前提是在Query 中不能有GROUP BY操作。如使用MIN()或者MAX ()的时候; 
-  - Using filesort: 当我们的Query 中包含ORDER BY操作，而且无法利用索引完成排序操作的时候，MySQL Query Opt imizer不得不选择相应的排序算法来实现。 
-  - Usingindex:所需要的数据只需要在Index即可全部获得而不需要再到表中取数据 
-  - Using index for group-by: 数据访问和Using index一样， 所需数据只需要读取索引即可，而当Query 中使用了GROUP BY或者DISTINCT 子句的时候，如果分组字段也在索引中，Extra 中的信息就会是Using index for group-by; 
-  - Using temporary: 当MySQL 在某些操作中必须使用临时表的时候，在Extra信息中就会出现Using temporary 。主要常见于GROUP BY和ORDER BY等操作中。 
-  - Using where: 如果我们不是读取表的所有数据，或者不是仅仅通过索引就可以获取所有需要的数据，则会出现Using where 信息; 
-  - Using where with pushed condition: 这是一个仅仅在NDBCluster存储引擎中才会出现的信息，而且还需要通过打开Condition Pushdown 优化功能才可能会被使用。控制参数为 engine condition pushdown。 
- </ul> 
+  - ``using temporary`` 使用了临时表保存中间结果，MySQL在对查询结果排序时使用临时表。常见于排序order by 和分组查询 group by。
+
+  - ``using index`` 表示相应的select操作中使用了``覆盖索引（Coveing Index）``，避免访问了表的数据行，效率不错！
+    如果同时出现 using where，表明索引被用来执行索引键值的查找；
+    如果没有同时出现 using where，表面索引用来读取数据而非执行查找动作。
+
+    覆盖索引（Coveing Index），一说索引覆盖。就是 select 的数据列只用从索引中就能够得到，不必读取数据行，MySQL 可以利用索引返回 select 列表中的字段，而不必根据索引再次读取数据文件，换句话说查询列要被所建的索引覆盖。
+
+    注意：
+
+    如果要使用覆盖索引，一定要注意 select列表中只取出需要的列，不可 select *，因为如果将所有字段一起做索引会导致索引文件过大，查询性能下降。
+
+  - ``using where`` 表面使用了where过滤
+
+  - ``using join buffer`` 使用了连接缓存
+
+  - ``impossible where`` where子句的值总是false，不能用来获取任何元组
+
+  - ``select tables optimized away`` 在没有GROUPBY子句的情况下，基于索引优化MIN/MAX操作或者对于MyISAM存储引擎优化COUNT(*)操作，不必等到执行阶段再进行计算，查询执行计划生成的阶段即完成优化。
+
+  - ``distinct`` 优化distinct，在找到第一匹配的元组后即停止找同样值的工作
+
+### 5.4 示例分析
+
+![1600939704485](mysql基础.assets/1600939704485.png)
+
+第一行（执行顺序4）：id列为1，表示是union里的第一个select，select_tyep列的primary
+
+第二行（执行顺序2）：id列为3，是整个查询中第三个select的一部分。因查询包含在from中，所以为derived。【select id,name from t1 where other_column=''】
+
+第三行（执行顺序3）：select列表中的子查询select_type为subquery，为整个查询中的第二个select。【select id from t3】
+
+第四行（执行顺序1）：select_type为union，说明第四个select是union里的第二个select，最先执行【select name,id from t2】
+
+第五行（执行顺序5）：代表从union的临时表中读取行的阶段，table列的<union1,4>表示用第一个和第四个select的结果进行union操作。【两个结果union操作】
 
 
 
