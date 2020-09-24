@@ -1,3 +1,5 @@
+
+
 ## 1 索引优化分析
 
 ### 1.1 SQL 性能下降原因
@@ -350,13 +352,240 @@ create index idx_article_cv on article(category_id,views);
 
 可以看到，type变为了ref，extra中的using filesort消失了，结果非常理想。
 
+##### 双表
 
+```mysql
+CREATE TABLE `book` (
+  `bookid` int(11) NOT NULL AUTO_INCREMENT,
+  `card` varchar(255) NOT NULL,
+  PRIMARY KEY (`bookid`)
+) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8;
 
+DROP TABLE IF EXISTS `class`;
+CREATE TABLE `class` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `card` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=41 DEFAULT CHARSET=utf8;
 
+#20次
+insert into book(card) values (FLOOR(1 + (RAND() * 20)));
+insert into class(card) values (FLOOR(1 + (RAND() * 20)));
 
+explain select * from class left join book on book.card = class.card;
+```
 
+![image-20200924203618597](mysql高级.assets/image-20200924203618597.png)
 
+```mysql
+# 测试 左连接 右边表添加索引
+# 即为 book 表的外键 card 创建索引 Y
+ALTER TABLE book ADD INDEX Y(card);
+```
 
+![image-20200924204122137](mysql高级.assets/image-20200924204122137.png)
+
+```mysql
+# 测试 左连接 左边表添加索引
+# 即为 card 表的外键 card 创建索引 Y
+DROP INDEX Y ON book;
+ALTER TABLE class ADD INDEX Y (card);
+```
+
+![image-20200924204621416](mysql高级.assets/image-20200924204621416.png)
+
+可以看出左连接右边表添加索引，type变为ref，rows也变成了优化比较明显。
+
+这是由左连接特性决定的，LEFT JOIN 条件用于确定如何从右表搜索行，左边一定都有，所以右边是我们的关键点，一定需要建立索引。
+
+```mysql
+# 由此可知，右连接应该在左表建立索引
+DROP INDEX Y ON class;
+ALTER TABLE class ADD INDEX Y (card);
+explain select * from class right join book on book.card = class.card;
+```
+
+![image-20200924205748474](mysql高级.assets/image-20200924205748474.png)
+
+优化较明显，这是因为 RIGHT JOIN 条件用于确定如何从左表搜索行，右边一定都有，所以左边是我们的关键点，一定需要建立索引。
+
+##### 三表
+
+```mysql
+# 删除所有索引，创建新表 phone
+CREATE TABLE `phone` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `card` int(11) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8;
+#20次
+insert into phone(card) values (FLOOR(1 + (RAND() * 20)));
+
+explain select * from class inner join book on class.card = book.card inner join phone on book.card = phone.card;
+```
+
+![image-20200924211358133](mysql高级.assets/image-20200924211358133.png)
+
+```mysql
+explain select * from class left join book on class.card = book.card left join phone on book.card = phone.card;
+```
+
+![image-20200924211218188](mysql高级.assets/image-20200924211218188.png)
+
+```mysql
+# 依照左链接准则，建立两个索引
+ALTER TABLE book ADD INDEX Y(card);
+ALTER TABLE phone ADD INDEX Z(card);
+```
+
+![image-20200924211840967](mysql高级.assets/image-20200924211840967.png)
+
+后两行的 type 都是 ref 且总 rows 优化很好，效果不错。因此索引最好设置在需要经常查询的字段中。
+
+##### 结论
+
+Join 语句的优化：
+
+尽可能减少Join语句中的``NestedLoop(嵌套循环)``的循环总次数：``“永远用小结果集驱动大的结果集”``。
+
+优先优化嵌套循环的内层循环：保证Join语句中被驱动表上Join条件字段已经被索引。
+
+当无法保证被驱动表的Join条件字段被索引且内存资源充足的前提下，不要太吝惜``JoinBuffer``的设置。
+
+#### 1.6.2 索引失效
+
+```mysql
+CREATE TABLE `staffs` (
+	`id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(24) NOT NULL COMMENT '姓名',
+  `age` int(11) NOT NULL DEFAULT '0' COMMENT '年龄',
+  `pos` varchar(20) NOT NULL COMMENT '职位',
+  `add_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '入职时间',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8;
+
+INSERT INTO staffs(name, age, pos, add_time) VALUES('z3', 22, 'manager', NOW());
+INSERT INTO staffs(name, age, pos, add_time) VALUES('July', 23, 'dev', NOW());
+INSERT INTO staffs(name, age, pos, add_time) VALUES('2000', 23, 'dev', NOW());
+
+ALTER TABLE staffs ADD INDEX idx_staffs_name_age_pos(name, age, pos);
+```
+
+##### 1.全值匹配
+
+全值匹配我最爱
+
+```mysql
+EXPLAIN SELECT * FROM staffs WHERE name = 'July';
+```
+
+![image-20200924214550517](mysql高级.assets/image-20200924214550517.png)
+
+```mysql
+EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND age = 23;
+```
+
+![image-20200924214734162](mysql高级.assets/image-20200924214734162.png)
+
+```mysql
+EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND age = 23 AND pos = 'dev';
+```
+
+![image-20200924214842566](mysql高级.assets/image-20200924214842566.png)
+
+##### 2.最佳左前缀法则
+
+最左前缀要遵守，带头大哥不能死，中间兄弟不能断
+
+```mysql
+EXPLAIN SELECT * FROM staffs WHERE age = 23 AND pos = 'dev';
+```
+
+![image-20200924215034278](mysql高级.assets/image-20200924215034278.png)
+
+```mysql
+EXPLAIN SELECT * FROM staffs WHERE age = 23;
+```
+
+![image-20200924215333119](mysql高级.assets/image-20200924215333119.png)
+
+```mysql
+EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND pos = 'dev';
+```
+
+![image-20200924220437843](mysql高级.assets/image-20200924220437843.png)
+
+如果索引了多例，要遵守最左前缀法则。指的是``查询从索引的最左前列开始并且不跳过索引中的列``。
+
+##### 3.索引列不要做任何操作
+
+索引列上少计算
+
+不在索引列上做任何操作（计算、函数、（自动or手动）类型转换），会导致索引失效而转向全表扫描。
+
+```mysql
+EXPLAIN SELECT * FROM staffs WHERE left(name, 4) = 'July';
+```
+
+![image-20200924221255958](mysql高级.assets/image-20200924221255958.png)
+
+##### 4.存储引擎不能使用索引中范围条件右边的列
+
+范围之后全失效
+
+```mysql
+EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND age > 11 AND pos = 'manager';
+```
+
+![image-20200924222542927](mysql高级.assets/image-20200924222542927.png)
+
+##### 5.尽量使用覆盖索引
+
+覆盖索引不写星
+
+尽量使用覆盖索引（只访问索引的查询（索引列和查询列一致）），减少select *
+
+```mysql
+EXPLAIN SELECT name, age, pos FROM staffs WHERE name = 'July' AND age = 23 AND pos = 'dev';
+```
+
+![image-20200924222930691](mysql高级.assets/image-20200924222930691.png)
+
+```mysql
+EXPLAIN SELECT name, age, pos FROM staffs WHERE name = 'July' AND age > 11 AND pos = 'manager';
+```
+
+![image-20200924223232131](mysql高级.assets/image-20200924223232131.png)
+
+同时，如果只查询索引列的部分字段，同样可以使用 using index，但是如果查询索引列以外的字段，则不会用到 using index。
+
+##### 6.!=和<>
+
+mysql在使用不等于（!=或者<>）的时候无法使用索引会导致全表扫描
+
+```mysql
+EXPLAIN SELECT * FROM staffs WHERE name != 'July' AND age = 11 AND pos = 'manager';
+```
+
+![image-20200924223935629](mysql高级.assets/image-20200924223935629.png)
+
+##### 7.is null 和 is not null
+
+is null,is not null 也无法使用索引
+
+```mysql
+EXPLAIN SELECT * FROM staffs WHERE name is null;
+```
+
+![image-20200924224603851](mysql高级.assets/image-20200924224603851.png)
+
+```mysql
+EXPLAIN SELECT * FROM staffs WHERE name is not null;
+```
+
+![image-20200924224641899](mysql高级.assets/image-20200924224641899.png)
+
+##### 8.like
 
 
 
