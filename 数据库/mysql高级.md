@@ -473,8 +473,6 @@ ALTER TABLE staffs ADD INDEX idx_staffs_name_age_pos(name, age, pos);
 
 ##### 1.全值匹配
 
-全值匹配我最爱
-
 ```mysql
 EXPLAIN SELECT * FROM staffs WHERE name = 'July';
 ```
@@ -495,7 +493,9 @@ EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND age = 23 AND pos = 'dev';
 
 ##### 2.最佳左前缀法则
 
-最左前缀要遵守，带头大哥不能死，中间兄弟不能断
+① 带头大哥不能死
+
+② 中间兄弟不能断
 
 ```mysql
 EXPLAIN SELECT * FROM staffs WHERE age = 23 AND pos = 'dev';
@@ -519,7 +519,7 @@ EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND pos = 'dev';
 
 ##### 3.索引列不要做任何操作
 
-索引列上少计算
+③ 索引列上无计算
 
 不在索引列上做任何操作（计算、函数、（自动or手动）类型转换），会导致索引失效而转向全表扫描。
 
@@ -531,7 +531,7 @@ EXPLAIN SELECT * FROM staffs WHERE left(name, 4) = 'July';
 
 ##### 4.存储引擎不能使用索引中范围条件右边的列
 
-范围之后全失效
+④ 范围之后全失效
 
 ```mysql
 EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND age > 11 AND pos = 'manager';
@@ -540,8 +540,6 @@ EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND age > 11 AND pos = 'manager
 ![image-20200924222542927](mysql高级.assets/image-20200924222542927.png)
 
 ##### 5.尽量使用覆盖索引
-
-覆盖索引不写星
 
 尽量使用覆盖索引（只访问索引的查询（索引列和查询列一致）），减少select *
 
@@ -586,6 +584,259 @@ EXPLAIN SELECT * FROM staffs WHERE name is not null;
 ![image-20200924224641899](mysql高级.assets/image-20200924224641899.png)
 
 ##### 8.like
+
+⑤ 百分like加右边 
+
+like以通配符开头（'%abc...'）mysql索引失效会变成全表扫描操作
+
+```mysql
+explain select * from staffs where name like '%July%';
+# '%July' 同
+```
+
+![1600996094755](mysql高级.assets/1600996094755.png)
+
+```mysql
+explain select * from staffs where name like 'July%';
+```
+
+![1600996147924](mysql高级.assets/1600996147924.png)
+
+
+
+问题：解决like '%字符串%' 索引不被使用的方法？？
+
+```mysql
+CREATE TABLE `tb_user` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(20) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  `email` varchar(20) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8;
+
+INSERT INTO tb_user(name,age,email) VALUES('1aa1', 21, 'b@163.com');
+INSERT INTO tb_user(name,age,email) VALUES('2aa2', 222, 'a@163.com');
+INSERT INTO tb_user(name,age,email) VALUES('3aa3', 265, 'c@163.com');
+INSERT INTO tb_user(name,age,email) VALUES('4aa4', 21, 'c@163.com');
+
+CREATE INDEX idx_user_name_age ON tb_user(name, age);
+
+# 索引未失效
+explain select name, age from tb_user where name like '%aa%';
+explain select id from tb_user where name like '%aa%';
+explain select name from tb_user where name like '%aa%';
+explain select age from tb_user where name like '%aa%';
+explain select id, name from tb_user where name like '%aa%';
+explain select id, name, age from tb_user where name like '%aa%';
+explain select name, age from tb_user where name like '%aa%';
+# 索引失效
+explain select * from tb_user where name like '%aa%';
+explain select id, name, age, email from tb_user where name like '%aa%';
+```
+
+1、可以使用主键索引
+2、使用覆盖索引，查询字段必须是建立覆盖索引字段
+3、当覆盖索引指向的字段是varchar(380)及380以上的字段时，覆盖索引会失效！
+
+##### 9.字符串不加单引号索引失效
+
+⑥ 字符串里有引号
+
+```mysql
+explain select * from staffs where name = 2000;
+```
+
+![1600997942495](mysql高级.assets/1600997942495.png)
+
+```mysql
+explain select * from staffs where name = '2000';
+```
+
+![1600997772120](mysql高级.assets/1600997772120.png)
+
+##### 10.少用or
+
+用or连接时会索引失效
+
+```mysql
+explain select * from staffs where name = 'July' or name = 'z3';
+```
+
+![1600998091903](mysql高级.assets/1600998091903.png)
+
+##### 小结
+
+![1601001932267](mysql高级.assets/1601001932267.png)
+
+【优化总结口诀】
+全值匹配我最爱，最左前缀要遵守；
+带头大哥不能死，中间兄弟不能断；
+索引列上少计算，范围之后全失效；
+LIKE百分写最右，覆盖索引不写星；
+不等空值还有or，索引失效要少用；
+VAR引号不可丢，SQL高级也不难！ 
+
+##### 一般性建议
+
+对于单键索引，尽量选择针对当前query过滤性更好的索引；
+
+在选择组合索引的时候，当前Query中过滤性最好的字段在索引字段顺序中，位置越靠前越好；
+
+在选择组合索引的时候，尽量选择可以能包含当前query中的where子句中更多字段的索引，尽可能通过分析统计信息和调整query的写法来达到选择合适索引的目的。
+
+## 2 查询截取优化
+
+### 2.1 查询优化
+
+#### 2.1.1 永远小表驱动大表
+即小的数据集驱动大的数据集，类似嵌套循环Nested Loop
+
+```mysql
+select * from A where id in (select id from B)
+# 等价于
+for select id from B
+for select * from A where A.id = B.id
+```
+
+当B表的数据集必须小于A表的数据集时，用in优于exists
+
+```mysql
+select * from A where exists (select 1 from B where B.id = A.id)
+# 等价于
+for select * from A
+for select * from B where B.id = A.id
+```
+
+当A表的数据集小于B表的数据集时，用exists优于in
+
+##### EXISTS
+
+SELECT ... FROM table WHERE EXISTS(subquery)
+
+该语法可以理解为：将主查询的数据，放到子查询中做条件验证，根据验证结果来决定主查询的数据结果是否得以保留。
+
+1. EXISTS(subquery)只返回TRUE和FALSE，因此子查询中的SELECT * 也可以是SELECT 1 或者其他，官方说法是实际执行时会忽略SELECT清单，因此没有区别
+2. EXISTS子查询的实际执行过程可能经过了优化而不是我们理解上的逐条对比，如果担心效率问题，可以进行实际检验已确定是否有效率问题
+3. EXISTS子查询往往也可以用条件表达式、其他子查询或者JOIN替代，何种最优需要具体问题具体分析
+
+#### 2.1.2 order by 关键字优化
+
+ORDER BY子句，尽量使用Index方式排序，避免使用FileSort方式排序
+
+```mysql
+CREATE TABLE `tba` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `age` int(11) DEFAULT NULL,
+  `birth` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8;
+
+INSERT INTO tbA(age, birth) VALUES(22, NOW());
+INSERT INTO tbA(age, birth) VALUES(23, NOW());
+INSERT INTO tbA(age, birth) VALUES(24, NOW());
+
+CREATE INDEX idx_A_ageBirth ON tbA(age, birth);
+
+# Using where; Using index
+explain select * from tbA where age > 20 order by age;
+explain select * from tbA where age > 20 order by age, birth;
+explain select * from tbA WHERE birth > '2020-09-25 00:00:00' order by age;
+# Using where; Using index; Using filesort
+explain select * from tbA where age > 20 order by birth;
+explain select * from tbA where age > 20 order by birth, age;
+explain select * from tbA WHERE birth > '2020-09-25 00:00:00' order by birth;
+#Using index; Using filesort
+explain select * from tbA order by birth;
+explain select * from tbA order by age ASC, birth DESC;
+```
+
+MySQL支持二种方式的排序，FileSort和Index，Index效率高。它指MySQL扫描索引本身完成排序。FileSort方式效率较低。
+
+ORDER BY满足两情况，会使用Index方式排序：
+
+1. ORDER BY语句使用索引最左前列
+
+2. 使用where子句与OrderBy子句条件列组合满足索引最左前列，尽可能在索引列上完成排序操作，遵照索引建的最佳左前缀
+
+##### filesort
+
+如果不在索引列上，filesort有两种算法，双路排序和单路排序：
+
+``双路排序`` MySQL4.1之前是使用双路排序，字面意思是两次扫描磁盘，最终得到数据。读取行指针和orderby列，对他们进行排序，然后扫描已经排序好的列表，按照列表中的值重新从列表中读取对应的数据传输。
+
+从磁盘取排序字段，在buffer进行排序，再从磁盘取其他字段。
+
+取一批数据，要对磁盘进行两次扫描，众所周知，I\O是很耗时的，所以在mysql4.1之后，出现了第二张改进的算法，就是单路排序。
+
+``单路排序`` 从磁盘读取查询需要的所有列，按照orderby列在buffer对它们进行排序，然后扫描排序后的列表进行输出，它的效率更快一些，避免了第二次读取数据，并且把随机IO变成顺序IO，但是它会使用更多的空间，因为它把每一行都保存在内存中了。
+
+**单路排序引申出的问题**
+
+由于单路是后出来的，总体而言好过双路，但是用单路有问题：
+
+在sort_buffer中，单路排序比双路排序占用空间多，因为单路排序是把所有字段都取出，所有有可能去除的数据的总大小超出了sort_buffer的容量，导致每次只能取sort_buffer容量大小的数据，进行排序（创建tmp文件，多路合并），排再取sort_buffer容量大小，再排......从而多次I/O。
+
+**优化策略**
+
+增大sort_buffer_size参数的设置
+
+增大max_length_for_sort_data参数的设置
+
+##### 提高Order By的速度
+
+1. Order By时select * 是一个大忌，只query需要的字段，这点非常重要：
+
+   当query的字段大小总和小于max_length_for_sort_data而排序字段不是TEXT|BLOB类型时，会用单路排序，否则用多路排序
+
+   两种算法的数据都有可能超出sort_buffer的容量，超出之后，会创建tmp文件进行合并排序，导致多次I/O，但是用单路排序算法风险会更大，所以要提高sort_buffer_size
+
+2. 尝试提高 sort_buffer_size
+
+   不管用哪种算法，提高这个参数都会提高效率，当然，要根据系统的能力去提高，因为这个参数是针对每个进程的
+
+3. 尝试提高 max_length_for_sort_data
+
+   提高这个参数，会增加用改进算法的概率。但是如果设的太高，数据总容量超出sort_buffer_size的概率就增大，明显症状是高的磁盘I/O活动和低的处理器使用率
+
+##### 为排序使用索引
+
+MySQL两种排序方式：文件排序或扫描有序索引排序
+
+MySQL能为排序与查询使用相同的索引
+
+```markdown
+KEY a_b_c(a,b,c)
+# order by 能使用索引最左前缀
+	ORDER BY a
+	ORDER BY a, b
+	ORDER BY a, b, c
+	ORDER BY a DESC, b DESC, c DESC
+
+# 如果where使用索引的最左前缀定义为常量，则order by能使用索引
+	WHERE a = const ORDER BY b, c
+	WHERE a = const AND b = const ORDER BY c
+	WHERE a = const AND b > const ORDER BY b, c
+
+# 不能使用索引进行排序
+	ORDER BY a ASC, b DESC, c DESC /*排序不一致*/
+	WHERE g = const ORDER BY b, c  /*丢失a索引*/
+	WHERE a = const ORDER BY c     /*丢失b索引*/
+	WHERE a = const ORDER BY a, d  /*d不是索引的一部分*/
+	WHERE a in (...) ORDER BY b, c /*对于排序来说，多个相等条件也是范围查询*/
+```
+
+#### 2.1.3 group by 关键字优化
+
+groupby实质是先排序后进行分组，遵照索引建的最佳左前缀。
+
+当无法使用索引列，增大max_length_for_sort_data参数的设置 + 增大sort_buffer_size参数的设置。
+
+where高于having,能写在where限定的条件就不要去having限定了。
+
+### 2.2 慢查询日志
+
+MySQL的慢查询日志是MySQL提供的一种日志记录，它用来记录在MySQL中响应时间超过阙值的语句，具体指运行时间
 
 
 
