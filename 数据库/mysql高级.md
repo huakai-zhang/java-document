@@ -836,9 +836,124 @@ where高于having,能写在where限定的条件就不要去having限定了。
 
 ### 2.2 慢查询日志
 
-MySQL的慢查询日志是MySQL提供的一种日志记录，它用来记录在MySQL中响应时间超过阙值的语句，具体指运行时间
+MySQL的慢查询日志是MySQL提供的一种日志记录，它用来记录在MySQL中响应时间超过阙值的语句，具体指运行时间超过``long_query_time``值的SQL，则会被记录到慢查询日志中。
 
+long_query_time默认值为10，意思是运行10秒以上的语句。
 
+由慢查询日志来查看哪些SQL超出了我们最大忍耐时间值，比如一条SQL执行查过5秒，就算慢SQL，希望能收集超过5秒的SQL，结合之前explain进行全面分析。
+
+默认情况下，MySQL数据库没有开启慢查询日志，需要手动来设置这个参数。当然如果不是调优需要的话，一般不建议开启该参数，因为开启慢查询日志或多或少带来一定的性能影响，慢查询日志支持将日志记录写入文件。
+
+#### 2.2.1 开启慢查询日志
+
+```mysql
+# 查看是否开启
+SHOW VARIABLES LIKE '%slow_query_log%';
+```
+
+![image-20200926152636280](mysql高级.assets/image-20200926152636280.png)
+
+默认情况下``slow_query_log``的值为OFF，表示慢查询日志是禁用的。
+
+```mysql
+# 使用下面语句开启慢查询日志只对当前数据库生效，如果MySQL重启后则会失效
+set global slow_query_log = 1;
+```
+
+如果要永久生效，就必须修改配置文件m y.cnf，在[mysqld]下增加或修改参数，然后重启MySQL服务器：
+
+```markdown
+slow_query_log=1
+slow_query_log_file=/usr/local/mysql/data/spring-slow.log
+long_query_time=3
+log_output=FILE
+```
+
+关于慢查询的参数slow_query_log_file，它指定慢查询日志的存放路径，系统默认会给一个缺省的文件host_name-slow.log(如果没有指定参数slow_query_log_file的话)。
+
+```mysql
+# 开启慢查询日志后，什么样的SQL参会记录到慢查询里面？
+SHOW VARIABLES LIKE 'long_query_time%';
+show global variables like 'long_query_time';
+
+# 设置慢查询SQL的阙值时间，也可以在my.cnf参数里面修改
+# 需要重新连接或者新开一个回话才能看到修改值
+set global long_query_time=3;
+```
+
+假如运行时间正好等于long_query_time的情况，并不会被记录下来。也就是说，在MySQL源码里是``判断大雨long_query_time，并非大不等于``。
+
+#### 2.2.2 记录慢SQL
+
+```mysql
+SELECT SLEEP(4);
+```
+
+查看对应的slow_query_log_file：
+
+```
+D:\Mysql5.5\bin\mysqld, Version: 5.5.28 (MySQL Community Server (GPL)). started with:
+TCP Port: 3306, Named Pipe: MySQL
+Time                 Id Command    Argument
+# Time: 200926 15:50:58
+# User@Host: root[root] @ localhost [127.0.0.1]
+# Query_time: 4.000666  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 0
+use test;
+SET timestamp=1601106658;
+#SHOW VARIABLES LIKE 'long_query_time%';
+#SHOW VARIABLES LIKE '%slow_query_log%';
+SELECT SLEEP(4);
+```
+
+#### 2.2.3 查看当前系统有多少条慢查询记录
+
+```mysql
+show global status like '%Slow_queries%';
+
+# Variable_name		Value
+# Slow_queries		1
+```
+
+#### 2.2.4 日志分析工具mysqldumpshow
+
+在生产环境中，如果要手工分析日志，查找、分析SQL，显然是一个体力活，MySQL提供了日志分析工具mysqldumpshow。
+
+```shell
+mysqldumpslow --help
+```
+
+![image-20200926161015073](mysql高级.assets/image-20200926161015073.png)
+
+s:是表示按何种方式排序
+
+c:访问次数
+
+l:锁定时间
+
+r:返回记录
+
+t:查询时间
+
+al:平均锁定时间
+
+ar:平均返回记录数
+
+at:平均查询时间
+
+t:即为返回前面多少条的数据
+
+g:后边搭配一个正则匹配模式，大小写不敏感的
+
+```shell
+# 得到返回记录集最多的10个SQL
+mysqldumpslow -s r -t 10 /var/lib/mysql/spring-slow.log
+# 得到访问次数最多的10个SQL
+mysqldumpslow -s c -t 10 /var/lib/mysql/spring-slow.log
+# 得到按照时间排序的前10条里面含有左连接的查询语句
+mysqldumpslow -s t -t 10 -g "left join" /var/lib/mysql/spring-slow.log
+# 另外建议在使用这些命令时结合 ｜ 和 more 使用，否则可能出现爆屏情况
+mysqldumpslow -s r -t 10 /var/lib/mysql/spring-slow.log ｜ more
+```
 
 
 
