@@ -955,6 +955,189 @@ mysqldumpslow -s t -t 10 -g "left join" /var/lib/mysql/spring-slow.log
 mysqldumpslow -s r -t 10 /var/lib/mysql/spring-slow.log ｜ more
 ```
 
+### 2.3 批量数据脚本
+
+往表里插入1000W数据
+
+```mysql
+# 建表
+CREATE TABLE `dept` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `deptno` mediumint(9) DEFAULT NULL,
+  `dname` varchar(20) DEFAULT NULL,
+  `loc` varchar(13) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+CREATE TABLE `emp` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `empno` mediumint(9) DEFAULT NULL COMMENT '编号',
+  `ename` varchar(20) DEFAULT NULL COMMENT '名字',
+  `job` varchar(9) DEFAULT NULL COMMENT '工作',
+  `mgr` mediumint(9) DEFAULT '0' COMMENT '上级编号',
+  `hiredate` date DEFAULT NULL COMMENT '入职时间',
+  `sal` decimal(7,2) DEFAULT NULL COMMENT '薪水',
+  `comn` decimal(7,2) DEFAULT NULL COMMENT '红利',
+  `deptno` mediumint(9) DEFAULT NULL COMMENT '部门编号',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+```
+
+#### 3.3.1 设置参数log_trust_function_createors
+
+创建函数，假如报错：This function has none of DETERMINISTIC......
+
+由于开启过慢查询日志，因为我们开启了bin-log，就必须为function指定一个参数。
+
+```mysql
+SHOW VARIABLES LIKE 'log_bin_trust_function_creators';
+set global log_bin_trust_function_creators=1;
+```
+
+#### 2.3.2 创建函数
+
+```mysql
+# 创建函数保证每条数据都不同
+# 随机参数指定长度的字符串
+DELIMITER $$
+CREATE FUNCTION rand_string(n INT) RETURNS VARCHAR(255)
+BEGIN
+	DECLARE chars_str VARCHAR(100) DEFAULT 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+	DECLARE return_str VARCHAR(255) DEFAULT '';
+	DECLARE i INT DEFAULT 0;
+	WHILE i < n DO
+	SET return_str = CONCAT(return_str,SUBSTRING(chars_str, FLOOR(1+RAND()*52), 1));
+	SET i = i + 1;
+	END WHILE;
+	RETURN return_str;
+END $$
+
+# 随机产生100~110之间的整数
+DELIMITER $$
+CREATE FUNCTION rand_num() RETURNS INT(5)
+BEGIN
+	DECLARE i INT DEFAULT 0;
+	SET i = FLOOR(100+RAND()*10);
+	RETURN i;
+END $$
+
+SELECT rand_string(10);
+SELECT rand_num();
+
+# 删除函数
+DROP FUNCTION rand_num;
+```
+
+#### 2.3.3 创建存储过程
+
+```mysql
+# 创建往emp表中插入数据的存储过程
+DELIMITER $$
+CREATE PROCEDURE insert_emp(IN START INT(10), IN max_num INT(10))
+BEGIN
+	DECLARE i INT DEFAULT 0;
+	# set autocommit = 0 把autocommit设置成0
+	SET autocommit = 0;
+	REPEAT
+	SET i = i + 1;
+	INSERT INTO emp(empno, ename, job, mgr, hiredate, sal, comn, deptno) VALUES ((START+i), rand_string(6), 'SALESMAN', 0001, CURDATE(), 2000, 400, rand_num());
+	UNTIL i = max_num
+	END REPEAT;
+	COMMIT;
+END $$
+
+# 创建往dept表中插入数据的存储过程
+DELIMITER $$
+CREATE PROCEDURE insert_dept(IN START INT(10), IN max_num INT(10))
+BEGIN
+	DECLARE i INT DEFAULT 0;
+	SET autocommit = 0;
+	REPEAT
+	SET i = i + 1;
+	INSERT INTO dept(deptno, dname, loc) VALUES ((START+i), rand_string(10), rand_string(8));
+	UNTIL i = max_num
+	END REPEAT;
+	COMMIT;
+END $$
+```
+
+#### 2.3.4 调用存储过程
+
+```mysql
+CALL insert_dept(100, 10);
+CALL insert_emp(100001, 500000);
+```
+
+### 2.4 Show profiles
+
+``Show profiles`` 是mysql提供可以用来分析当前会话中语句执行的资源消耗情况。可以用于SQL的调优测量。
+
+官网：https://dev.mysql.com/doc/refman/8.0/en/show-profile.html
+
+默认情况下，参数处于``关闭状态，并保存最近15次``的运行结果。
+
+```mysql
+# 是否支持，看看当前的SQL版本是否支持
+show variables like 'profiling';
+# 开启功能，默认是关闭，使用前需要开启
+set profiling=on;
+
+# 运行SQL
+SELECT * from tb_emp e INNER JOIN tb_dept d on e.deptId = d.id;
+select * from emp group by id%10 limit 150000;
+select * from emp group by id%20 order by 5;
+
+# 查看结果
+show profiles;
+```
+
+![1601199549766](mysql高级.assets/1601199549766.png)
+
+```mysql
+# 诊断SQL，show profile cpu,block io for query 上一步前面的问题SQL数字号码;
+show profile cpu,block io for query 3;
+```
+
+![1601199661301](mysql高级.assets/1601199661301.png)
+
+参数备注：
+
+``ALL`` 显示所有的开销信息
+
+``BLOCK IO`` 显示块IO相关开销
+
+``CONTEXT SWITCHES`` 上下文切换相关开销
+
+``CPU`` 显示CPU相关开销信息
+
+``IPC`` 显示发送和接收相关开销信息
+
+``MEMORY`` 显示内存相关开销信息
+
+``PAGE FAULTS`` 显示页面错误相关开销信息
+
+``SOURCE`` 显示和Source_function，Source_file，Source_line相关的开销信息
+
+``SWAPS`` 显示交换次数相关开销信息
+
+**日常开发注意点**
+
+converting HEAP to MyISAM 查询结果太大，内存都不够用了往磁盘上搬了。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
