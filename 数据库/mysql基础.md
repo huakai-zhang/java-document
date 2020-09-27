@@ -171,6 +171,8 @@ show variables like '%storage_engine%'
 | 索引   | 非聚集索引<br>支持全文索引，查询效率上MyISAM要高           | 聚集索引(索引的数据域存储数据文件本身)<br>不支持全文索引     |
 | 持久化 | 一个表三个文件（索引文件，表结构文件，数据文件）           | 表空间                                                       |
 
+![image-20200923200411220](mysql基础.assets/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70-1212589.png)
+
 ## 5 性能优化
 
 ### 5.1 MySQL Query Optimizer
@@ -374,99 +376,171 @@ key_len显示的值为索引最大可能长度，并非实际使用长度，即k
 3. show profile 查询SQL在MySQL服务器里面的执行细节和生命周期情况
 4. SQL数据库服务器的参数调优
 
+## 6 MySQL 锁机制
 
+### 6.1 概述
 
+锁是计算机协调多个进程或线程并发访问某一资源的机制。
 
+在数据库中，除传统的计算资源(如CPU、RAM、I/O等)的争用以外，数据也是一种供许多用户共享的资源，如何保证数据并发访问的一致性、有效性是所有数据库必须解决的一个问题，锁冲突也是影响数据库并发访问性能的一个重要因素。从这个角度来说，锁对数据库而言显得尤其重要，也更加复杂。
 
+#### 锁的分类
 
+从数据操作的类型（读、写）分：
 
+读锁（共享锁）：针对同一份数据，多个读操作可以同时进行而不互相影响。
 
+写锁（排它锁）：当前写操作没有完成前，它会阻断其他写锁和读锁。
 
+从对数据操作的颗粒度分：
 
+行锁、表锁
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### 索引
-
-#### 索引结构
-
-MySql 支持的数据结构：
-
-1. Hash，针对某个字段做索引，会对这个字段做Hash MySQL大面积不用Hash，首先有冲突，第二个无法做范围查询：
-
-```java
-select * from table where id > 1
-```
-
-1.  FullText 全文搜索  
-2.  R-Tree 
-
-### 锁
-
-#### 行锁
-
-
-![img](https://img-blog.csdnimg.cn/20200328133745662.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
-
-#### 表锁
-
-
-![img](https://img-blog.csdnimg.cn/20200328134121767.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
-
-```java
+```mysql
 # 表级锁争用状态变量
 show status like 'table%'
 # 行级锁争用状态变量
 show status like 'innodb_row_lock%'
 ```
 
+### 6.2 表锁（偏读）
+
+偏向MyISAM存储引擎，开销小，获取释放锁快，避免死锁，锁定粒度大，发生锁冲突的概率最高，并发最低。
+
+```mysql
+CREATE TABLE `mylock` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(20) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+
+insert into mylock(name) values('a');
+insert into mylock(name) values('b');
+insert into mylock(name) values('c');
+insert into mylock(name) values('d');
+insert into mylock(name) values('e');
+
+# 手动增加表锁
+# 为mylock表添加读锁，为book添加写锁
+lock table mylock read, book write;
+
+# 查看表上加过的锁
+show open tables;
+
+# 释放表锁
+unlock tables;
+```
+
+![image-20200927214048725](mysql基础.assets/image-20200927214048725.png)
+
+#### 6.2.1 加读锁
+
+为mylock表加read锁（读阻塞写例子）
+
+| session_1                                                    | session_2                                                    |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 获得表mylock的READ锁定<br>lock table mylock read;            | 连接终端                                                     |
+| 当前session可以查询该表记录<br>select * from mylock;         | 其他session也可以查询该表记录<br>select * from mylock;       |
+| 当前session不能查询其他没有锁定的表<br>select * from book;<br/>ERROR 1100 (HY000): Table 'book' was not locked with LOCK TABLES | 其他session可以查询或更新未锁定的表<br>select * from book;<br>update book set card=20 where bookid = 25; |
+| 当前session中插入或更新锁定的表都会提示错误<br>update mylock set name='a2' where id = 1;<br/>ERROR 1099 (HY000): Table 'mylock' was locked with a READ lock and can't be updated | 其他session插入或更新锁定表会一直等待获得锁<br>update mylock set name='a2' where id = 1; |
+| 释放锁<br>unlock tables;                                     | session2 获得锁，插入操作完成<br>Query OK, 0 rows affected (40.17 sec) |
+
+#### 6.2.2 加写锁
+
+为mylock表加write锁（MyISAM存储引擎的写阻塞读例子）
+
+| session_1                                                    | session_2                                                    |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 获得锁mylock的write锁定                                      | session2再连接终端                                           |
+| 当前session对锁定表的查询更新插入操作都可以执行<br>select * from mylock;<br>update mylock set name='a2' where id = 1; | 其他session对锁定表的查询被阻塞，需要等待锁被释放<br>select * from mylock where id=1; |
+| 释放锁<br/>unlock tables;                                    | session2获得锁，查询返回<br>5 rows in set (29.73 sec)        |
+
+MySQL的表级锁有两种模式：
+
+表共享读锁（Table Read Lock）
+
+表独占写锁（Table Write Lock）
+
+1. 对MyISAM表的读操作（加读锁），不会阻塞其他进程对同一表的读请求，但会阻塞对同一表的写请求。只有当前读锁释放后，才会执行其他进程的写操作。
+2. 对MyISAM表的写操作（加写锁），会阻塞其他线程对同一表的读和写操作，只有当写锁释放后，才会执行其他进程的读写操作。
+
+简而言之，就是读锁会阻塞写，但不会阻塞读。而写锁则会把读和写都阻塞。
+
+#### 6.2.3 分析表锁定
+
+```mysql
+show status like 'table%';
+```
+
+![image-20200927222724030](mysql基础.assets/image-20200927222724030.png)
+
+可以通过检查table_locks_waited和table_locks_immediate状态变量来分析系统上的表锁定：
+
+``table_locks_immediate`` 产生表级锁的次数，表示可以立即获取锁的查询次数，每立即获取锁值加1；
+
+``table_locks_waited`` 出现表级锁争用而产生等待的次数（不能立即获取锁的次数，每等待一次锁值加1），此值高则说明存在着较严重的表级锁争用情况；
+
+此外，MyISAM的读写锁调度是写优先，这也是MyISAM不适合做写为主表的引擎。因为写锁后，其他线程不能做任何操作，大量的更新会是查询很难得到锁，从而造成阻塞。
+
+### 6.3 行锁（偏写）
+
+偏向InnoDB存储引擎，开销大，获取释放锁快慢；会出现死锁；锁定粒度最小，发生锁冲突的概率最低，并发度也最高。
+
+InnoDB与MyISAM的最大不同有两点：一是支持事务（TRANSACTION）;二是采用了行级锁
+
+#### 6.3.1事务（Transation）及其ACID属性
+
+参考 Spring 事务原理详解
+
+#### 6.3.2 并发事务处理带来的问题
+
+``更新丢失(Lost Update)`` 当两个或多个事务选择同一行，然后基于最初选定的值更新该行时，由于每个事务都不知道其他事务的存在，就会发生丢失更新问题，最后的更新覆盖了由其他事务所做的更新。
+
+``脏读(Dirty Reads)`` 一个事务对数据进行了增删改，但未提交，这条记录就处于不一致状态，另一个事务可以读取到未提交的数据。如果第一个事务这时候回滚，那么第二个事务读到了脏数据，不符合一致性要求。
+
+事务A读取到了事务B已修改但尚未提交的数据。 
+
+``不可重复读(Non-Reoeatable Reads)`` 一个事务中发生了两次读操作，第一次读操作和第二次读操作之间，另一个事务对数据进行了修改，这时候两次读取的数据是不一致的。 
+
+事务A读取到了事务B已经提交的修改数据，不符合隔离性。
+
+``幻读(Phantom Reads)`` 一个事物按相同的查询条件重新读取检索过的数据，却发现其他事务插入了满足其查询条件的新数据。
+
+事务A读取到了事务B已提交的新增数据，不符合隔离性。
+
+幻读和脏读有点类似，脏读是事务B修改了数据，幻读是事务B新增了数据。
+
+#### 6.3.3 数据库事务隔离级别
+
+| 隔离级别                  | 隔离级别的值                     | 导致的问题                                                   |
+| ------------------------- | -------------------------------- | ------------------------------------------------------------ |
+| 未提交读 Read-Uncommitted | 0 只能保证不读取物理上损坏的数据 | 允许读取还未提交的改变了的数据，导致脏读，幻，不可重复读     |
+| 已提交读 Read-Committed   | 1 语句级                         | 允许在并发事务已经提交后读取，避免脏读，允许不可重复读和幻读（默认） |
+| 可重复读Repeatable-Read   | 2 事务级                         | 对相同字段的多次读取是一致的，除非数据被事务本身改变，避免脏读，不可重复读，允许幻读（有增删改操作，不允许读取） |
+| 可串行化 Serializable     | 3 最高级别，事务级               | 串行化读，事务只能一个一个执行，避免了脏读，不可重复读，幻读。执行效率慢，使用时谨慎 |
+
+总结： 隔离级别越高，越能保证数据的完整性和一致性，但是对并发性能的影响也越大。 
+
+大多数的数据库默认隔离级别为Read Commited,比如SqlServer、 Oracle 
+
+少数数据库默认隔离级别为: Repeatable Read比如: MySQL InnoDB
+
+```mysql
+# 查看当前数据库的事务隔离级别
+show variables like 'tx_isolation';
+```
 
 
-![img](https://img-blog.csdnimg.cn/20200328142825873.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) ![img](https://img-blog.csdnimg.cn/2020032814150452.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
+
+
+
+
+
+
+
+
+
+
 
 ### 优化
 
@@ -476,14 +550,6 @@ show status like 'innodb_row_lock%'
 ![img](https://img-blog.csdnimg.cn/20200328143235326.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
 
 
-#### profiling(有个概念)
-
-```java
-set profiling=1;
-select nick_name ,count(*) from user group by nick_name;
-show profiles;
-show profile cpu,block io for query 75;
-```
 
 ### join \ order by \ group by 解释
 

@@ -1122,7 +1122,40 @@ show profile cpu,block io for query 3;
 
 **日常开发注意点**
 
-converting HEAP to MyISAM 查询结果太大，内存都不够用了往磁盘上搬了。
+``converting HEAP to MyISAM`` 查询结果太大，内存都不够用了往磁盘上搬了
+
+``Creating tmp table`` 创建临时表，拷贝数据到临时表，用完再删除
+
+``Copying to tmp table on disk`` 把内存中临时表复制到磁盘，危险！！！
+
+``locked``
+
+### 2.5 全局查询日志
+
+**配置启用**
+
+在 MySQL 的 my.cnf中，设置如下：
+
+```
+# 开启
+general_log=1
+# 记录日志文件的路径
+general_log_file=/path/logfile
+# 输出格式
+log_output=FILE
+```
+
+**编码启用**
+
+```mysql
+set global general_log=1;
+set global log_output='TABLE';
+
+# 此后，所编写的SQL语句，就会记录到mysql库里的general_log表，可以用下面的命令查看
+select * from mysql.general_log;
+```
+
+``永远不要在生产环境开启这个功能。``
 
 
 
