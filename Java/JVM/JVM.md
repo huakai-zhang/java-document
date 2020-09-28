@@ -584,7 +584,7 @@ public class HelloGC {
 
 开启后会使用：Serial(Young区用) + Serial Old(Old区)的收集器组合
 
-表示：新生代、老年代都会使用串行回收收集器，新生代使用复制算法，老年代使用标记-整理算法。
+表示：新生代、老年代都会使用串行回收收集器，新生代使用``复制算法``，老年代使用``标记-整理算法``。
 
 ```markdown
 -Xms10m -Xmx10m -XX:+PrintGCDetails -XX:+PrintCommandLineFlags -XX:+UseSerialGC
@@ -604,7 +604,7 @@ ParNew收集器其实就是Serial收集器新生代的并行多线程版本，�
 
 常用对应JVM参数：``-XX:+UseParNewGC`` 启用ParNew收集器，只影响新生代的收集，不影响老年代。
 
-开启上诉参数后，会使用：ParNew(Young区用) + Serial Old的收集器组合，新生代使用复制算法，老年代采用标记-整理算法。
+开启上诉参数后，会使用：ParNew(Young区用) + Serial Old的收集器组合，新生代使用``复制算法``，老年代采用``标记-整理``算法。
 
 ```markdown
 # 限制线程数量，默认开启和CPU数目相同的线程数
@@ -619,6 +619,122 @@ ParNew收集器其实就是Serial收集器新生代的并行多线程版本，�
 # 这样的搭配，java8已经不再推荐
 Java HotSpot(TM) 64-Bit Server VM warning: Using the ParNew young collector with the Serial old collector is deprecated and will likely be removed in a future release(图中红叉)
 ```
+
+#### Parallel Scavenge收集器
+
+<img src="JVM.assets/image-20200928194031262.png" alt="image-20200928194031262" style="zoom:50%;" />
+
+Parallel Scavenge收集器类似ParNew也是新生代垃圾收集器，使用``复制算法``，也是一个并行的多线程的垃圾收集器，俗称吞吐量优先收集器。一句话：串行收集器在新生代和老年代的并行化
+
+它终点关注的是：
+
+可控制的吞吐量（Thoughput=运行用户代码时间/(运行用户代码时间+垃圾回收时间)，也即比如程序运行100分钟，垃圾收集时间1分钟，吞吐量就是99%）。高吞吐量意味着高效利用CPU的时间，它多用于在后台运算而不需要太多交互的任务。
+
+自适应调节策略也是Parallel Scavenge收集器与ParNew收集器的一个重要区别。
+
+自适应调节策略：虚拟机会根据当前系统的运行情况收集性能监控信息，动态调整这些参数以提供最适合的停顿时间（``-XX:MAXGCPauseMIllis``）或最大的吞吐量。
+
+常用JVM参数：``-XX:+UseParallelGC或-XX:+UseParallelOldGC(可相互激活)``，使用Parallel Scanvenge收集器。
+
+-XX:ParallelGCThreads=N，表示启动多少个GC线程。
+
+cpu < 8  N = cpu数量
+
+cpu > 8 N = (3+((5*CPU_count)/8))
+
+```markdown
+-Xms10m -Xmx10m -XX:+PrintGCDetails -XX:+PrintCommandLineFlags -XX:+UseParallelGC
+-Xms10m -Xmx10m -XX:+PrintGCDetails -XX:+PrintCommandLineFlags -XX:+UseParallelOldGC
+
+# 不加即是默认 PSYoungGen + ParOldGen
+-Xms10m -Xmx10m -XX:+PrintGCDetails -XX:+PrintCommandLineFlags
+
+(PSYoungGen + ParOldGen)
+[GC (Allocation Failure) [PSYoungGen: 0K->0K(1536K)] 4366K->4366K(8704K), 0.0013401 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
+[Full GC (Allocation Failure) [PSYoungGen: 0K->0K(1536K)] [ParOldGen: 4366K->4352K(7168K)] 4366K->4352K(8704K), [Metaspace: 2667K->2667K(1056768K)], 0.0073078 secs] [Times: user=0.01 sys=0.00, real=0.00 secs] 
+```
+
+### 老年代垃圾收集器
+
+#### Parallel Old收集器
+
+Parallel Old收集器是Parallel Scavenge的老年代版本，使用多线程的``标记-整理``算法，Parallel Old收集器在JDK1.6才开始提供。
+
+在JDK1.6之前，新生代使用Parallel Scavenge收集器只能搭配老年代的Serial Old收集器，只能保证新生代的吞吐量优先，无法保证整体的吞吐量。
+
+Parallel Old正是为了在老年代同样提供吞吐量优先的垃圾收集器，如果系统对吞吐量要求比较高，JDK1.8后可以优先考虑新生代Parallel Scavenge和老年代Parallel Old收集器的搭配策略。
+
+JVM常用参数：``-XX:+UseParallelOldGC``，设置后，新生代Parallel + 老年代Parallel Old
+
+#### CMS收集器
+
+CMS收集器（Concurrent Mark Sweep：并发标记清除）是一种以``获取最短回收停顿时间``为目标的收集器。
+
+适合应用在互联网站或者B/S系统的服务器上，这类应用尤其重视服务器的响应速度，希望系统停顿时间最短。
+
+CMS非常适合堆内存大、CPU核数多的服务器端应用，也是G1出现之前大型应用的首选收集器。
+
+<img src="JVM.assets/image-20200928202151131.png" alt="image-20200928202151131" style="zoom:50%;" />
+
+Concurrent Mark Sweep 并发标记清除，并发收集低停顿，并发指的是与用户线程一起执行。
+
+开启该收集器JVM参数：``-XX:+UseConcMarkSweepGC``，开启参数后会自动将``-XX:+UseParNewGC``打开。
+
+使用ParNew(Young区用) + CMS(Old区用) + Serial Old收集器组合，Serial Old将做为CMS出错的后备收集器。
+
+4步过程：
+
+``初始标记（CMS initial mark）``标记一下GC Roots能直接关联的对象，速度很快，仍然需要暂停所有的工作线程；
+
+``并发标记（CMS concurrent mark）``和用户线程一起，进行GC Roots跟踪的过程，不需要暂停工作线程。主要标记过程，标记全部对象；
+
+``重新标记（CMS remark）``为了修正在并发标记期间，因用户程序继续运行而导致标记产生变动的那一部分对象的标记记录，仍然需要暂停所有工作线程。由于并发标记时，用户线程仍然运行，因此在正式清理前，再做修正。
+
+``并发清除（CMS concurrent sweep）``和用户线程一起，清除GC Roots不可达对象，和用户线程一起工作，不需要暂停工作线程。基于标记结果，直接清理对象。
+
+由于耗时最长的并发标记和并发清除过程中，垃圾收集线程可以和用户现在一起并发工作，所以总体上来看CMS收集器的内存回收和用户线程是一起并发地执行。
+
+![image-20200928212523917](JVM.assets/image-20200928212523917.png)
+
+```markdown
+-Xms10m -Xmx10m -XX:+PrintGCDetails -XX:+PrintCommandLineFlags -XX:+UseConcMarkSweepGC
+
+(ParNew + CMS)
+-XX:InitialHeapSize=10485760 -XX:MaxHeapSize=10485760 -XX:MaxNewSize=3497984 -XX:MaxTenuringThreshold=6 -XX:NewSize=3497984 -XX:OldPLABSize=16 -XX:OldSize=6987776 -XX:+PrintCommandLineFlags -XX:+PrintGCDetails -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC 
+[GC (Allocation Failure) [ParNew: 1424K->4K(3072K), 0.0014961 secs] 4496K->4420K(9920K), 0.0015363 secs] [Times: user=0.01 sys=0.00, real=0.01 secs] 
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 4416K(6848K)] 7108K(9920K), 0.0002154 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+[GC (CMS Final Remark) [YG occupancy: 2689 K (3072 K)][Rescan (parallel) , 0.0063867 secs][weak refs processing, 0.0000430 secs][class unloading, 0.0003802 secs][scrub symbol table, 0.0009412 secs][scrub string table, 0.0002421 secs][1 CMS-remark: 6426K(6848K)] 9116K(9920K), 0.0081364 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
+[CMS-concurrent-sweep: 0.000/0.000 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+```
+
+优点：
+
+* 并发收集低停顿
+
+缺点：
+
+* 并发执行，对CPU资源压力大
+
+  由于并发进行，CMS在收集与应用线程会同时会增加对堆内存的占用，也就是说，``CMS必须要在老年代堆内存用尽之前完成垃圾回收，否则CMS回收失败时``，将触发担保机制，串行老年代收集器将会以STW的方式进行一次GC，从而造成较大停顿时间
+
+* 采用的标记清除算法会导致大量碎片
+
+  标记清除算法无法整理空间碎片，老年代空间会随着应用时长被逐步耗尽，最后将不得不通过担保机制堆堆内存进行压缩。CMS也提供了参数``-XX:+CMSFullGCsBeForeCompaction``(默认0，即每次都进行内存整理)来指定多少次CMS收集之后，进行一次压缩的Full GC。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
