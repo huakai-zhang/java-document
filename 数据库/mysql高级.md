@@ -49,6 +49,8 @@ LIMIT <limit_number>
 
 #### 1.2.2 JOIN 图
 
+![img](mysql高级.assets/20200328155236811.png)
+
 ![1600760264681](mysql高级.assets/1600760264681.png)
 
 #### 1.2.3 7种 JOIN
@@ -761,6 +763,10 @@ ORDER BY满足两情况，会使用Index方式排序：
 
 ##### filesort
 
+![img](mysql高级.assets/20200328163111593.png)
+
+如果sort_buffer能够承载所有的字段的时候，mysql就会自动选择第二种，如果不够就会使用第一种，第一种速度略逊于第一种，因为要两次读取数据，两次IO。
+
 如果不在索引列上，filesort有两种算法，双路排序和单路排序：
 
 ``双路排序`` MySQL4.1之前是使用双路排序，字面意思是两次扫描磁盘，最终得到数据。读取行指针和orderby列，对他们进行排序，然后扫描已经排序好的列表，按照列表中的值重新从列表中读取对应的数据传输。
@@ -1157,21 +1163,114 @@ select * from mysql.general_log;
 
 ``永远不要在生产环境开启这个功能。``
 
+## 3 主从复制
 
+### 3.1 复制的基本原理
 
+slave会从master读取binlog来进行数据同步。
 
+![1601263215813](mysql高级.assets/1601263215813.png)
 
+MySQL复制过程分为三步：
 
+1. master将改变记录到二进制日志（binary log），这些记录过程叫做二进制日志事件，binary log events；
+2. slave将master的binary log events拷贝到它的中继日志（relay log）;
+3. slave重做中继日志中的事件，将改变应用到自己的数据库中，MySQL复制是异步的且串行化的。
 
+### 3.2 复制的基本原则
 
+每个slave只有一个master
 
+每个slave只能有一个唯一的服务器ID
 
+每个master可以有多个salve
 
+### 3.3 一主一从常见配置
 
+MySQL版本一致且后台以服务运行，主从都配置在【mysqld】结点下，都是小写。
 
+主机从机都关闭防火墙。
 
+#### 3.3.1 主机修改my.cnf配置文件
 
+```markdown
+[mysqld]
+# 1.【必须】主服务器唯一ID
+server-id =1
+# 2.【必须】启用二进制日志
+log-bin=自己本地的路径/mysqlbin
+log-bin=D:/Mysql5.5/data/mysqlbin
+# 3.【可选】启动错误日志
+log-err=自己本地的路径/mysqlerr
+# 4.【可选】根目录
+basedir="自己本地路径"
+# 5.【可选】临时目录
+tmpdir="自己的本地路劲"
+# 6.【可选】数据目录
+datadir="自己本地路径/Data/"
+# 7.主机，读写都可以
+read-only=0
+# 8.【可选】设置不要复制的数据库
+binlog-ignore-db=mysql
+# 9.【可选】设置需要复制的数据
+binlog-do-db=需要复制的主数据库名字
+```
 
+#### 3.3.2 从机修改my.cnf配置文件
 
+```markdown
+# 【必须】从服务器唯一ID
+server-id       = 2
+# 【可选】启用二进制文件
+log-bin=mysql-bin
+```
+
+#### 3.3.3 在主机上建立账户并授权slave
+
+```mysql
+# 给ip为192.168.174.128的从机授权帐号为zhangsan密码为123456的帐号访问
+GRANT REPLICATION SLAVE  ON*.* TO '帐号'@'从机器数据库IP' IDENTIFIED BY '密码';
+GRANT REPLICATION SLAVE  ON*.* TO 'zhangsan'@'192.168.174.128' IDENTIFIED BY '123456';
+# 刷新MySQL的系统权限相关表
+flush privileges;
+# 查询主机状态，记录下File和Position的值（从File文件的Position行开始复制）
+show master status;
+```
+
+![1601276350119](mysql高级.assets/1601276350119.png)
+
+#### 3.3.4 在从机上配置需要复制的主机
+
+```mysql
+# 如果之前做过主从复制，要先停止
+stop slave;
+
+CHANGE MASTER TO 
+MASTER_HOST='主机IP',
+MASTER_USER='帐号',
+MASTER_PASSWORD='密码',
+MASTER_LOG_FILE='File名字',MASTER_LOG_POS=Position数字;
+CHANGE MASTER TO 
+MASTER_HOST='192.168.174.1',
+MASTER_USER='zhangsan',
+MASTER_PASSWORD='123456',
+MASTER_LOG_FILE='mysqlbin.000001',MASTER_LOG_POS=107;
+
+# 启动从服务器复制功能
+start slave;
+
+# 查看slave状态
+show slave status;
+```
+
+下面两个参数都是YES，则说明主从配置成功！
+
+Slave_IO_Running:Yes
+
+Slave_SQL_Running:Yes
+
+![1601276806420](mysql高级.assets/1601276806420.png)
+
+------
 
 

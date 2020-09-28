@@ -6,18 +6,84 @@
 
 下载地址：https://dev.mysql.com/ »  [MySQL Downloads](https://dev.mysql.com/downloads/) » [MySQL Community Server](https://dev.mysql.com/downloads/mysql/)
 
-### 2.1 MySQL 安装完成相关命令
+选择合适的MySQL版本，操作系统以及操作系统版本，下载，这里以 [rpm-bundle](https://cdn.mysql.com/archives/mysql-5.5/MySQL-5.5.62-1.el7.x86_64.rpm-bundle.tar) 为例。
+
+下载得到 MySQL-5.5.62-1.el7.x86_64.rpm-bundle.tar
+
+![1601270368086](mysql基础.assets/1601270368086.png)
+
+### 2.1 MySQL 安装流程
+
+```markdown
+# 1.将 tar 文件上传至 Linux 服务器 /usr/local/mysql 下
+# 2.检查是否已经存在mysql，若存在卸载，避免安装时产生一些错误
+	rpm -qa | grep -i mysql
+
+# 3.解压缩安装包
+	tar -xvf  MySQL-5.5.62-1.el7.x86_64.rpm-bundle.tar 
+	得到文件：
+		MySQL-devel-5.5.62-1.el7.x86_64.rpm
+		MySQL-embedded-5.5.62-1.el7.x86_64.rpm
+		MySQL-shared-5.5.62-1.el7.x86_64.rpm
+		MySQL-test-5.5.62-1.el7.x86_64.rpm
+		MySQL-server-5.5.62-1.el7.x86_64.rpm
+		MySQL-shared-compat-5.5.62-1.el7.x86_64.rpm
+		MySQL-client-5.5.62-1.el7.x86_64.rpm
+# 4.安装mysql
+	rpm -ivh MySQL-server-5.5.62-1.el7.x86_64.rpm
+	错误1：
+		警告：MySQL-server-5.5.62-1.el7.x86_64.rpm: 头V3 DSA/SHA1 Signature, 密钥 ID 5072e1f5: NOKEY
+		错误：依赖检测失败：
+			net-tools 被 MySQL-server-5.5.62-1.el7.x86_64 需要
+			perl(Data::Dumper) 被 MySQL-server-5.5.62-1.el7.x86_64 需要
+		解决方法：
+		yum -y install net-tools
+		yum -y install perl
+		yum -y install autoconf
+	错误2：
+		file /usr/share/mysql/charsets/README from install of MySQL-server-5.5.62-1.el7.x86_64 conflicts with file from package mariadb-libs-1:5.5.64-1.el7.x86_64
+		此报错是说mysql安装包与mariadb包冲突，那么那么只要删除mariadb包即可。
+		解决方法：
+		rpm -qa|grep -i mariadb
+			mariadb-libs-5.5.64-1.el7.x86_64
+		yum remove mariadb-libs-5.5.64-1.el7.x86_64
+
+# 5.启动 MySQL
+	service mysql start
+
+# 6.设置帐号密码
+	mysqladmin -u root password root
+    mysql
+		ERROR 1045 (28000): Access denied for user 'root'@'localhost' (using password: NO)
+
+# 7.连接数据库
+	 mysql -u root -p
+
+# 8.授权远程连接
+	use mysql;
+	# 下面语句可能会报错，不用关心
+	update user set host = '%' where user = 'root';
+	# 刷新权限
+	FLUSH PRIVILEGES;
+
+# 9.设置开机自启动mysql
+	chkconfig mysql on
+	chkconfig --list|grep mysql
+		mysql          	0:关	1:关	2:开	3:开	4:开	5:开	6:关
+```
+
+### 2.2 MySQL 安装完成相关命令
 
 ```markdown
 # 查看Mysql安装时创建的mysql用户和mysql组
 	cat /etc/passwd | grep mysql
-		_mysql:*:74:74:MySQL Server:/var/empty:/usr/bin/false
+		mysql:x:996:993:MySQL server:/var/lib/mysql:/bin/bash
 	cat /etc/group | grep mysql
-		_mysql:*:74:
+		mysql:x:993:
 
 # 查看 MySQL 版本
 	mysqladmin --version
-		mysqladmin  Ver 8.42 Distrib 5.7.22, for macos10.13 on x86_64
+		mysqladmin  Ver 8.42 Distrib 5.5.62, for Linux on x86_64
 
 # MySQL 服务启停
 	service mysql start
@@ -28,14 +94,15 @@
 
 # Mysql的安装位置
 	ps -ef | grep mysql
-		74   141     1   0  7:00下午 ??         0:01.75 /usr/local/mysql/bin/mysqld --user=_mysql --basedir=/usr/local/mysql --datadir=/usr/local/mysql/data --plugin-dir=/usr/local/mysql/lib/plugin --log-error=/usr/local/mysql/data/mysqld.local.err --pid-file=/usr/local/mysql/data/mysqld.local.pid --keyring-file-data=/usr/local/mysql/keyring/keyring --early-plugin-load=keyring_file=keyring_file.so
+		root       2928      1  0 13:51 ?        00:00:00 /bin/sh /usr/bin/mysqld_safe --datadir=/var/lib/mysql --pid-file=/var/lib/mysql/localhost.localdomain.pid
+	mysql      3014   2928  0 13:51 ?        00:00:00 /usr/sbin/mysqld --basedir=/usr --datadir=/var/lib/mysql --plugin-dir=/usr/lib64/mysql/plugin --user=mysql --log-error=localhost.localdomain.err --pid-file=/var/lib/mysql/localhost.localdomain.pid
 ```
 
-### 2.2 修改字符集和数据存储路径
+### 2.3 修改字符集和数据存储路径
 
 ```mysql
 # 查看当前字符集
-show variables like '%char%'
+show variables like '%char%';
 ```
 
 ![image-20200921212803689](mysql基础.assets/image-20200921212803689.png)
@@ -43,9 +110,15 @@ show variables like '%char%'
 数据库和服务端的字符集默认都是latin1，中文会乱码。
 
 ```markdown
-# Linux 自定义配置文件/etc/my.cnf
+# Linux 自定义配置文件 5.5版本 /usr/share/mysql/my-huge.cnf 之后版本 /usr/share/mysql/my-default.cnf
+# 复制 配置文件到 /etc/my.cnf
+	cp /usr/share//mysql/my-huge.cnf /etc/my.cnf
+# 重启mysql
+	service mysql stop
+	service mysql start
+
 [client]
-default-character-set = utf8
+default-character-set=utf8
 
 [mysqld]
 character_set_server=utf8
@@ -59,18 +132,26 @@ max_connections=1000
 # 错误日志配置 log-err=''
 
 [mysql]
-default-character-set = utf8
+default-character-set=utf8
+
+# 修改之后新建的数据库才会应用新的字符集配置
 ```
 
-### 2.3 主要配置文件
+### 2.4 主要配置文件
 
-``二进制日志log-bin`` 主重复制
+``二进制日志log-bin`` 主从复制
 
 ``错误日志log-error`` 默认是关闭的,记录严重的警告和错误信息,每次启动和关闭的详细信息等
 
 ``查询日志log`` 默认关闭,记录查询的sql语句，如果开启会减低mysql的整体性能，因为记录日志也是需要消耗系统资源的
 
 #### 数据文件
+
+两系统：
+
+windows C:\ProgramFiles\MySQL\MySQLServer5.5\data
+
+linux /var/lib/mysql
 
 ``frm文件`` 存放表结构
 
@@ -484,7 +565,7 @@ show status like 'table%';
 
 ### 6.3 行锁（偏写）
 
-偏向InnoDB存储引擎，开销大，获取释放锁快慢；会出现死锁；锁定粒度最小，发生锁冲突的概率最低，并发度也最高。
+偏向InnoDB存储引擎，开销大，获取释放锁慢；会出现死锁；锁定粒度最小，发生锁冲突的概率最低，并发度也最高。
 
 InnoDB与MyISAM的最大不同有两点：一是支持事务（TRANSACTION）;二是采用了行级锁
 
@@ -530,77 +611,123 @@ InnoDB与MyISAM的最大不同有两点：一是支持事务（TRANSACTION）;�
 show variables like 'tx_isolation';
 ```
 
+#### 6.3.4 行锁演示
 
+```mysql
+create table innodb_lock(a int(11), b varchar(16)) engine=innodb;
 
+insert into innodb_lock values(1, 'b2');
+insert into innodb_lock values(3, '3');
+insert into innodb_lock values(4, '4000');
+insert into innodb_lock values(5, '5000');
+insert into innodb_lock values(6, '6000');
+insert into innodb_lock values(7, '7000');
 
-
-
-
-
-
-
-
-
-
-### 优化
-
-#### 原则
-
-
-![img](https://img-blog.csdnimg.cn/20200328143235326.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
-
-
-
-### join \ order by \ group by 解释
-
-#### join
-
-
-
-![img](https://img-blog.csdnimg.cn/20200328155236811.png) ![img](https://img-blog.csdnimg.cn/20200328155954998.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
-
-```java
-# join
-show variables like "join_%"
+create index innodb_a_ind on innodb_lock(a);
+create index innodb_b_ind on innodb_lock(b);
 ```
 
-#### order by
+| session1                                                     | session2                                                     |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| set autocommit=0;                                            | set autocommit=0;                                            |
+| 更新但不提交，没有手动commit<br>update innodb_lock set b='4001' where a=4; | session更新同一行数据，只能阻塞等待<br>update innodb_lock set b='4002' where a=4; |
+| 提交更新<br>commit;                                          | 解除阻塞，更新正常进行<br>Query OK, 1 row affected (15.42 sec) |
+|                                                              | commit执行提交                                               |
+| 更新但不提交，没有手动commit<br/>update innodb_lock set b='4002' where a=4;<br>session1自己可以查询到更新 | session2查询不到session1的更改<br>select  * from innodb_lock; |
+| 提交更新<br/>commit;                                         | 依然查询不到，需要session2也执行commit;<br>才能查询到session1的更新，保证可重复读 |
+| session1更新a=4;                                             | session更新a=5;<br>不会阻塞                                  |
 
+##### 无索引行锁升级为表锁
 
+varchar  不用 ' '  导致系统自动转换类型, 行锁变表锁
 
-![img](https://img-blog.csdnimg.cn/20200328163712558.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) ![img](https://img-blog.csdnimg.cn/20200328163111593.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) 如果sort_buffer能够承载所有的字段的时候，mysql就会自动选择第二种，如果不够就会使用第一种，第一种速度略逊于第一种，因为要两次读取数据，两次IO。
+```mysql
+# session1做如下更新（b使用int类型变表锁），session2会阻塞
+update innodb_lock set a=8 where b=4001;
 
-```java
-# sort_buffer_size
-show variables like "sort_buffer_%"
+# 删除 b 字段的索引后，session1使用 b 字段做更新（无索引变表锁），session2会阻塞
+update innodb_lock set a=8 where b='4001';
 ```
 
-#### group by
+##### 如何锁定一行
 
-前提是先排序
-
-DISTINCT 基于group by LIMIT
-
-```java
-SELECT * FROM user limit 10000,10;
-# limit慢的原因是，它要取 10010 条数据
-SELECT * FROM user where id> 10000 limit 10;
+```mysql
+# select ... for update;锁定某一行后，其他操作会被阻塞，直到锁定行的会话commit
+begin;
+select * from innodb_lock where a=8 for update;
+...
+commit;
 ```
 
-#### Slow Sql 配置
+##### 行锁总结
 
+Innodb存储引擎由于实现了行级锁定，虽然在锁定机制的实现方面所带来的性能损耗可能比表级锁定会更高一些，但是在整体并发处理能力方面要远远优于MyISAM的表级锁定的。当系统并发量较高的时候，Innodb的整体性能和MyISAM相比就会有比较明显的优势了。
 
-![img](https://img-blog.csdnimg.cn/20200328170140712.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
+但是Innodb的行级锁定同样也有脆弱的一面，当我们使用不当的时候，可能会让InnoDB的整体性能表现不仅不能比MyISAM高甚至会更差。
 
-#### 建索引的几大原则
+##### 行锁分析
 
-1.最左前缀匹配原则，非常重要的原则，mysql会一直向右匹配直到遇到范围查询(&gt;、&lt;、between、like)就停止匹配，比如a = 1 and b = 2 and c &gt; 3 and d = 4 如果建立(a,b,c,d)顺序的索引，d是用不到索引的，如果建立(a,b,d,c)的索引则都可以用到，a,b,d的顺序可以任意调整。
+```mysql
+show status like 'innodb_row_lock%';
+```
 
-2.=和in可以乱序，比如a = 1 and b = 2 and c = 3 建立(a,b,c)索引可以任意顺序，mysql的查询优化器会帮你优化成索引可以识别的形式。
+![1601261501682](mysql基础.assets/1601261501682.png)
 
-3.尽量选择区分度高的列作为索引，区分度的公式是count(distinct col)/count(*)，表示字段不重复的比例，比例越大我们扫描的记录数越少，唯一键的区分度是1，而一些状态、性别字段可能在大数据面前区分度就是0，那可能有人会问，这个比例有什么经验值吗？使用场景不同，这个值也很难确定，一般需要join的字段我们都要求是0.1以上，即平均1条扫描10条记录。
+各个状态量的说明如下：
 
-4.索引列不能参与计算，保持列“干净”，比如from_unixtime(create_time) = ’2014-05-29’就不能使用到索引，原因很简单，b+树中存的都是数据表中的字段值，但进行检索时，需要把所有元素都应用函数才能比较，显然成本太大。所以语句应该写成create_time = unix_timestamp(’2014-05-29’)。
+``Innodb_row_lock_current_waits`` 当前正在等待锁定的数量
 
-5.尽量的扩展索引，不要新建索引。比如表中已经有a的索引，现在要加(a,b)的索引，那么只需要修改原来的索引即可。
+``Innodb_row_lock_time`` 从系统启动到现在锁定总时间长度
+
+``Innodb_row_lock_time_avg `` 每次等待所花平均时间
+
+``Innodb_row_lock_time_max`` 从系统启动到现在等待最长的一次所花的时间
+
+``Innodb_row_lock_waits`` 系统启动后到现在总共能带的次数
+
+比较重要的主要是：
+
+``Innodb_row_lock_time_avg `` 等待平均时长
+
+``Innodb_row_lock_waits`` 等待总次数
+
+``Innodb_row_lock_time`` 等待总时长
+
+尤其等等待次数很高，而且每次等待时长也不小的时候，我们就需要分析系统中为什么如此多的等待，然后根据分析结果着手指定优化计划（show profile）。
+
+#### 6.3.5 优化建议
+
+尽可能让所有数据检索都通过索引来完成，避免无索引行锁升级为表锁
+
+合理设计索引，尽量缩小锁的范围
+
+尽可能较少检索条件，避免间隙锁
+
+尽量控制事务大小，减少锁定资源量和时间长度
+
+尽可能低级别事务隔离
+
+### 6.4 间隙锁
+
+当我们用范围条件而不是相等条件检索数据，并请求共享或排它锁时，InnoDB会给符合条件的已有数据记录的索引项加锁；对于键值在条件范围但不存在的记录，叫做“间隙（GAP）”；
+
+InnoDB也会对这个“间隙”加锁，这种锁机制就是所谓的``间隙锁（Next-Key锁）``。
+
+**危害**
+
+因为Query执行过程中通过范围查找的话，它会锁定整个范围内所有的索引键值，即使这个键值并不存在。
+
+间隙锁有一个比较致命的弱点，就是当锁定一个范围键值之后，即使某些不存在的键值也会被无辜的锁定，而造成在锁定的时候无法插入锁定范围的任何数据。在某些场景下这可能会对性能造成很大的危害。
+
+| session1                                           | session2                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------ |
+| update innodb_lock set b='0928' where a>1 and a<6; | 阻塞产生，暂时不能插入<br>insert into innodb_lock values(2, '2000'); |
+| commit;                                            | 阻塞解除，完成插入<br>Query OK, 1 row affected (4.47 sec)    |
+
+### 6.5 页锁
+
+开销和加锁时间界于表锁和行锁之间：会出现死锁；锁定粒度界于表锁和行锁之间，并发度一般。
+
+------
+
 
