@@ -722,29 +722,171 @@ Concurrent Mark Sweep 并发标记清除，并发收集低停顿，并发指的�
 
   标记清除算法无法整理空间碎片，老年代空间会随着应用时长被逐步耗尽，最后将不得不通过担保机制堆堆内存进行压缩。CMS也提供了参数``-XX:+CMSFullGCsBeForeCompaction``(默认0，即每次都进行内存整理)来指定多少次CMS收集之后，进行一次压缩的Full GC。
 
+#### Serial Old 收集器
 
+Serial Old是Serial垃圾收集器老年代版本，同样是个单线程的收集器，使用``标记整理算法``，这个收集器也主要是运行在Client默认的java虚拟机默认的老年代垃圾收集器。
 
+在Server模式下，主要有两个用途：
 
+1. 在JDK1.5之前与新生代Parallel Scavengr收集器搭配使用。
+2. 做为老年代版本中使用CMS收集器的后备垃圾收集方案。
 
+```markdown
+# 理论知道即可，实际java8已经被优化掉了
+-Xms10m -Xmx10m -XX:+PrintGCDetails -XX:+PrintCommandLineFlags -XX:+UseSerialOldGC
 
+Error: Could not create the Java Virtual Machine.
+Error: A fatal exception has occurred. Program will exit.
+Unrecognized VM option 'UseSerialOldGC'
+Did you mean '(+/-)UseSerialGC'?
+```
 
+### 垃圾收集器的选择
 
+* 单CPU或小内存，单机程序 -XX:+UseSerialGC
+* 多CPU，需要高吞吐量（如后台计算型应用） -XX:+UseParallelGC或-XX:+UseParallelOldGC
+* 多CPU，追求低停顿时间，需快速响应（如互联网应用） -XX:+UseConcMarkSweppGC
 
+| 参数                                          | 新生代                 | 算法                             | 老年代           | 算法     |
+| --------------------------------------------- | ---------------------- | -------------------------------- | ---------------- | -------- |
+| -XX:+UseSerialGC                              | SerialGC               | 复制                             | SerialOldGC      | 标记整理 |
+| -XX:+UseParNewGC                              | ParNew                 | 复制                             | SerialOldGC      | 标记整理 |
+| -XX:+UseParallelGC /<br>-XX:+UseParallelOldGC | Parallel[Scavenge]     | 复制                             | Parallel Old     | 标记整理 |
+| -XX:+UseConcMarkSweepGC                       | ParNew                 | 复制                             | CMS + Serial Old | 标记清除 |
+| -XX:+UseG1GC                                  | G1整体采用标记整理算法 | 局部通过复制<br>不会产生内存碎片 |                  |          |
 
+### G1垃圾收集器
 
+以前收集器特点：
 
+1. 新生代和老年代是各自独立且连续的内存块
+2. 新生代收集使用单eden+s0+s1进行复制算法
+3. 老年代收集必须扫描整个老年代区域
+4. 都是以尽可能少而快速地执行GC为设计原则
 
+#### G1是什么
 
+G1（Garbage-First）收集器，是一款面向服务端应用的收集器。
 
+G1是一种服务器端的垃圾收集器，应用在多处理器和大容量内存环境中，在实际高吞吐量的同时，尽可能的满足垃圾手机暂停时间的要求。另外，它还具有以下特性：
 
+* 像CMS收集器一样，能与应用程序并发执行
+* 整理空闲空间更快
+* 需要更多的时间来预测GC停顿时间
+* 不希望牺牲大量的吞吐性能
+* 不需要更大的Java Heap
 
+G1收集器的设计目标是取代CMS收集器，它同CMS相比，在以下方面表现的更出色：
 
+* G1是一个有整理内存过程的垃圾收集器，不会产生很多内存碎片
+* G1的Stop The World(STW)更可控，G1在停顿时间上添加了预测机制，用户可以指定停顿时间
 
+CMS垃圾收集器虽然减少了暂停应用程序的运行时间，但是它还是存在着内存碎片问题。于是，为了去除内存碎片的问题，同时又保留CMS垃圾收集器低暂停时间的优点，JAVA7发布了一个新的垃圾收集器——G1垃圾收集器。
 
+G1是在2012年才在jdk1.7u4中可用。oracle官方计划在jdk9中将G1变成默认的垃圾收集器以替代CMS。它是一款面向服务端应用的收集器，主要应用在多CPU和大内存服务环境下，极大的减少垃圾收集的停顿时间，全面提升服务器的性能，逐步替换java8以前的CMS收集器。
 
+主要改变是Eden，Survivor和Tenured等内存区域不再是连续的了，而是变成了一个个大小一样的region，每个region从1M到32M不等。一个region有可能属于Eden，Survivor或Tenured内存区域。
 
+#### G1 特点
 
+1. G1能充分利用多CPU、多核环境硬件优势，尽量缩减STW
+2. G1整体上采用标记整理算法，局部是通过复制算法，不会产生内存碎片
+3. 宏观上看G1之中不再区分年轻代和老年代。把内存划分成多个独立的子区域（Region），可以近似理解为一个围棋的棋盘
+4. G1收集器里面讲整个的内存区都混合在一起了，但其本身依然在小范围内要进行新生代和老年代的区分，保留了新生代和老年代，但它们不再是物理隔离的，而是一部分Region的集合且不需要Region是连续的，也就是说依然会采用不同的GC方式来处理不同的区域
+5. G1虽然也是分代收集器，但整个内存分区不存在物理上的新生代和老年代的区别，也不需要完全独立的survivor(to space)堆做复制准备。G1只是逻辑上的分代概念，或者说每个分区都可能随G1的运行在不同代之间前后切换
 
+#### G1 底层原理
 
+Region区域化垃圾收集器，最大的好处是化整为零，避免全内存扫描，只需要按照区域来进行扫描。
 
+区域化内存划片Region，整体变为一些不连续的内存区域，核心思想是将整个堆内存区域分为大小相同的子区域（Region），在JVM启动时会自动设置这些子区域的大小，在堆使用上，G1并不要求对象的存储一定是物理上连续的只要逻辑上连续即可，每个分区也不会固定地为某个代服务，可以按需在新生代和老年代之间切换。启动时可以通过参数``-XX:G1HeapRegionSize=n``可以指定分区大小(1M~32M，且必须是2的幂)，默认将整堆划分为``2048个分区``。
+
+即能够支持的最大内存为：32MB * 2048 = 65536MB = 64G 内存
+
+![1601347615979](JVM.assets/1601347615979.png)
+
+G1算法将堆划分为若干个区域（Region），它仍然属于分代收集器。这些Region的一部分包含新生代，新生代的垃圾收集依然采用暂停所有线程的方式，将存活对象拷贝到老年代或Survivor空间。
+
+一部分Region也包含老年代，G1收集器通过将对象一个区域复制到另一个区域，完成了清理工作。这就意味着，在正常的处理过程中，G1完成了堆压缩（至少是部分堆的压缩），这样也就不会有CMS内存碎片问题了。
+
+在G1中，还有一种特殊的区域，叫``Humongous(巨大的)``区域。如果一个对象占用的空间超过了``分区容量50%``以上，G1收集器就认为这个是一个巨型对象。这些``巨型对象默认直接被分配在老年代``，但是如果是一个短期存在的巨型对象，就会对垃圾收集器造成负面影响。为了解决这个问题，G1划分了一个Humongous区，它用来专门存放巨型对象。如果一个H区装不下一个巨型对象，那么G1会寻找连续的H分区来存储。为了能找到连续的H区，有时候不得不启动Full GC。
+
+#### G1 回收步骤
+
+针对Eden区进行收集，Eden区耗尽后会触发，主要是小区域收集 + 形成连续内存块，避免内存碎片：
+
+* Eden区的数据移动到Survivor区，假如出现Survivor区空间不够，Eden区数据会部分晋升到Old区
+* Survivor区的数据移动到新的Survivor区，部分数据晋升到Old区
+* 最后Eden区收拾干净，GC结束，用户应用程序继续进行
+
+![1601348842827](JVM.assets/1601348842827.png)
+
+![1601348863751](JVM.assets/1601348863751.png)
+
+4步过程：
+
+1. 初始标记，只标记GC Roots能够直接关联到的对象
+2. 并发标记，进行GC Roots Tracing的过程
+3. 最终标记，修正并发标记期间，因程序运行导致标记发生变化的那一部分对象
+4. 筛选回收，根据时间来进行价值最大化的回收
+
+![1601349053319](JVM.assets/1601349053319.png)
+
+```markdown
+-Xms10m -Xmx10m -XX:+PrintGCDetails -XX:+PrintCommandLineFlags -XX:+UseG1GC
+
+[GC pause (G1 Humongous Allocation) (young) (initial-mark), 0.0017942 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0001925 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0016351 secs]
+[GC remark [Finalize Marking, 0.0000529 secs] [GC ref-proc, 0.0000632 secs] [Unloading, 0.0004366 secs], 0.0006288 secs]
+ [Times: user=0.00 sys=0.00, real=0.00 secs] 
+[GC cleanup 5479K->5479K(10M), 0.0001007 secs]
+ [Times: user=0.00 sys=0.00, real=0.00 secs] 
+```
+
+#### G1 常用配置参数
+
+```markdown
+# 开启G1收集器
+	-XX:+UseG1GC
+
+# 设置G1区域的大小，值是2的幂，范围是1MB~32MB。目标是根据最小的Java堆大小划分出约2048个区域
+	-XX:G1HeapRegionSize=n
+
+# 最大GC停顿时间，这是一个软目标，JVM将尽可能（但不保证）停顿小于这个时间
+	-XX:MaxGCPauseMillis=n
+
+# 堆占用了多少空间时就触发GC，默认是45
+	-XX:InitiatingHeapOccupancyPercent=n
+
+# 并发GC使用的线程数
+	-XX:ConcGCThreads=n
+
+# 设置作为空闲空间的预留空间内存百分比，以降低目标空间溢出风险，默认是10%
+	-XX:G1ReservePercent=n
+```
+
+#### G1 比起CMS的优势
+
+1. G1不会产生内存碎片
+2. 可以精确的控制停顿。该收集器把整个堆（新生代、老年代）划分成多个固定大小的区域，每次根据允许停顿时间去收集垃圾最多的区域
+
+### JVMGC + SpringBoot微服务的生产部署和参数调优
+
+微服务启动时候，同时配置JVM/GC的调优参数。
+
+IDE通过Application#main()方法启动：
+
+![1601351101314](JVM.assets/1601351101314.png)
+
+服务器部署时：
+
+```
+java -server JVM参数 -jar jar/war包名字
+java -server -Xms1024m -Xmx1024m -XX:+UseG1GC -jar springboot2020-1.0-SNAPSHOT.jar
+```
+
+------
 
