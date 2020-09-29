@@ -242,7 +242,9 @@ Java 堆从 GC 的角度还可以细分为：新生代（Eden区、From Survivor
 
 永久区(java7之前有)，永久存储区是一个常驻内存区域，用于存放JDK自身所携带的 Class,Interface 的元数据，也就是说它存储的是运行环境必须的类信息，被装载进此区域的数据是不会被垃圾回收器回收掉的，关闭 JVM 才会释放此区域所占用的内存。
 
-### 堆参数调优
+## 7 JVM 参数
+
+### 堆大小的配置
 
 ![1599201581506](JVM.assets/1599201581506.png)
 
@@ -322,9 +324,163 @@ Heap
   class space    used 363K, capacity 388K, committed 512K, reserved 1048576K
 ```
 
-​            ![img](JVM.assets/0.png)            
+![1601365760361](JVM.assets/1601365760361.png)  
 
-## 7 GC 算法
+### 标配参数
+
+-version
+
+-hele
+
+-showversion
+
+### X 参数（了解）
+
+-Xint 解释执行
+
+-Xcomp 第一次使用就编译本地代码
+
+-Xmined 混合模式
+
+![1601358666775](JVM.assets/1601358666775.png)
+
+### XX 参数
+
+#### Boolean 类型
+
+```markdown
+# 公式
+	-XX:+ 或者 - 某个属性值
+		+ 表示开启
+		- 表示关闭
+
+# java提供的一个显示当前所有java进程pid的命令
+	jps -l
+		6960 com.jvm.HelloGC
+
+# 用来查看正在运行的 java 应用程序的扩展参数，包括Java System属性和JVM命令行参数
+	jinfo [option] <pid>
+		option
+			no option 输出全部的参数和系统属性
+			-flag name 输出对应名称的参数
+			-flag [+|-]name 开启或者关闭对应名称的参数
+			-flag name=value 设定对应名称的参数
+			-flags 输出全部的参数
+			-sysprops 输出系统属性
+		pid 对应jvm的进程id
+	jinfo -flag PrintGCDetails 6960
+		-XX:-PrintGCDetails  表明6960程序未开启PrintGCDetails
+	jinfo -flags 6960
+		Attaching to process ID 29676, please wait...
+		Debugger attached successfully.
+		Server compiler detected.
+		JVM version is 25.232-b09
+		Non-default VM flags: -XX:CICompilerCount=3 -XX:CompressedClassSpaceSize=134217728 -XX:InitialHeapSize=536870912 -XX:MaxHeapSize=536870912 -XX:MaxMetaspaceSize=209715200 -XX:MaxNewSize=178782208 -XX:MetaspaceSize=209715200 -XX:MinHeapDeltaBytes=524288 -XX:NewSize=178782208 -XX:OldSize=358088704 -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:+UseParallelGC 
+		Command line:  -Xms512m -Xmx512m -XX:CompressedClassSpaceSize=128m -XX:MetaspaceSize=200m -XX:MaxMetaspaceSize=200m
+
+# Non-default VM flags JVM初始加载(系统根据机器性能配置)
+# Command line 人工配置
+```
+
+##### KV 设置类型
+
+```markdown
+# 公式
+	-XX:属性key=属性值value
+
+# 元空间大小
+	-XX:MetaspaceSize=128m
+
+# 控制新生代需要经历多少次GC晋升到老年代中的最大阈值
+	-XX:MaxTenuringThreshold=15
+
+# 两个经典参数
+# -Xms
+	等价于 -XX:InitialHeapSize
+
+# -Xmx
+	等价于 -XX:MaxHeapSize
+```
+
+### 盘点JVM家底
+
+```markdown
+# 查看初始默认 
+	java -XX:+PrintFlagsInitial
+		[Global flags]
+			...
+			uintx InitialHeapSize                     = 0                              {product}
+			bool UseParallelGC                        = false                          {product}
+			...
+# 查询人为修改或JVM修改过之后的参数值
+	java -XX:+PrintFlagsFinal -version
+		[Global flags]
+			uintx InitialHeapSize                     := 262144000                     {product}
+			bool UseParallelGC                        := true                          {product}
+     		bool UseParallelOldGC                      = true                          {product}
+
+# := 表示人为修改或JVM修改过之后的更新参数值
+# 任意一个程序 VM:options 配置	
+	-XX:+PrintFlagsFinal -XX:MetaspaceSize=128m
+		[Global flags]
+			 uintx MetaspaceSize                      := 134217728                     {pd product}
+
+# 打印命令行参数
+	java -XX:+PrintCommandLineFlags -version
+		-XX:InitialHeapSize=260259904 -XX:MaxHeapSize=4164158464 -XX:+PrintCommandLineFlags -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:+UseParallelGC 
+		openjdk version "1.8.0_232"
+		OpenJDK Runtime Environment (build 1.8.0_232-b09)
+		OpenJDK 64-Bit Server VM (build 25.232-b09, mixed mode)
+```
+
+### 常用参数
+
+```markdown
+# 初始大小内存，默认为物理内存1/64
+	-Xms
+	-XX:InitialHeapSize
+
+# 最大分配内存，默认为物理内存1/4
+	-Xmx
+	-XX:MaxHeapSize
+
+# 设置单个线程栈的大小，一般默认为512k~1024k,表面上查看等于0，表示使用默认出厂的设置
+	-Xss
+	-XX:ThreadStackSize
+
+# 设置新生代大小
+	-Xmn
+
+# 设置元空间大小
+	-XX:MetaspaceSize
+	元空间的本质和永久代类似，都是对JVM规范中方法区的实现。
+	不过元空间和永久代的区别在于：元空间并不在虚拟机中，而是使用本地内存。
+	因此，默认情况下，元空间的大小仅受本地内存限制（默认只用20几M）
+
+# 典型设置案例
+	-Xms128m -Xmx4096m -Xss1024k -XX:MetaspaceSize=512m -XX:+PrintCommandLineFlags -XX:+PrintGCDetails -XX:+UseSerialGC
+
+# 输出详细GC收集日志信息
+	-XX:PrintGCDetails
+
+# 设置新生代eden和s0/s1空间的比例
+	-XX:SurvivorRatio
+	默认-XX:SurvivorRatio=8 ==》 Eden:s0:s1=8:1:1
+	例如-XX:SurvivorRatio=4 ==》 Eden:s0:s1=4:1:1
+	SurvivorRatio值设置eden区的比例占多少，s0/s1保持相同
+
+# 配置新生代与老年代在堆结构的占比
+	-XX:NewRatio
+	默认-XX:NewRatio=2 新生代占1，老年代占2，新生代占整个堆的1/3
+	假如-XX:NewRatio=4 新生代占1，老年代占4，新生代占整个堆的1/5
+	NewRatio值就是设置老年代的占比，剩下的1给新生代
+
+# 设置垃圾最大年龄
+	-XX:MaxTenuringThreshold
+	如果设置为0，则新生代对象不经过Survivor区，直接进入老年代。对于老年代比较多的应用，可以提高效率。如果将此值设置为一个较大值，则新生代对象会在Survivor区进行多次复制，这样可以增加对象在新生代的存活时间，增加在新生代即被回收的概率。
+```
+
+## 8 GC 算法
 
 GC是什么(分代收集算法)
 
@@ -423,6 +579,49 @@ HotSpot JVM把年轻代分为了三部分：1个Eden区和2个Survivor区（分�
 清除：遍历整个堆，把标记的对象清除。 
 缺点：此算法需要暂停整个应用，会产生内存碎片 
 
+##### GC Roots
+
+内存中已经不再被使用到的空间就是``垃圾``。
+
+![1601356986445](JVM.assets/1601356986445.png)
+
+所谓 GC Roots 或者说tracing GC的 “跟集合” 就是一组必须活跃的引用。
+
+基本思路就是通过一系列名为“GC Roots”的对象作为起始点，从这个被称为GC Roots的对象开始向下搜索，如果一个对象到GC Roots没有任何引用链相连时，则说明此对象不可用。也即给定一个集合的引用作为跟出发，通过引用关系遍历对象图，能被遍历到的（可到达的）对象就被判定为存活，否则为死亡。
+
+<img src="JVM.assets/1601357411886.png" alt="1601357411886" style="zoom:50%;" />
+
+**可以作为 GC Roots 的对象**
+
+虚拟机栈（栈帧中的局部变量区，也叫做局部变量表）中的引用对象
+
+方法区中的类静态属性引用的对象
+
+方法区中常量引用的对象
+
+本地方法栈中JNI(Native)引用的对象
+
+```java
+public class GCRootsDemo {
+    
+    // 方法区中的类静态属性引用的对象
+    //private static GCRootsDemo2 demo2;
+    // 方法区中常量引用的对象
+    //private static final GCRootsDemo3 demo3 = new GCRootsDemo3(8);
+
+    public static void m1() {
+        // 虚拟机栈（栈帧中的局部变量区，也叫做局部变量表）中的引用对象
+        GCRootsDemo t1 = new GCRootsDemo();
+        System.gc();
+        System.out.println("第一次GC完成");
+    }
+
+    public static void main(String[] args) {
+        m1();
+    }
+}
+```
+
 #### 动态演示
 
 ![1599209014558](JVM.assets/mark_sweep.gif)
@@ -490,7 +689,7 @@ HotSpot JVM把年轻代分为了三部分：1个Eden区和2个Survivor区（分�
 
 基于上面的考虑，老年代一般是由标记清除或者是标记清除与标记整理的混合实现。以hotspot中的CMS回收器为例，CMS是基于Mark-Sweep实现的，对于对像的回收效率很高，而对于碎片问题，CMS采用基于Mark-Compact算法的Serial Old回收器做为补偿措施：当内存回收不佳（碎片导致的Concurrent Mode Failure时），将采用Serial Old执行Full GC以达到对老年代内存的整理。
 
-## 8 垃圾回收器
+## 9 垃圾回收器
 
 GC算法是内存回收的方法论，垃圾收集器就是算法的落地实现。
 
@@ -538,7 +737,7 @@ public class HelloGC {
         Thread.sleep(Integer.MAX_VALUE);
     }
 }
-// 项目目录下运行 jps -l
+// jps -l
 // 11728 com.jvm.HelloGC
 // jinfo -flag UseParallelGC 11728
 // -XX:+UseParallelGC
