@@ -154,24 +154,6 @@ B方法又调用了 C方法，于是产生栈帧 F3 也被压入栈
 
 每执行一个方法都会产生一个栈帧，保存到栈(后进先出)的顶部，顶部栈就是当前的方法，该方法执行完毕后会自动将此栈帧出栈。
 
-### 栈溢出
-
-```java
-public class Test {
-    public static void main(String[] args) {
-        m1();
-    }
-
-    public static void m1() {
-        m1();
-    }
-}
-// Exception in thread "main" java.lang.StackOverflowError
-// 是错误，不是异常
-```
-
-<img src="JVM.assets/image-20200903233114460.png" alt="image-20200903233114460"/>
-
 ### 堆+栈+方法区的交互关系
 
 ![image-20200903234726062](JVM.assets/image-20200903234726062.png)
@@ -206,14 +188,6 @@ public class Test {
 
 当伊甸园的空间用完时，程序又需要创建对象，JVM的垃圾回收器将对伊甸园区进行``垃圾回收(Minor GC)``，将伊甸园区中的不再被其他对象所引用的对象进行销毁。然后将伊甸园中的剩余对象移动到幸存 0区。若幸存 0区也满了，再对该区进行垃圾回收，然后移动到 1 区。那如果1 区也满了呢？再移动到养老区。若养老区也满了，那么这个时候将产生``MajorGC（FullGC）``，进行养老区的内存清理。
 
-若养老区执行了Full GC之后发现依然无法进行对象的保存，就会``产生OOM异常“OutOfMemoryError”``。
-
-如果出现java.lang.OutOfMemoryError: Java heap space异常，说明Java虚拟机的堆内存不够。原因有二：
-
-1. Java虚拟机的堆内存设置不够，可以通过参数-Xms、-Xmx来调整。
-
-2. 代码中创建了大量大对象，并且长时间不能被垃圾收集器收集（存在被引用）。
-
 ### MinorGC 过程（复制->清空->互换）
 
 Java 堆从 GC 的角度还可以细分为：新生代（Eden区、From Survivor区和 To Survivor）和老年代。
@@ -240,7 +214,7 @@ Java 堆从 GC 的角度还可以细分为：新生代（Eden区、From Survivor
 
 ![1599201114802](JVM.assets/1599201114802.png)
 
-永久区(java7之前有)，永久存储区是一个常驻内存区域，用于存放JDK自身所携带的 Class,Interface 的元数据，也就是说它存储的是运行环境必须的类信息，被装载进此区域的数据是不会被垃圾回收器回收掉的，关闭 JVM 才会释放此区域所占用的内存。
+永久区(java7之前有)，永久存储区是一个常驻内存区域( 元空间与永久代其内存空间直接使用的是本地内存 )，用于存放JDK自身所携带的 Class,Interface 的元数据，也就是说它存储的是运行环境必须的类信息，被装载进此区域的数据是不会被垃圾回收器回收掉的，关闭 JVM 才会释放此区域所占用的内存。
 
 ## 7 JVM 参数
 
@@ -257,7 +231,7 @@ Java 堆从 GC 的角度还可以细分为：新生代（Eden区、From Survivor
 ![1599202099696](JVM.assets/1599202099696.png)
 
 ```java
-public class T2 {
+public class MemoryOptionsDemo {
     public static void main(String[] args) {
         System.out.println("当前计算机核数 = " + Runtime.getRuntime().availableProcessors());
 
@@ -278,53 +252,7 @@ public class T2 {
 
 配置VM参数：`` -Xms1024m -Xmx1024m -XX:+PrintGCDetails``
 
-![1599204829124](JVM.assets/1599204829124.png)
-
-```java
-public class T2 {
-    public static void main(String[] args) {
-        String str = "www.baidu.com" ;
-        while(true) {
-            str += str + new Random().nextInt(88888888) + new Random().nextInt(999999999) ;
-        }
-    }
-}
-// Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
-```
-
-配置VM参数：``-Xms8m -Xmx8m -XX:+PrintGCDetails``
-
-```markdown
-[GC (Allocation Failure) [PSYoungGen: 1526K->504K(2048K)] 1526K->772K(7680K), 0.0009672 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
-[GC (Allocation Failure) [PSYoungGen: 1915K->499K(2048K)] 2183K->1017K(7680K), 0.0007847 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
-[GC (Allocation Failure) [PSYoungGen: 1942K->456K(2048K)] 2461K->1210K(7680K), 0.0008139 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
-[GC (Allocation Failure) [PSYoungGen: 1664K->504K(2048K)] 3363K->2674K(7680K), 0.0007038 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
-[GC (Allocation Failure) [PSYoungGen: 1949K->488K(2048K)] 6951K->5490K(7680K), 0.0009813 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
-[GC (Allocation Failure) --[PSYoungGen: 1432K->1432K(2048K)] 6434K->6434K(7680K), 0.0072110 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
-[Full GC (Ergonomics) [PSYoungGen: 1432K->0K(2048K)] [ParOldGen: 5002K->2625K(5632K)] 6434K->2625K(7680K), [Metaspace: 3294K->3294K(1056768K)], 0.0032568 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
-[GC (Allocation Failure) [PSYoungGen: 30K->0K(2048K)] 4544K->4513K(7680K), 0.0002178 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
-[GC (Allocation Failure) [PSYoungGen: 0K->0K(2048K)] 4513K->4513K(7680K), 0.0001809 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
-[Full GC (Allocation Failure) [PSYoungGen: 0K->0K(2048K)] [ParOldGen: 4513K->3568K(5632K)] 4513K->3568K(7680K), [Metaspace: 3294K->3294K(1056768K)], 0.0041181 secs] [Times: user=0.03 sys=0.00, real=0.00 secs] 
-[Full GC (Allocation Failure) Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
-	at java.util.Arrays.copyOf(Arrays.java:3332)
-	at java.lang.AbstractStringBuilder.expandCapacity(AbstractStringBuilder.java:137)
-	at java.lang.AbstractStringBuilder.ensureCapacityInternal(AbstractStringBuilder.java:121)
-	at java.lang.AbstractStringBuilder.append(AbstractStringBuilder.java:647)
-	at java.lang.StringBuilder.append(StringBuilder.java:208)
-	at jvm.T2.main(T2.java:22)
-[PSYoungGen: 0K->0K(2048K)] [ParOldGen: 3568K->3547K(5632K)] 3568K->3547K(7680K), [Metaspace: 3294K->3294K(1056768K)], 0.0047886 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
-Heap
- PSYoungGen      total 2048K, used 61K [0x00000000ffd80000, 0x0000000100000000, 0x0000000100000000)
-  eden space 1536K, 3% used [0x00000000ffd80000,0x00000000ffd8f438,0x00000000fff00000)
-  from space 512K, 0% used [0x00000000fff80000,0x00000000fff80000,0x0000000100000000)
-  to   space 512K, 0% used [0x00000000fff00000,0x00000000fff00000,0x00000000fff80000)
- ParOldGen       total 5632K, used 3547K [0x00000000ff800000, 0x00000000ffd80000, 0x00000000ffd80000)
-  object space 5632K, 62% used [0x00000000ff800000,0x00000000ffb76fd0,0x00000000ffd80000)
- Metaspace       used 3327K, capacity 4496K, committed 4864K, reserved 1056768K
-  class space    used 363K, capacity 388K, committed 512K, reserved 1048576K
-```
-
-![1601365760361](JVM.assets/1601365760361.png)  
+![1599204829124](JVM.assets/1599204829124.png)  
 
 ### 标配参数
 
@@ -1087,5 +1015,171 @@ java -server JVM参数 -jar jar/war包名字
 java -server -Xms1024m -Xmx1024m -XX:+UseG1GC -jar springboot2020-1.0-SNAPSHOT.jar
 ```
 
-------
+## 10 SOFE和OOM
+
+![1601429347879](JVM.assets/1601429347879.png)
+
+### StackOverflowError 栈溢出
+
+```java
+public class StackOverFlowErrorDemo {
+    public static void main(String[] args) {
+        m1();
+    }
+
+    public static void m1() {
+        m1();
+    }
+}
+// Exception in thread "main" java.lang.StackOverflowError
+// 是错误，不是异常
+```
+
+### OutOfMemoryError 内存溢出
+
+若老年代执行了Full GC之后发现依然无法进行对象的保存，就会``产生OOM异常“OutOfMemoryError”``。
+
+#### Java heap space
+
+如果出现java.lang.OutOfMemoryError: Java heap space异常，说明Java虚拟机的堆内存不够。原因有二：
+
+1. Java虚拟机的堆内存设置不够，可以通过参数-Xms、-Xmx来调整。
+
+2. 代码中创建了大量大对象，并且长时间不能被垃圾收集器收集（存在被引用）。
+
+```java
+public class JavaHeapSpaceDemo {
+    public static void main(String[] args) {
+        String str = "www.baidu.com" ;
+        while(true) {
+            str += str + new Random().nextInt(88888888) + new Random().nextInt(999999999) ;
+        }
+    }
+}
+// Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
+```
+
+配置VM参数：``-Xms8m -Xmx8m -XX:+PrintGCDetails``
+
+```markdown
+[GC (Allocation Failure) [PSYoungGen: 1526K->504K(2048K)] 1526K->772K(7680K), 0.0009672 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+[GC (Allocation Failure) [PSYoungGen: 1915K->499K(2048K)] 2183K->1017K(7680K), 0.0007847 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+[GC (Allocation Failure) [PSYoungGen: 1942K->456K(2048K)] 2461K->1210K(7680K), 0.0008139 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+[GC (Allocation Failure) [PSYoungGen: 1664K->504K(2048K)] 3363K->2674K(7680K), 0.0007038 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+[GC (Allocation Failure) [PSYoungGen: 1949K->488K(2048K)] 6951K->5490K(7680K), 0.0009813 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+[GC (Allocation Failure) --[PSYoungGen: 1432K->1432K(2048K)] 6434K->6434K(7680K), 0.0072110 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
+[Full GC (Ergonomics) [PSYoungGen: 1432K->0K(2048K)] [ParOldGen: 5002K->2625K(5632K)] 6434K->2625K(7680K), [Metaspace: 3294K->3294K(1056768K)], 0.0032568 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+[GC (Allocation Failure) [PSYoungGen: 30K->0K(2048K)] 4544K->4513K(7680K), 0.0002178 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+[GC (Allocation Failure) [PSYoungGen: 0K->0K(2048K)] 4513K->4513K(7680K), 0.0001809 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+[Full GC (Allocation Failure) [PSYoungGen: 0K->0K(2048K)] [ParOldGen: 4513K->3568K(5632K)] 4513K->3568K(7680K), [Metaspace: 3294K->3294K(1056768K)], 0.0041181 secs] [Times: user=0.03 sys=0.00, real=0.00 secs] 
+[Full GC (Allocation Failure) Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
+	at java.util.Arrays.copyOf(Arrays.java:3332)
+	at java.lang.AbstractStringBuilder.expandCapacity(AbstractStringBuilder.java:137)
+	at java.lang.AbstractStringBuilder.ensureCapacityInternal(AbstractStringBuilder.java:121)
+	at java.lang.AbstractStringBuilder.append(AbstractStringBuilder.java:647)
+	at java.lang.StringBuilder.append(StringBuilder.java:208)
+	at jvm.T2.main(T2.java:22)
+[PSYoungGen: 0K->0K(2048K)] [ParOldGen: 3568K->3547K(5632K)] 3568K->3547K(7680K), [Metaspace: 3294K->3294K(1056768K)], 0.0047886 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
+Heap
+ PSYoungGen      total 2048K, used 61K [0x00000000ffd80000, 0x0000000100000000, 0x0000000100000000)
+  eden space 1536K, 3% used [0x00000000ffd80000,0x00000000ffd8f438,0x00000000fff00000)
+  from space 512K, 0% used [0x00000000fff80000,0x00000000fff80000,0x0000000100000000)
+  to   space 512K, 0% used [0x00000000fff00000,0x00000000fff00000,0x00000000fff80000)
+ ParOldGen       total 5632K, used 3547K [0x00000000ff800000, 0x00000000ffd80000, 0x00000000ffd80000)
+  object space 5632K, 62% used [0x00000000ff800000,0x00000000ffb76fd0,0x00000000ffd80000)
+ Metaspace       used 3327K, capacity 4496K, committed 4864K, reserved 1056768K
+  class space    used 363K, capacity 388K, committed 512K, reserved 1048576K
+```
+
+![1601365760361](JVM.assets/1601365760361.png)
+
+#### GC overhead limit exceeded
+
+GC回收时间过长会抛出OutOfMerroyError。过长的定义是，超过98%的时间用来做GC并且回收了不到2%的堆内存，连续多次GC都只回收了不到2%的极端情况下才会抛出。
+
+假如不抛出GC overhead limit exceeded错误，GC清理就这么点内存很快再次填满，迫使GC再次执行，这样恶性循环，CPU使用率一直都是100%，而GC却没有任何成果。
+
+![1601429881869](JVM.assets/1601429881869.png)
+
+```java
+public class GCOverheadDemo {
+    public static void main(String[] args) {
+        int i = 0;
+        List<String> list = new ArrayList<>();
+
+        try {
+            while (true) {
+                list.add(String.valueOf(++i).intern());
+            }
+        } catch (Exception e) {
+            System.out.println("==========i: " + i);
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+配置VM参数：``-Xms20m -Xmx20m -XX:+PrintGCDetails -XX:MaxDirectMemorySize=5m``
+
+```markdown
+[Full GC (Ergonomics) [PSYoungGen: 5631K->5631K(6144K)] [ParOldGen: 13777K->13777K(13824K)] 19409K->19409K(19968K), [Metaspace: 3293K->3293K(1056768K)], 0.0539105 secs] [Times: user=0.19 sys=0.00, real=0.06 secs] 
+==========i: 317532
+java.lang.OutOfMemoryError: GC overhead limit exceeded
+	at java.lang.Integer.toString(Integer.java:403)
+	at java.lang.String.valueOf(String.java:3099)
+	at com.jvm.GCOverheadDemo.main(GCOverheadDemo.java:17)
+```
+
+#### Direct buffer memory
+
+写NIO程序经常使用ByteBuffer来读取或写入数据，这是一种基于通道（Channel）与缓冲区（Buffer）的I/O方式，它可以使用Native函数库直接分配堆外内存，然后通过一个存储在Java堆里面的DirectByteBuffer对象来做为这块内存的引用进行操作。这样能在一些场景中显著提升性能，因为避免了在Java堆和Native堆中来回复制数据。
+
+``ByteBuffer.allocate(capability)`` 分配JVM堆内存，属于GC管辖范围，由于需要拷贝所以速度相对较慢。
+
+``ByteBuffer.allocateDirect(capability)`` 分配OS本地内存，不属于GC管辖范围，由于不需要内存拷贝所以速度相对较快
+
+但如果不断分配本地内存，堆内存很少使用，那么JVM就不需要执行GC，DirectByteBuffer对象就不会被回收，这时候堆内存充足，但本地内存可能已经用光了，再次尝试分配本地内存就会出现OutOfMemoryError，那程序就直接崩溃。
+
+```java
+public class DirectBufferMemoryDemo {
+    public static void main(String[] args) {
+        System.out.println("配置的maxDirectMemory:" + (VM.maxDirectMemory() / 1024 / 1023) + "MB");
+        try {
+            Thread.sleep(3000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        ByteBuffer bb = ByteBuffer.allocateDirect(6 * 1024 * 1024);
+    }
+}
+```
+
+配置VM参数：``-Xms10m -Xmx10m -XX:+PrintGCDetails -XX:MaxDirectMemorySize=5m``
+
+```markdown
+[Full GC (System.gc()) [PSYoungGen: 504K->0K(2560K)] [ParOldGen: 352K->738K(7168K)] 856K->738K(9728K), [Metaspace: 3298K->3298K(1056768K)], 0.0067846 secs] [Times: user=0.06 sys=0.00, real=0.01 secs] 
+Exception in thread "main" java.lang.OutOfMemoryError: Direct buffer memory
+	at java.nio.Bits.reserveMemory(Bits.java:693)
+	at java.nio.DirectByteBuffer.<init>(DirectByteBuffer.java:123)
+	at java.nio.ByteBuffer.allocateDirect(ByteBuffer.java:311)
+	at com.jvm.DirectBufferMemoryDemo.main(DirectBufferMemoryDemo.java:19)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
