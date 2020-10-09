@@ -1,42 +1,140 @@
-# ps -ef | grep xxx
 
-``ps`` 是LINUX下最常用的也是非常强大的进程查看命令
 
-``ps [选项]``，下面对命令选项进行说明：
+## 线上查询及帮助命令
 
--e 显示所有进程
+### man
 
--f 全格式 
+man 命令名
 
--h 不显示标题 
+查看命令帮助，命令的词典，更复杂的还有info，但不常用
 
--l 长格式 
+### help
 
--w 宽输出 
+help 命令名
 
--a 显示终端上的所有进程，包括其他用户的进程 
+命令名 --help
 
--r 只显示正在运行的进程 
+查看Linux内置命令的帮助，比如cd命令 
 
--x 显示没有控制终端的进程
+## 文件和目录操作命令
 
-``中间的“ | ”``是管道命令 是指ps命令与grep同时执行
+### ls
 
-``grep(Global Regular Expression Print``，表示全局正则表达式版本)命令是查找，是一种强大的文本搜索工具，它能使用正则表达式搜索文本，并把匹配的行打印出来。它的使用权限是所有用户。
+ls：全拼list，功能是列出目录的内容及其内容属性信息。
 
-## 防火墙
+### cd
 
-firewall-cmd --list-all 参看防火墙 
+cd：全拼change directory，功能是从当前工作目录切换到指定的工作目录。
 
-sudo firewall-cmd --add-port=80/tcp --permanent 添加开放端口 
+### cp
 
-firewall-cmd --reload 重启 
+cp：全拼copy，其功能为复制文件或目录。
 
-systemctl stop firewalld 
+### find
 
-systemctl start firewalld
+find：查找的意思，用于查找目录及目录下的文件。
 
-## tar -zxvf
+-cmin n : 在过去 n 分钟内被修改过
+
+-cnewer file :比文件 file 更新的文件
+
+-ctime n : 在过去n天内被修改过的文件
+
+-empty : 空的文件-gid n or -group name : gid 是 n 或是 group 名称是 name
+
+-ipath p, -path p : 路径名称符合 p 的文件，ipath 会忽略大小写
+
+-name name, -iname name : 文件名称符合 name 的文件。iname 会忽略大小写
+
+-size n : 文件大小 是 n 单位，b 代表 512 位元组的区块，c 表示字元数，k 表示 kilo bytes，w 是二个位元组。
+
+-type c : 文件类型是 c 的文件。
+
+​		d: 目录
+
+​		c: 字型装置文件
+
+​		b: 区块装置文件
+
+​		p: 具名贮列
+
+​		f: 一般文件
+
+​		l: 符号连结
+
+​		s: socket
+
+```markdown
+# 将目前目录及其子目录下所有延伸档名是 xml 的文件列出来
+	find . -name *.xml
+
+# 将目前目录其其下子目录中所有目录列出
+	find . -type d
+
+# 将目前目录及其子目录下所有最近 1 天内更新过的文件列出
+find . -ctime -1
+```
+
+### mkdir
+
+mkdir：全拼make directories，其功能是创建目录。
+
+### mv
+
+mv：全拼move，其功能是移动或重命名文件。
+
+### pwd
+
+pwd：全拼print working directory，其功能是显示当前工作目录的绝对路径。
+
+### rename
+
+rename：用于重命名文件。
+
+### rm
+
+rm：全拼remove，其功能是删除一个或多个文件或目录。
+
+-i 删除前逐一询问确认。
+
+-f 即使原档案属性设为唯读，亦直接删除，无需逐一确认。
+
+-r 将目录及以下之档案亦逐一删除。
+
+```markdown
+# 删除spring目录下的所有文件及目录
+	rm  -rf  spring
+```
+
+### rmdir
+
+rmdir：全拼remove empty directories，功能是删除空目录。
+
+### file
+
+file：显示文件的类型。 
+
+## 查看文件及内容处理命令
+
+more：分页显示文件内容。
+
+less：分页显示文件内容，more命令的相反用法。
+
+head：显示文件内容的头部。
+
+tail：显示文件内容的尾部。
+
+wc：统计文件的行数、单词数或字节数。
+
+iconv：转换文件的编码格式。
+
+grep/egrep：过滤字符串
+
+vi/vim：命令行文本编辑器。
+
+## 文件压缩及解压缩命令
+
+### tar
 
 ``tar`` 命令：用来压缩和解压文件。tar本身不具有压缩功能。他是调用压缩功能实现的。 
 
@@ -74,3 +172,123 @@ systemctl start firewalld
 
 –exclude FILE：在压缩的过程中，不要将 FILE 打包
 
+## 信息显示命令
+
+uname：显示操作系统相关信息的命令。
+
+hostname：显示或者设置当前系统的主机名。
+
+dmesg：显示开机信息，用于诊断系统故障。
+
+uptime：显示系统运行时间及负载。
+
+stat：显示文件或文件系统的状态。
+
+du：计算磁盘空间使用情况。
+
+df：报告文件系统磁盘空间的使用情况。
+
+top：实时显示系统资源使用情况。
+
+free：查看系统内存。
+
+date：显示与设置系统时间。
+
+cal：查看日历等时间信息。
+
+## 用户管理命令
+
+useradd：添加用户。
+
+usermod：修改系统已经存在的用户属性。
+
+userdel：删除用户。
+
+groupadd：添加用户组。
+
+passwd：修改用户密码。
+
+id：查看用户的uid,gid及归属的用户组。
+
+su：切换用户身份。
+
+sudo：以另外一个用户身份(默认root用户)执行事先在sudoers文件允许的命令。
+
+## 基础网络操作命令
+
+ping：测试主机之间网络的连通性。
+
+ifconfig：查看、配置、启用或禁用网络接口的命令。
+
+netstat：查看网络状态。
+
+## 系统权限及用户授权相关命令
+
+chmod：改变文件或目录权限。
+
+## 内置命令及其它
+
+rpm：管理rpm包的命令。
+
+yum：自动化简单化地管理rpm包的命令。
+
+clear：清除屏幕，简称清屏。
+
+chkconfig：管理Linux系统开机启动项。 
+
+vmstat：虚拟内存统计。
+
+mpstat：显示各个可用CPU的状态统计。
+
+iostat：统计系统IO。
+
+## 进程管理相关命令
+
+kill：终止进程。
+
+### ps
+
+``ps`` 是LINUX下最常用的也是非常强大的进程查看命令
+
+``ps [选项]``，下面对命令选项进行说明：
+
+-e 显示所有进程
+
+-f 全格式 
+
+-h 不显示标题 
+
+-l 长格式 
+
+-w 宽输出 
+
+-a 显示终端上的所有进程，包括其他用户的进程 
+
+-r 只显示正在运行的进程 
+
+-x 显示没有控制终端的进程
+
+``中间的“ | ”``是管道命令 是指ps命令与grep同时执行
+
+``grep(Global Regular Expression Print``，表示全局正则表达式版本)命令是查找，是一种强大的文本搜索工具，它能使用正则表达式搜索文本，并把匹配的行打印出来。它的使用权限是所有用户。
+
+```markdown
+# 查找名字为xxx的线程信息
+	ps -ef | grep xxx
+```
+
+### service
+
+service：启动、停止、重新启动和关闭系统服务，还可以显示所有系统服务的当前状态。 
+
+## 防火墙
+
+firewall-cmd --list-all 参看防火墙 
+
+sudo firewall-cmd --add-port=80/tcp --permanent 添加开放端口 
+
+firewall-cmd --reload 重启 
+
+systemctl stop firewalld 
+
+systemctl start firewalld
