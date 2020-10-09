@@ -214,7 +214,7 @@ Java 堆从 GC 的角度还可以细分为：新生代（Eden区、From Survivor
 
 ![1599201114802](JVM.assets/1599201114802.png)
 
-永久区(java7之前有)，永久存储区是一个常驻内存区域( 元空间与永久代其内存空间直接使用的是本地内存 )，用于存放JDK自身所携带的 Class,Interface 的元数据，也就是说它存储的是运行环境必须的类信息，被装载进此区域的数据是不会被垃圾回收器回收掉的，关闭 JVM 才会释放此区域所占用的内存。
+永久区(java7之前有)，永久存储区是一个常驻内存区域( 元空间与永久代不同其内存空间直接使用的是本地内存 )，用于存放JDK自身所携带的 Class,Interface 的元数据，也就是说它存储的是运行环境必须的类信息，被装载进此区域的数据是不会被垃圾回收器回收掉的，关闭 JVM 才会释放此区域所占用的内存。
 
 ## 7 JVM 参数
 
@@ -1165,21 +1165,105 @@ Exception in thread "main" java.lang.OutOfMemoryError: Direct buffer memory
 	at com.jvm.DirectBufferMemoryDemo.main(DirectBufferMemoryDemo.java:19)
 ```
 
+#### unable to create new native thread
 
+高并发请求服务器时，经常出现如下异常：java.lang.OutOfMemoryError: unable to create new native thread，准确的讲该native thread异常与对应的平台有关。
 
+导致原因：
 
+1. 应用创建了太多线程了，一个应用进程创建多个线程，超过系统承载极限
+2. 服务器并不允许你的应用程序创建这么多线程，linux系统默认允许单个进程可以创建的线程数是1024个
 
+解决办法：
 
+1. 想办法降低应用程序创建线程的数量，分析应用是否真的需要创建这么多线程，如果不是，改代码将线程数降到最低
+2. 对于有的应用，确实需要创建很多线程，远超过linux的默认线程限制，可以通过修改linux服务器配置，扩大linux默认限制
 
+```java
+public class UnableCreateNewThreadDemo {
+    public static void main(String[] args) {
+        for (int i = 1; ; i++) {
+            System.out.println("=============== i = " + i);
+            new Thread(() -> {
+                try {
+                    Thread.sleep(Integer.MAX_VALUE);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }, "" + i).start();
+        }
+    }
+}
+```
 
+```markdown
+Exception in thread "main" java.lang.OutOfMemoryError: unable to create new native thread
+	at java.lang.Thread.start0(Native Method)
+	at java.lang.Thread.start(Thread.java:717)
+	at UnableCreateNewThreadDemo.main(UnableCreateNewThreadDemo.java:17)
+```
 
+#### Metaspace
 
+使用 ``java -XX:+PrintFlagsInitial`` 命令查看本机的初始化参数，-XX:MetaspaceSize为 21810376B（约20.8M）
 
+Java8 及之后的版本使用的Metaspace来替代永久代。
 
+Metaspace是方法区在HotSpot中的实现，它与永久代最大区别在于：Metaspace并不在虚拟机内存中而是使用本地内存。也即在Java8中，class metadata(the virtual machines internal presentation of Java class)，被存储在叫做Metaspace的native memory。
 
+永久代（Java8后被元空间Metaspace取代）存放以下信息：
 
+* 虚拟机加载的类信息
 
+* 常量池
 
+* 静态变量
 
+* 即时编译后的代码
 
+```java
+public class MetaspaceOOMTest {
+
+    static class OOMTest {}
+
+    public static void main(String[] args) {
+        // 模拟计数多少次以后发生异常
+        int i = 0;
+        try {
+            while (true) {
+                i++;
+                Enhancer enhancer = new Enhancer();
+                enhancer.setSuperclass(OOMTest.class);
+                enhancer.setUseCache(false);
+                enhancer.setCallback(new MethodInterceptor() {
+                    @Override
+                    public Object intercept(Object o, Method method, Object[] objects, MethodProxy methodProxy) throws Throwable {
+                        return methodProxy.invokeSuper(o, args);
+                    }
+                });
+                enhancer.create();
+            }
+        } catch (Throwable e) {
+            System.out.println("************多少次后发生异常： " + i);
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+配置VM参数： ``-XX:MetaspaceSize=8m -XX:MaxMetaspaceSize=8m``
+
+```markdown
+************多少次后发生异常： 255
+java.lang.OutOfMemoryError: Metaspace
+	at java.lang.Class.forName0(Native Method)
+	at java.lang.Class.forName(Class.java:348)
+	at org.springframework.cglib.core.ReflectUtils.defineClass(ReflectUtils.java:386)
+	at org.springframework.cglib.core.AbstractClassGenerator.create(AbstractClassGenerator.java:219)
+	at org.springframework.cglib.proxy.Enhancer.createHelper(Enhancer.java:377)
+	at org.springframework.cglib.proxy.Enhancer.create(Enhancer.java:285)
+	at com.jvm.MetaspaceOOMTest.main(MetaspaceOOMTest.java:32)
+```
+
+------
 
