@@ -613,7 +613,7 @@ Mongodb 的三种集群方式的搭建：Master-Slaver/Replica Set / Sharding。
 
 #### 3.2.1 MongoDB 主从搭建
 
-这个是最简答的集群搭建，不过准确说也不能算是集群，只能说是主备。并且官方已经不推荐这种方式， 所以在这里只是简单的介绍下吧，搭建方式也相对简单。 
+这个是最简单的集群搭建，不过准确说也不能算是集群，只能说是主备。并且官方已经不推荐这种方式， 所以在这里只是简单的介绍下吧，搭建方式也相对简单。 
 
 ```markdown
 # 主机配置 /opt/mongodb/master-slave/master/mongodb.cfg 

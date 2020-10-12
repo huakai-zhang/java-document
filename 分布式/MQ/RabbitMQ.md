@@ -853,11 +853,11 @@ public class TopicConsumer {
 
 2.秒杀业务根据消息队列中的请求信息，再做后续处理。
 
-## 7. RabbitMQ的集群
+# 7. RabbitMQ的集群
 
-### 7.1 集群架构
+## 7.1 集群架构
 
-#### 7.1.1 普通集群(副本集群)
+### 7.1.1 普通集群(副本集群)
 
 > All data/state required for the operation of a RabbitMQ broker is replicated across all nodes. An exception to this are message queues, which by default reside on one node, though they are visible and reachable from all nodes. To replicate queues across nodes in a cluster, use a queue type that supports replication. This topic is covered in the Quorum Queues and Classic Mirrored Queues guides. --摘自官网
 
@@ -946,7 +946,7 @@ rabbitmqctl stop_app
 
 ---
 
-#### 7.1.2 镜像集群
+### 7.1.2 镜像集群
 
 > This guide covers mirroring (queue contents replication) of classic queues  --摘自官网
 >

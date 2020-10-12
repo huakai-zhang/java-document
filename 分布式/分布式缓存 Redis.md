@@ -2,7 +2,7 @@
 
 ## 存储结构
 
-1. 字符类型（简单动态字符串（Simple Dynamic String），简称SDS）
+1. String 字符类型（简单动态字符串（Simple Dynamic String），简称SDS）
 
    ```c
    struct sdshdr{
@@ -15,13 +15,15 @@
    };
    ```
 
-2. 散列类型 
+   作为常规的key-value缓存应用。例如微博数、粉丝数等，一个键最大能存储512MB
 
-3. 列表类型 
+2. 散列类型 ， 主要用来存储对象信息
 
-4. 集合类型 
+3. 列表类型 ，比如twitter的关注列表，粉丝列表等都可以用Redis的list结构来实现 
 
-5. 有序集合
+4. 集合类型 ， 交集，并集，差集 
+
+5. 有序集合，排行榜
 
 ## 功能
 
@@ -709,8 +711,9 @@ slave第一次或者重连到master上以后，会向master发送一个SYNC的�
 1. 执行bgsave（rdb的快照文件） 
 2. master 会把新收到的修改命令存入到缓冲区
 
+master通过命令的方式把快照发送给slave，slave收到数据之后，会把自己的数据清空，然后加载这个文件到内存 ![img](https://img-blog.csdnimg.cn/2020061213453976.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) 
 
-master通过命令的方式把快照发送给slave，slave收到数据之后，会把自己的数据清空，然后加载这个文件到内存 ![img](https://img-blog.csdnimg.cn/2020061213453976.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) 当 replica 失去与 master 的连接时，或者当复制仍在进行时，replica 可以以两种不同的方式操作：
+当 replica 失去与 master 的连接时，或者当复制仍在进行时，replica 可以以两种不同的方式操作：
 
 1. 如果将replica serve stale data设置为“yes”（默认值），则replica仍将答复客户端请求，可能包含过期数据，或者如果这是第一次同步，则数据集可能只是空的。 
 <li>如果replica serve stale data设置为’no’，则replica将对所有类型的命令回复错误“SYNC with master in progress”。</li>
