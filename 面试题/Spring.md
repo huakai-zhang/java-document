@@ -36,5 +36,97 @@ ResponseBody
 
 #### Q3 简单介绍一下 Spring bean 的生命周期
 
+`定义` 在配置文件里面用 bean 标签来进行定义
+
+`初始化` 有两种初始化方式：
+
+1. 在配置文件中指定 init-method 属性来完成
+2. 实现 org.springframework.beans.factory.InitializingBean 接口
+
+`调用` 有三种方式可以得到 bean 实例，并进行调用
+
+`销毁` 有两种销毁方式：
+
+1. 使用配置文件指定 destory-method 属性
+2. 实现 org.springframework.beans.factory.DisposableBean 接口
+
+
+
+#### Q4 请描述一下 Spring 的事务
+
+基于 TransactionInterceptor 的编程式事务
+
+基于 TransactionProxyFactoryBean 的声明式事务
+
+基于 @Transactional 的声明式事务
+
+
+
+#### Q5 有哪些不同类型的 IOC（依赖注入）方式？
+
+Spring 提供了多种依赖注入的方式。
+
+1.Set 注入
+
+```java
+private HelloService helloService;
+
+@Autowired
+public void setHelloService(HelloService helloService) {
+    this.helloService = helloService;
+}
+```
+
+2.构造器注入
+
+```java
+// 属性注入
+//@Autowired
+private HelloService helloService;
+
+@Autowired
+public HelloController(HelloService helloService) {
+    this.helloService = helloService;
+}
+```
+
+3.静态工厂的方法注入
+
+4.实例工厂的方法注入
+
+
+
+#### Q6 Spring 支持的几种 bean 的作用域
+
+Spring 框架中的单例 bean 不是线程安全的。
+
+
+
+#### Q7 什么是 bean 的自动装配？
+
+无须在 Spring 配置文件中描述 javaBean 之间的依赖关系（如配置property、constructor-arg）。IOC 容器会自动建立 javabean 之间的关联关系。
+
+有五种自动装配的方式，可以用来指导 Spring 容器用自动装配方式来进行依赖注入。
+
+1）no：默认的方式是不进行自动装配，通过显式设置 ref 属性来进行装配。
+
+2）byName：通过参数名自动装配，Spring 容器在配置文件中发现 bean 的 autowire 属性被设置成 byname，之后容器试图匹配、装配和该 bean 的属性具有相同名字的 bean。
+
+3）byType:：通过参数类型自动装配，Spring 容器在配置文件中发现 bean 的 autowire 属性被设置成 byType，之后容器试图匹配、装配和该 bean 的属性具有相同类型的 bean。如果有多个 bean 符合条件，则抛出错误。
+
+4）constructor：这个方式类似于 byType， 但是要提供给构造器参数，如果没有确定的带参数的构造器参数类型，将会抛出异常。
+
+5）autodetect：首先尝试使用 constructor 来自动装配，如果无法工作，则使用 byType 方式。
+
+
+
+
+
+
+
+
+
+
+
 
 
