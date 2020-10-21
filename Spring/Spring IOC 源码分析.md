@@ -265,75 +265,83 @@ FileSystemXmlApplicationContext调用其父类的AbstractApplicationContext的re
 public void refresh() throws BeansException, IllegalStateException {
    synchronized (this.startupShutdownMonitor) {
       // Prepare this context for refreshing.
-      //调用容器准备刷新的方法，获取容器的当时时间，同时给容器设置同步标识
+      // 1.调用容器准备刷新的方法，获取容器的当时时间，同时给容器设置同步标识
       prepareRefresh();
 
       // Tell the subclass to refresh the internal bean factory.
-      //告诉子类启动refreshBeanFactory()方法，Bean定义资源方法的载入从子类的refreshBeanFactory()方法启动
+      // 2.告诉子类启动refreshBeanFactory()方法，Bean定义资源方法的载入从子类的refreshBeanFactory()方法启动
       ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
 
       // Prepare the bean factory for use in this context.
-      //为BeanFactory配置容器特性，例如类加载器，事件处理器等
+      // 3.为BeanFactory配置容器特性，例如类加载器，事件处理器等
       prepareBeanFactory(beanFactory);
 
       try {
          // Allows post-processing of the bean factory in context subclasses.
-         //为容器的某些子类指定特殊的BeanPost事件处理器
+         // 4.为容器的某些子类指定特殊的BeanPost事件处理器
          postProcessBeanFactory(beanFactory);
 
          // Invoke factory processors registered as beans in the context.
-         // 调用所有注册的BeanFactoryPostProcessor的Bean
+         // 5.调用所有注册的BeanFactoryPostProcessor的Bean
          invokeBeanFactoryPostProcessors(beanFactory);
 
          // Register bean processors that intercept bean creation.
-         //为BeanFactory注册BeanPost事件处理器 
-         //BeanPostProcessor是Bean后置处理器，用于监听容器触发的事件
+         // 6.为BeanFactory注册BeanPost事件处理器 
+         // BeanPostProcessor是Bean后置处理器，用于监听容器触发的事件
          registerBeanPostProcessors(beanFactory);
 
          // Initialize message source for this context.
-         //初始化信息源，国际化相关
+         // 7.初始化信息源，国际化相关
          initMessageSource();
 
          // Initialize event multicaster for this context.
-         //初始化容器事件传播器
+         // 8.初始化容器事件传播器
          initApplicationEventMulticaster();
 
          // Initialize other special beans in specific context subclasses.
-         //调用子类的某些Bean初始化方法
+         // 9.调用子类的某些Bean初始化方法
          onRefresh();
 
          // Check for listener beans and register them.
-         //为事件传播器注册事件监听器
+         // 10.为事件传播器注册事件监听器
          registerListeners();
 
          // Instantiate all remaining (non-lazy-init) singletons.
-         //初始化所有剩余的单例Bean
+         // 11.初始化所有剩余的单例Bean
          finishBeanFactoryInitialization(beanFactory);
 
          // Last step: publish corresponding event.
-         // 初始化容器的生命周期事件处理器，并发布容器的生命周期事件
+         // 12.初始化容器的生命周期事件处理器，并发布容器的生命周期事件
          finishRefresh();
       }
 
       catch (BeansException ex) {
          // Destroy already created singletons to avoid dangling resources.
-         //销毁以创建的单例Bean
+         // 13.销毁以创建的单例Bean
          destroyBeans();
 
          // Reset 'active' flag.
-         //取消refresh操作，重置容器的同步标识
+         // 14.取消refresh操作，重置容器的同步标识
          cancelRefresh(ex);
 
          // Propagate exception to caller.
          throw ex;
       }
+     	finally { 
+       	// Reset common introspection caches in Spring's core, since we 
+       	// might not ever need metadata for singleton beans anymore... 
+       	// 15.重设公共缓存 
+       	resetCommonCaches(); 
+     }
    }
 }
 ```
 
-refresh()方法主要为IOC容器Bean的生命周期管理提供条件，Spring IOC容器载入Bean定义资源文件从其子类容器的refreshBeanFactory()方法启动，所以整个refresh()中ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory()这句代码以后的都是注册容器的信息源和生命周期事件，载入过程就是从这句代码启动。
+refresh()方法主要为IOC容器Bean的生命周期管理提供条件，Spring IOC容器载入Bean定义资源文件从其子类容器的``refreshBeanFactory()``方法启动，所以整个refresh()中ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory()这句代码以后的都是注册容器的信息源和生命周期事件，载入过程就是从这句代码启动。
 
-### 启动容器载入Bean定义资源文件
+refresh()方法的主要作用是：在创建IOC容器之前，如果已经容器已经存在，则需要把已有的容器销毁和关闭，以保证在refresh之后使用的是新建立起来的IOC容器。它类似于对IOC容器的重启，在新建立好的容器中对容器进行初始化，对 Bean 配置资源进行载入。
+
+### 3.2.4 创建容器
 
 AbstractApplicationContext的obtainFreshBeanFactory()方法调用子类容器的refreshBeanFactory方法，启动容器载入Bean定义资源文件的过程：
 
@@ -379,9 +387,11 @@ protected final void refreshBeanFactory() throws BeansException {
 
 这个方法中，先判断BeanFactory是否存在，如果存在则先销毁beans并关闭beanFactory，接着创建DefaultListableBeanFactory，并调用loadBeanDefinitions装载bean定义。
 
-### AbstractXmlApplicationContext子类的loadBeanDefinitions方法
+### 3.2.5 载入配置路径
 
-AbstractRefreshableApplicationContext中只定义了抽象的loadBeanDefinition方法，容器真正调用的是其子类AbstractXmlApplicationContext对该方法的实现： loadBeanDefinitions方法同样是抽象方法，是有其子类实现的，也即在AbstractXmlApplicationContext中。
+AbstractRefreshableApplicationContext中只定义了抽象的loadBeanDefinition方法，容器真正调用的是其子类AbstractXmlApplicationContext对该方法的实现： 
+
+loadBeanDefinitions方法同样是抽象方法，是有其子类实现的，也即在AbstractXmlApplicationContext中。
 
 ```java
 public abstract class AbstractXmlApplicationContext 
@@ -441,9 +451,11 @@ protected Resource[] getConfigResources() {
 
 Xml Bean读取器(XmlBeanDefinitionReader)调用其父类AbstractBeanDefinitionReader的reader.loadBeanDefinitions方法读取Bean定义资源。 这里使用FileSystemXmlApplicationContext作为例子分析，因此getConfigResources的返回值为null，因此程序执行reader.loadBeanDefinitions(configLocations);
 
-### AbstractBeanDefinitionReader读取Bean定义资源
+### 3.2.6 分配路径处理策略
 
-org.springframework.beans.factory.support的BeanDefinitionReader在其抽象父类AbstractBeanDefinitionReader中定义了载入过程：
+org.springframework.beans.factory.support的BeanDefinitionReader在其抽象父类AbstractBeanDefinitionReader中定义了载入过程。
+
+AbstractBeanDefinitionReader 的 loadBeanDefinitions()方法源码如下： 
 
 ```java
 //重载方法，调用下面的loadBeanDefinitions(String, Set<Resource>);方法 
@@ -498,15 +510,24 @@ public int loadBeanDefinitions(String location, Set<Resource> actualResources) t
       return loadCount;
    }
 }
+
+//重载方法，调用loadBeanDefinitions(String);
+@Override
+public int loadBeanDefinitions(String... locations) throws BeanDefinitionStoreException {
+	Assert.notNull(locations, "Location array must not be null");
+	int counter = 0;
+	for (String location : locations) {
+		counter += loadBeanDefinitions(location);
+	}
+	return counter;
+}
 ```
-
-
 
 loadBeanDefinitions(Resource… resources)方法和上面分析的3个方法类似，同样也是调用XmlBeanDefinitionReader的loadBeanDefinitions方法。 从对AbstractBeanDefinitionReader的loadBeanDefinitions方法源码分析可以看出该方法做了一下两件事： 
 
 首先，调用资源加载器的获取资源方法resourceLoader.getResource(location)，获取要加载的资源。(上方代码else中的getResource) 
 
-其次，真正执行加载功能是其子类XmlBeanDefinitionReader的loadBeanDefinitions方法。 
+其次，真正执行加载功能是其子类XmlBeanDefinitionReader的loadBeanDefinitions方法。在 loadBeanDefinitions()方法中调用了 AbstractApplicationContext 的 getResources()方法，跟进去之后发现 getResources()方法其实定义在 ResourcePatternResolver 中，此时，我们有必要来看一下 ResourcePatternResolver 的全类图：  
 
 ![20200331104926782](Spring IOC 源码分析.assets/20200331104926782.png)
 
@@ -514,7 +535,7 @@ loadBeanDefinitions(Resource… resources)方法和上面分析的3个方法类�
 
 结合上面的ResourceLoader于ApplicationContext的继承图，可以知道此时调用的是DefaultResourceLoader的getResource方法定位Resource，因为FileSystemXmlApplicationContext本身就是DefaultResourceLoader的实现类，所以此时又回到了FileSystemXmlApplicationContext中来。
 
-### 资源加载器获取要读入的资源
+### 3.2.7 解析配置文件路径
 
 XmlBeanDefinitionReader通过调用其父类DefaultResourceLoader的getResource方法获取要加载的资源：
 
@@ -558,7 +579,7 @@ protected Resource getResourceByPath(String path) {
 
 代码回到了FileSystemXmlApplicaitonContext中来，它提供了FileSystemResource来完成从文件系统得到配置文件的资源定义。 这样就可以从文件系统路径上对IOC配置文件进行加载——当然可以按照这个逻辑从任何地方加载，在Spring中提供的各种资源抽象，比如ClassPathResource，URLResouce，FileSystemResource等来供我们使用。上面是定位Resource的一个过程，而这只是加载过程的一部分。
 
-### XmlBeanDefinitionReader加载Bean定义资源
+### 3.2.8 开始读取配置内容
 
 Bean定义了Resource得到了，继续回到XmlBeanDefinitionReader的loadBeanDefinitions(Resource …)方法看到代表bean文件的资源定义以后的载入过程。
 
@@ -647,7 +668,9 @@ protected int doLoadBeanDefinitions(InputSource inputSource, Resource resource)
 
 通过源码分析，载入Bean定义资源文件的最后一步是将Bean定义资源转换为Document对象，该过程有documentLoader实现。
 
-### DocumentLoader将Bean定义资源转换为Document对象
+### 3.2.9 准备文档对象
+
+DocumentLoader 将 Bean 配置资源转换成 Document 对象的源码如下： 
 
 ```java
 //使用标准的JAXP将载入的Bean定义资源转换成document对象
@@ -698,7 +721,7 @@ protected DocumentBuilderFactory createDocumentBuilderFactory(int validationMode
 
 该解析过程调用JavaEE标准的JAXP标准进行处理。 至此Spring IOC 容器根据定位的Bean定义资源文件，将其加载读入并转化为Document对象过程完成。 接下来分析Spring IOC 将载入的Bean定义资源文件转换为Document之后，是如何将其解析为SpringIOC管理的Bean对象并将其注册到容器中的。
 
-### XmlBeanDefinitionReader解析载入的Bean定义资源文件
+### 3.2.10 分配解析策略
 
 XmlBeanDefinitionReader类中的doLoadBeanDefinitions方法是从特定XML文件中实际载入Bean定义资源的方法，该方法在载入Bean资源之后将其转换为Document对象，接下来调用registerBeanDefinitions启动Spring IOC容器对Bean定义的解析过程：
 
@@ -723,9 +746,13 @@ protected BeanDefinitionDocumentReader createBeanDefinitionDocumentReader() {
 }
 ```
 
-Bean定义资源的载入解析分为以下两个过程： 首先，通过调用XML解析器将Bean定义资源转换得到Document对象，但是这些Document对象并没有按照Spring Bean规则进行操作，这一步是载入的过程。 其次，在完成通用的XML解析之后，按照Spring的Bean规则对Document对象进行解析。 按照Spring的Bean规则对Document对象解析的过程是在接口BeanDefinitionDocumentReader的实现类DefaultBeanDefinitionDocumentReader中实现的。
+Bean定义资源的载入解析分为以下两个过程： 
 
-### DefaultBeanDefinitionDocumentReader对Bean定义的Document对象解析
+首先，通过调用XML解析器将Bean定义资源转换得到Document对象，但是这些Document对象并没有按照Spring Bean规则进行操作，这一步是载入的过程。
+
+其次，在完成通用的XML解析之后，按照Spring的Bean规则对Document对象进行解析。 按照Spring的Bean规则对Document对象解析的过程是在接口BeanDefinitionDocumentReader的实现类DefaultBeanDefinitionDocumentReader中实现的。
+
+### 3.2.11 将配置载入内存
 
 BeanDefinitionDocumentReader接口通过registerBeanDefinitions方法调用其实现类DefaultBeanDefinitionDocumentReader对Document对象进行解析：
 
@@ -961,6 +988,10 @@ protected void processBeanDefinition(Element ele, BeanDefinitionParserDelegate d
 
 对于既不是``<Import>``元素，又不是``<Alias>``元素的元素，即Spring配置文件中普通的``<Bean>``元素的解析是BeanDefinitionParserDelegate类的parseBeanDefinitionElement方法来实现。
 
+### 3.2.12 载入 `<bean>` 元素
+
+Bean 配置信息中的`<import>`和`<alias>`元素解析在 DefaultBeanDefinitionDocumentReader 中已经完成，对 Bean 配置信息中使用最多的`<bean>`元素交由 BeanDefinitionParserDelegate 来解析，其解析实现的源码如下： 
+
 ```java
 //解析<Bean>元素的入口
 public BeanDefinitionHolder parseBeanDefinitionElement(Element ele) {
@@ -1112,9 +1143,13 @@ public AbstractBeanDefinition parseBeanDefinitionElement(
 }
 ```
 
-在Spring配置文件中``<Bean>``元素中的配置的属性就是通过该方法解析和设置到Bean中去的。 注意：在解析``<Bean>``元素过程中没有创建和实例化Bean对象，只是创建了Bean对象的定义类BeanDefinition，将``<Bean>``元素中的配置信息设置到BeanDefinition中作为记录，当依赖注入时才使用这些记录信息创建和实例化具体的Bean对象。 使用Spring的``<Bean>``元素时，配置最多的是``<property>``属性，因此下面了解Bean的属性在解析时是如何设置的。
+在Spring配置文件中``<Bean>``元素中的配置的属性就是通过该方法解析和设置到Bean中去的。 
 
-### BeanDefinitionParserDelegate解析``<property>``元素
+注意：在解析``<Bean>``元素过程中没有创建和实例化Bean对象，只是创建了Bean对象的定义类BeanDefinition，将``<Bean>``元素中的配置信息设置到BeanDefinition中作为记录，当依赖注入时才使用这些记录信息创建和实例化具体的Bean对象。
+
+使用Spring的``<Bean>``元素时，配置最多的是``<property>``属性，因此下面了解Bean的属性在解析时是如何设置的。
+
+### 3.2.13 载入``<property>``元素
 
 BeanDefinitionParserDelegate在解析``<Bean>``调用parsePropertyElements方法解析``&lt;Bean>``元素中的``<property>``属性子元素：
 
@@ -1234,9 +1269,11 @@ public Object parsePropertyValue(Element ele, BeanDefinition bd, String property
 
 - ref被封装为指向依赖对象一个饮用 
 - value配置都会被封装成一个字符串类型的对象 
-- ref和value都通过“解析的数据类型属性值.setSource(extractSource(ele))”方法将属性值/引用与所引用的属性连接起来。 在方法的最后对于``<property>``元素的子元素通过parsePropertySubElement方法解析。
+- ref和value都通过  “解析的数据类型属性值.setSource(extractSource(ele));”  方法将属性值/引用与所引用的属性连接起来。
 
-### 解析``<property>``元素的子元素
+在方法的最后对于``<property>``元素的子元素通过parsePropertySubElement方法解析。
+
+### 3.2.14 载入 ``<property>`` 的子元素
 
 在BeanDefinitionPaserDelegate类中的parsePropertySubElement方法对``<property>``中的子元素解析：
 
@@ -1338,7 +1375,7 @@ public Object parsePropertySubElement(Element ele, BeanDefinition bd, String def
 
 在Spring配置文件中，对``<property>``元素中配置的Array，List，Set，Map，Prop等各种集合子元素都通过上述方法解析，生产对应的数据对象，比如ManagedList，ManagedArray等，这些Managed类是Spring对象BeanDefinition的数据封装，对集合数据类型的具体解析有各自的解析方法实现，解析方法的命名非常规范，一目了然。
 
-### 解析``<list>``子元素
+### 3.2.15 载入 ``<list>`` 子元素
 
 在BeanDefinitionParserDelegate类中的parseListElement方法具体实现解析``<property>``元素中的``<list>``集合子元素：
 
@@ -1374,9 +1411,11 @@ protected void parseCollectionElements(
 }
 ```
 
-经过对Spring Bean定义资源文件转换的Document对象中的元素层层解析，Spring IOC现在已经<font color="red">将XML形式定义的Bean定义资源文件转换为SpringIOC所识别的数据结构——BeanDefinition（加载BeanDefinition）</font>，它是Bean定义资源文件中配置的POJO对象在SpringIOC容器中的映射，可以通过AbstractBeanDefinition为入口，看到了IOC容器进行索引，查询和操作。 通过SpringIOC容器对Bean定义资源的解析后，IOC容器大致完成了管理Bean对象的准备工作，即初始化过程，但是最为重要的依赖注入还没有发生，现在在IOC容器中BeanFefinition存储的只是一些静态信息，接下来需要向容器注册Bean定义信息才能全部完成IOC容器的初始化过程。
+经过对Spring Bean定义资源文件转换的Document对象中的元素层层解析，Spring IOC现在已经<font color="red">将XML形式定义的Bean定义资源文件转换为SpringIOC所识别的数据结构——BeanDefinition（加载BeanDefinition）</font>，它是Bean定义资源文件中配置的POJO对象在SpringIOC容器中的映射，可以通过AbstractBeanDefinition为入口，看到了IOC容器进行索引，查询和操作。 
 
-### 解析过后的BeanDefinition在IOC容器中注册
+通过SpringIOC容器对Bean定义资源的解析后，IOC容器大致完成了管理Bean对象的准备工作，即初始化过程，但是最为重要的依赖注入还没有发生，现在在IOC容器中BeanFefinition存储的只是一些静态信息，接下来需要向容器注册Bean定义信息才能全部完成IOC容器的初始化过程。
+
+### 3.2.16 分配注册策略
 
 DefaultBeanDefinitionDocumentReader对Bean定义转换的Document对象解析流程中，在其parseDefaultElement方法中完成对Document对象的解析后得到封装BeanDefinition的BeanDefinitionHold对象，然后调用BeanDefinitionReaderUtils的resisterBeanDefinition方法向IOC容器注册解析的Bean：
 
@@ -1405,7 +1444,7 @@ public static void registerBeanDefinition(
 
 当调用DeanDefinitionReaderUtils向IOC容器注册解析的BeanDefinition时，真正完成注册功能的是DefaultListableBeanFactory。
 
-### DefaultListableBeanFactory向Ioc容器注册解析后的BeanDefinition
+### 3.2.17 向容器注册
 
 DefaultListableBeanFactory中使用HashMap的集合对象存放IOC容器中注册解析的BeanDefinition，向IOC容器注册：
 
