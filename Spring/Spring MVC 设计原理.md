@@ -45,7 +45,7 @@ springmvc提供了两种request参数与方法形参的绑定方法：
 
 ### 初始化阶段
 
-根据 DispatcherServlet 的继承关系可知，``DispatcherServlet  -> FrameworkServlet -> HttpServletBean -> GenericServlet -> javax.servlet.Servlet``，其接口 Servlet 的 init() 方法最终由 HttpServletBean 实现。
+根据 DispatcherServlet 的继承关系可知，``DispatcherServlet  -> FrameworkServlet -> HttpServletBean -> javax.servlet.http.HttpServlet``，其接口 HttpServlet 的 init() 方法最终由 HttpServletBean 实现。
 
 HttpServletBean 的 init() 方法调用了由 FrameworkServlet 实现的 initServletBean() -> initWebApplicationContext()，最终触发 由 DispatcherServlet  实现的 onRefresh 方法，初始化过程：
 

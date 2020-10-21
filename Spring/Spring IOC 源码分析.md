@@ -1,12 +1,40 @@
-# Spring IOC 体系结构
+# 1 Spring 核心之 IOC 容器
 
-## BeanFactory
+`IOC(Inversion of Control) 控制反转` 所谓控制反转，就是把原先我们代码里面需要实现的对象创建、依赖的代码，反转给容器来帮忙实现。那么必然的我们需要创建一个容器，同时需要一种描述来让 容器知道需要创建的对象与对象的关系。这个描述最具体表现就是我们所看到的配置文件。 
+
+``DI(Dependency Injection) 依赖注入`` 就是指对象是被动接受依赖类而不是自己主动去找，换句话说就 是指对象不是从容器中查找它依赖的类，而是在容器实例化对象的时候主动将它依赖的类注入给它。 
+
+先从我们自己设计这样一个视角来考虑： 
+
+1、对象和对象的关系怎么表示？ 
+
+可以用 xml，properties 文件等语义化配置文件表示。
+
+2、描述对象关系的文件存放在哪里？ 
+
+可能是 classpath，filesystem，或者是 URL 网络资源，servletContext 等。 
+
+回到正题，有了配置文件，还需要对配置文件解析。 
+
+3、不同的配置文件对对象的描述不一样，如标准的，自定义声明式的，如何统一？ 
+
+在内部需要有一个统一的关于对象的定义，所有外部的描述都必须转化成统一的描述定义。 
+
+4、如何对不同的配置文件进行解析？ 
+
+需要对不同的配置文件语法，采用不同的解析器。
+
+# 2 Spring IOC 体系结构
+
+## 2.1 BeanFactory
 
 Spring Bean 的创建是典型的工厂模式，这一系列的 Bean 工厂，即 IOC 容器为开发者管理对象间的依赖关系提供了很多便利和基础服务，在 Spring 中有许多的 IOC 的实现： 
 
-![20200331100636154](Spring IOC 源码分析.assets/20200331100636154.png)
+<img src="Spring IOC 源码分析.assets/20200331100636154.png" alt="20200331100636154" style="zoom: 80%;" />
 
- 其中 BeanFactory 作为最顶层的一个接口类，它定义了 IOC 容器的基本功能规范，BeanFactory 有三个子类：ListableBeanFactory、HierarchicalBeanFactory 和 AutowireCapableBeanFactory。最终的默认实现类是 DefaultListableBeanFactory，他实现了所有的接口。那为何要定义这么多层次的接口呢？查阅这些接口的源码和说明发现，每个接口都有他使用的场合，它主要是为了区分在 Spring 内部在操作过程中对象的传递和转化过程中，对对象的数据访问所做的限制。例如： 
+其中 BeanFactory 作为最顶层的一个接口类，它定义了 IOC 容器的基本功能规范，BeanFactory 有三个子类：``ListableBeanFactory`、`HierarchicalBeanFactory` 和 `AutowireCapableBeanFactory`。最终的默认实现类是 `DefaultListableBeanFactory`，他实现了所有的接口。
+
+那为何要定义这么多层次的接口呢？查阅这些接口的源码和说明发现，每个接口都有他使用的场合，它主要是为了区分在 Spring 内部在操作过程中对象的传递和转化过程中，对对象的数据访问所做的限制。例如： 
 
 ``ListableBeanFactory `` 可列表化的Bean（List，Map，Set） 
 
@@ -14,7 +42,7 @@ Spring Bean 的创建是典型的工厂模式，这一系列的 Bean 工厂，�
 
 ``AutowireCapableBeanFactory`` 配置了（隐式，上面2个是显式）接口定义 Bean 的自动装配规则
 
-### 最基本的 IOC 容器接口 BeanFactory
+BeanFactory 源码：
 
 ```java
 public interface BeanFactory {
@@ -50,7 +78,11 @@ public interface BeanFactory {
 }
 ```
 
-在 BeanFactory 里只对 IOC 容器的基本行为作了定义，根本不关心你的 Bean 是如何定义怎样加载的。 正如我们只关心工厂里得到什么的产品对象，至于工厂是怎么生产这些对象的，这个基本的接口不关心。 而要知道工厂是如何产生对象的，我们需要看具体的 IOC 容器实现，Spring 提供了许多 IOC 容器 的实现。比如 XmlBeanFactory，ClasspathXmlApplicationContext 等。其中 XmlBeanFactory 就 是针对最基本的 IOC 容器的实现，这个 IOC 容器可以读取 XML 文件定义的 BeanDefinition（XML 文件中对 bean 的描述）,如果说 XmlBeanFactory 是容器中的屌丝，ApplicationContext 应该算容器中 的高帅富.
+在 BeanFactory 里只对 IOC 容器的基本行为作了定义，根本不关心你的 Bean 是如何定义怎样加载的。 正如我们只关心工厂里得到什么的产品对象，至于工厂是怎么生产这些对象的，这个基本的接口不关心。
+
+而要知道工厂是如何产生对象的，我们需要看具体的 IOC 容器实现，Spring 提供了许多 IOC 容器 的实现。比如 XmlBeanFactory，ClasspathXmlApplicationContext 等。
+
+其中 XmlBeanFactory 就 是针对最基本的 IOC 容器的实现，这个 IOC 容器可以读取 XML 文件定义的 BeanDefinition（XML 文件中对 bean 的描述）,如果说 XmlBeanFactory 是容器中的屌丝，ApplicationContext 应该算容器中 的高帅富.
 
 ``ApplcationContext`` 是Spring提供的一个高级 IOC 容器，除了提供 IOC 容器的基本功能外，还为用户提供以下附加服务：
 
@@ -63,17 +95,19 @@ public interface ApplicationContext extends EnvironmentCapable, ListableBeanFact
 		MessageSource, ApplicationEventPublisher, ResourcePatternResolver
 ```
 
-## BeanDefinition
+## 2.2 BeanDefinition
 
 Spring IOC 容器管理定义的各种Bean对象及其相互的关系，Bean对象在Spring实现中是以BeanDefinition（保存了Bean的所有配置信息）来描述的：
 
-![20200331101810123](Spring IOC 源码分析.assets/20200331101810123.png) 
+​										 ![20200331101810123](Spring IOC 源码分析.assets/20200331101810123.png) 
 
-Bean的解析主要就是对Spring配置文件的解析，解析过程：
+## 2.3 BeanDefinitionReader
+
+Bean的解析主要就是对Spring配置文件的解析，解析过程主要通过 BeanDefinitionReader 来完成：
 
 ![20200331101843949](Spring IOC 源码分析.assets/20200331101843949.png)
 
-# IOC 容器的初始化
+# 3 IOC 容器源码解析
 
 IOC 容器的初始化包括 ``BeanDefinition`` 的 Resource <font color="red">定位，载入和注册</font>三个基本过程。 以ApplicationContext为例，因为Web项目中使用XmlWebApplicationContext就属于这个继承体系，还有ClasspathXmlApplicationContext等： 
 
@@ -83,7 +117,7 @@ IOC 容器的初始化包括 ``BeanDefinition`` 的 Resource <font color="red">�
 
 两种 IOC 容器的创建过程：
 
-## XmlBeanFactory
+## 3.1 XmlBeanFactory
 
 ```java
 public class XmlBeanFactory extends DefaultListableBeanFactory {
@@ -114,9 +148,9 @@ XmlBeanDefinitionReader reader =new XmlBeanDefinitionReader(factory);
 reader.loadBeanDefinitions(resource);
 ```
 
-## FileSystemXmlApplicationContext的IOC容器流程
+## 3.2 基于 FileSystemXml 的IOC容器初始化
 
-### ApplicationContext IOC 解剖
+### 3.2.1 寻找入口
 
 ```java
 ApplicationContext = new FileSystemXmlApplicationContext(xmlPath);
@@ -146,7 +180,9 @@ public FileSystemXmlApplicationContext(String[] configLocations, boolean refresh
 }
 ```
 
-### 设置资源加载器和资源定位
+还有像 AnnotationConfigApplicationContext 、 ClassPathXmlApplicationContext 、XmlWebApplicationContext 等都继承自父容器 AbstractApplicationContext主要用到了装饰器模式和策略模式，最终都是调用 refresh()方法。
+
+### 3.2.2 获得资源路径
 
 ``FileSystemXmlApplicationContext`` 首先调用父类容器的构造方法(super(parent))为容器设置好Bean资源加载器。 然后，再调用父类``AbstractApplicationContext`` 的 setConfigLocations方法来设置Bean定义资源文件的定位路径。 追踪其父类发现：
 
@@ -180,7 +216,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 }
 ```
 
-AbstracApplicationContext构造方法中调用PathMatchingResourcePatternResolver的构造方法创建Spring资源加载器：
+AbstracApplicationContext构造方法中调用 `PathMatchingResourcePatternResolver` 的构造方法创建Spring资源加载器：
 
 ```java
 public PathMatchingResourcePatternResolver(ResourceLoader resourceLoader) {
@@ -190,7 +226,7 @@ public PathMatchingResourcePatternResolver(ResourceLoader resourceLoader) {
 }
 ```
 
-在设置容器的资源记载器之后，接下来FileSystemXmlApplicationContext执行setConfigLocations方法通过调用其父类AbstractRefreshableConfigApplicationContext的方法进行对Bean定义资源文件的定义：
+在设置容器的资源记载器之后，接下来 FileSystemXmlApplicationContext 执行 setConfigLocations 方法通过调用其父类``AbstractRefreshableConfigApplicationContext``的方法进行对Bean定义资源文件的定义：
 
 ```java
 //处理单个资源文件为一个字符串的情况
@@ -216,7 +252,9 @@ public void setConfigLocations(String[] locations) {
 }
 ```
 
-### AbstractApplicationContext的refresh函数载入Bean定义过程
+通过这两个方法的源码我们可以看出，我们既可以使用一个字符串来配置多个 Spring Bean 配置信息，也可以使用字符串数组。
+
+### 3.2.3 开始启动
 
 Spring IOC 容器对Bean定义资源的载入是从refresh()函数开始的，refresh是一个模版方法，refresh方法的作用是：在创建IOC容器前，如果已有容器存在，则需要把已有的容器销毁和关闭，以保证在refresh之后使用的是新建立起来的IOC容器。refresh的作用类似于对IOC容器的重启，在新建立好的容器中对容器进行初始化，对Bean定义资源进行载入。
 
