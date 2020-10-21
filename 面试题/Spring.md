@@ -14,7 +14,7 @@
 
 
 
-#### Q2 SpringMVC 工作原来？
+#### Q2 SpringMVC 工作原理？
 
 1. 用户向服务器发送请求，请求被SpringMVC的前端控制前DispatchServlet捕获
 2. DispatchServlet收到请求调用处理器映射器HandlerMapping，根据请求URL找到具体的处理器，生成处理器执行链HandlerExecutionChain(包括处理对象和处理器拦截器)，一并返回给DispatchServlet
