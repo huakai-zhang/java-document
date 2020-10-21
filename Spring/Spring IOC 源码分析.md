@@ -449,7 +449,7 @@ protected Resource[] getConfigResources() {
 }
 ```
 
-Xml Bean读取器(XmlBeanDefinitionReader)调用其父类AbstractBeanDefinitionReader的reader.loadBeanDefinitions方法读取Bean定义资源。 这里使用FileSystemXmlApplicationContext作为例子分析，因此getConfigResources的返回值为null，因此程序执行reader.loadBeanDefinitions(configLocations);
+Xml Bean读取器(XmlBeanDefinitionReader)调用其父类AbstractBeanDefinitionReader的reader.loadBeanDefinitions方法读取Bean定义资源。 这里使用FileSystemXmlApplicationContext作为例子分析，因此getConfigResources的返回值为null，因此程序<font color=red>执行</font>``reader.loadBeanDefinitions(configLocations)``;
 
 ### 3.2.6 分配路径处理策略
 
