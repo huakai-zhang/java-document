@@ -32,7 +32,7 @@ Spring Bean 的创建是典型的工厂模式，这一系列的 Bean 工厂，�
 
 <img src="Spring IOC 源码分析.assets/20200331100636154.png" alt="20200331100636154" style="zoom: 80%;" />
 
-其中 BeanFactory 作为最顶层的一个接口类，它定义了 IOC 容器的基本功能规范，BeanFactory 有三个子类：``ListableBeanFactory`、`HierarchicalBeanFactory` 和 `AutowireCapableBeanFactory`。最终的默认实现类是 `DefaultListableBeanFactory`，他实现了所有的接口。
+其中 BeanFactory 作为最顶层的一个接口类，它定义了 IOC 容器的基本功能规范，BeanFactory 有三个子类：`ListableBeanFactory`、`HierarchicalBeanFactory` 和 `AutowireCapableBeanFactory`。最终的默认实现类是 `DefaultListableBeanFactory`，他实现了所有的接口。
 
 那为何要定义这么多层次的接口呢？查阅这些接口的源码和说明发现，每个接口都有他使用的场合，它主要是为了区分在 Spring 内部在操作过程中对象的传递和转化过程中，对对象的数据访问所做的限制。例如： 
 
@@ -1520,16 +1520,16 @@ public void registerBeanDefinition(String beanName, BeanDefinition beanDefinitio
 
 至此，Bean定义资源文件中配置的Bean被解析过后，已经注册到IOC容器中，被容器管理起来，真正完成了IOC容器初始化所做的全部工作。现在IOC容器中已经建立了整个Bean的配置信息，这些BeanDefinition信息已经可以使用，并且可以被检索，IOC容器的作用就是对这些注册的Bean定义信息进行处理和维护。这些注册的Bean定义信息是IOC容器控制反转的基础，正是有了这些注册的数据，容器才可以进行依赖注入。
 
-## 3.3 UML 图
-
-![20200331101843949](Spring IOC 源码分析.assets/7b3636e7556e390a1c0eb10ef5328cd.png)
-
 ```java
 //存储注册信息的BeanDefinition
 private final Map<String, BeanDefinition> beanDefinitionMap = new ConcurrentHashMap<String, BeanDefinition>(64);
 ```
 
 <font color="red">IOC容器实际上也是一个Map.</font>
+
+## 3.3 UML 图
+
+![20200331101843949](Spring IOC 源码分析.assets/7b3636e7556e390a1c0eb10ef5328cd.png)
 
 # 总结
 
