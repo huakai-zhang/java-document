@@ -724,6 +724,10 @@ void transfer(Entry[] newTable, boolean rehash) {
 
 在对table进行扩容到newTable后，需要将原来数据转移到newTable中，注意10-12行代码，这里可以看出在转移元素的过程中，使用的是头插法，也就是链表的顺序会翻转，这里也是形成死循环的关键点。
 
+![1603349639090](Java核心技术 集合.assets/1603349639090.png)
+
+![1603349694618](Java核心技术 集合.assets/1603349694618.png)
+
 **扩容造成数据丢失分析过程**
 
 ##### JDK1.8中的HashMap

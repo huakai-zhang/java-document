@@ -1520,6 +1520,10 @@ public void registerBeanDefinition(String beanName, BeanDefinition beanDefinitio
 
 至此，Bean定义资源文件中配置的Bean被解析过后，已经注册到IOC容器中，被容器管理起来，真正完成了IOC容器初始化所做的全部工作。现在IOC容器中已经建立了整个Bean的配置信息，这些BeanDefinition信息已经可以使用，并且可以被检索，IOC容器的作用就是对这些注册的Bean定义信息进行处理和维护。这些注册的Bean定义信息是IOC容器控制反转的基础，正是有了这些注册的数据，容器才可以进行依赖注入。
 
+## 3.3 UML 图
+
+![20200331101843949](Spring IOC 源码分析.assets/7b3636e7556e390a1c0eb10ef5328cd.png)
+
 ```java
 //存储注册信息的BeanDefinition
 private final Map<String, BeanDefinition> beanDefinitionMap = new ConcurrentHashMap<String, BeanDefinition>(64);
@@ -1527,7 +1531,7 @@ private final Map<String, BeanDefinition> beanDefinitionMap = new ConcurrentHash
 
 <font color="red">IOC容器实际上也是一个Map.</font>
 
-## 总结
+# 总结
 
 现在通过上面的代码，总结一下IOC容器初始化的基本步骤： 
 
