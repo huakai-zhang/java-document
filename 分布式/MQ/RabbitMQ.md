@@ -4,7 +4,7 @@
 
 ### 1.1 什么是MQ
 
-`MQ`(Message Quene) :  翻译为 `消息队列`,通过典型的 `生产者`和`消费者`模型,生产者不断向消息队列中生产消息，消费者不断的从队列中获取消息。因为消息的生产和消费都是异步的，而且只关心消息的发送和接收，没有业务逻辑的侵入,轻松的实现系统间解耦。别名为 `消息中间件`	通过利用高效可靠的消息传递机制进行平台无关的数据交流，并基于数据通信来进行分布式系统的集成。
+`MQ`(Message Quene) :  翻译为 `消息队列`,通过典型的 `生产者`和`消费者`模型,生产者不断向消息队列中生产消息，消费者不断的从队列中获取消息。因为消息的生产和消费都是异步的，而且只关心消息的发送和接收，没有业务逻辑的侵入,轻松的实现系统间解耦。别名为 `消息中间件`	<font color=red>通过利用高效可靠的消息传递机制进行平台无关的数据交流，并基于数据通信来进行分布式系统的集成。</font>
 
 ### 1.2 不同MQ特点
 
@@ -24,6 +24,10 @@
 
 > RabbitMQ 比 Kafka 可靠，Kafka 更适合 IO 高吞吐的处理，一般应用在大数据日志处理或对实时性（少量延迟），可靠性（少量丢数据）要求稍低的场景使用，比如ELK日志收集。
 
+如果仅仅是解决消息消费的问题，Java 里面有这么多的队列的实现，为什么不用他们呢？这个问题的答案，就跟有了 HashMap 之后，为什么还要 Redis 做缓存是一样的。
+
+<font color=red>Queue 不能跨进程，不能在分布式系统中使用，并且没有持久化机制等等。 </font>
+
 ## 2.RabbitMQ
 
 > 基于`AMQP`协议，erlang语言开发，是部署最广泛的开源消息中间件,是最受欢迎的开源消息中间件之一。
@@ -34,14 +38,78 @@
 
 `官方教程` https://www.rabbitmq.com/#getstarted
 
+高可靠：RabbitMQ 提供了多种多样的特性让你在可靠性和性能之间做出权衡，包括持久化、发送应答、发布确认以及高可用性。 
+
+灵活的路由：通过交换机（Exchange）实现消息的灵活路由。 
+
+支持多客户端：对主流开发语言（Python、Java、Ruby、PHP、C#、JavaScript、 Go、Elixir、Objective-C、Swift 等）都有客户端实现。 
+
+集群与扩展性：多个节点组成一个逻辑的服务器，支持负载。 
+
+高可用队列：通过镜像队列实现队列中数据的复制。 
+
+权限管理：通过用户与虚拟机实现权限管理。 
+
+插件系统：支持各种丰富的插件扩展，同时也支持自定义插件。 
+
+与 Spring 集成：Spring 对 AMQP 进行了封装。
+
+### 2.1 AMQP
+
 ```markdown
  # AMQP 协议
-	AMQP（advanced message queuing protocol）`在2003年时被提出，最早用于解决金融领不同平台之间的消息传递交互问题。顾名思义，AMQP是一种协议，更准确的说是一种binary wire-level protocol（链接协议）。这是其和JMS的本质差别，AMQP不从API层进行限定，而是直接定义网络交换的数据格式。这使得实现了AMQP的provider天然性就是跨平台的。以下是AMQP协议模型:
+	AMQP（advanced message queuing protocol）在2003年时被提出，最早用于解决金融领不同平台之间的消息传递交互问题。顾名思义，AMQP是一种协议，更准确的说是一种binary wire-level protocol（链接协议）。这是其和JMS的本质差别，AMQP不从API层进行限定，而是直接定义网络交换的数据格式。这使得实现了AMQP的provider天然性就是跨平台的。以下是AMQP协议模型:
 ```
 
-![jiegou](RabbitMQ.assets/jiegou.png)
+![image-20201025133851187](RabbitMQ.assets/image-20201025133851187.png)
 
-### 2.1 RabbitMQ 安装
+#### Broker
+
+要是用RabbitMQ来收发消息，就必须要安装一个RabbitMQ的服务，可以安装在Windows或者Linux上，默认端口是5672。这台RabbitMQ的服务器我们叫它``Broker，中文翻译是代理/中介``，因为MQ服务器帮助我们做的事情就是存储、转发消息。
+
+#### Connection
+
+无论是生产者发生消息，还是消费者接收消息，都需要和Broker之间建立一个连接，这个连接是一个TCP的长连接。
+
+#### Channel
+
+如果生产者发送消息和消费者接收消息都直接创建和释放TCP长连接的话，对于Broker来说会造成很大的消耗，因为TCP连接是非常宝贵的资源，创建和释放也需要消耗时间。
+
+所以在AMQP中引入了Channel的概念，它是一个虚拟连接。把它翻译成通道，或者消息信道。我们可以在创建的TCP长连接中创建和释放Channel，``大大减少了资源消耗``。
+
+Channel是RabbitMQ原生API中最重要的编程接口，我们定义交换机、队列、绑定关系，发送消费消息，调用的都是Channel接口上的方法。
+
+#### Queue
+
+队列是``真正用来存储消息的``，是一个独立运行的进程，有自己的数据库（Mnesia）。
+
+消费者获取消息有两种模式，一种是push模式，只要生产者发到服务器，就马上推送给消费者。另一种是pull模式，消息存放在服务器，主要消费者主动去拿到消息（消费者对队列监听）。
+
+由于队列有FIFO的特性，只要确定前一条消息被消费者接受之后，才会把这条消息从数据库删除，继续投递下一条消息。
+
+#### Exchange
+
+在RabbitMQ里面永远不会出现消息直接发送给队列的情况。因为AMQP里面引入了交换机（Exchange）的概念，`用来实现消息的灵活路由`。
+
+交换机是一个绑定列表，用来查找匹配的绑定关系。
+
+队列使用绑定键（Binding Key）跟交换机建立绑定关系。
+
+生产者发送消息需要携带路由键（Routing Key），交换机收到消息时会根据它保存的绑定列表，决定将消息路由到哪些与它绑定的队列上。
+
+注意：交换机与队列、队列与消费者都是多对多的关系。
+
+#### Vhost
+
+我们每个需要实现基于 RabbitMQ 的异步通信的系统，都需要在服务器上创建自己要用到的交换机、队列和它们的绑定关系。如果某个业务系统不想跟别人混用一个系统，怎么办？再采购一台硬件服务器单独安装一个 RabbitMQ 服务？这种方式成本太高了。 
+
+在同一个硬件服务器上安装多个 RabbitMQ 的服务呢？比如再运行一个 5673 的端口？ 没有必要，因为 RabbitMQ 提供了虚拟主机 VHOST。 
+
+VHOST 除了`可以提高硬件资源的利用率之外，还可以实现资源的隔离和权限的控制`。它的作用类似于编程语言中的 namespace 和 package，不同的 VHOST 中可以有同名的 Exchange 和 Queue，它们是完全透明的。 
+
+这个时候，我们可以为不同的业务系统创建不同的用户（User），然后给这些用户分配 VHOST 的权限。比如给风控系统的用户分配风控系统的 VHOST 的权限，这个用户可以访问里面的交换机和队列。给超级管理员分配所有 VHOST 的权限。
+
+### 2.2 RabbitMQ 安装
 
 官网下载地址： https://www.rabbitmq.com/download.html 
 
@@ -237,6 +305,24 @@ public class Producer {
 }
 ```
 
+> queueDeclare声明队列的参数5：Map<String, Object> arguments
+>
+> ![image-20201025140919789](RabbitMQ.assets/image-20201025140919789.png)
+>
+> x-message-ttl 队列中消息的存活时间，单位毫秒 
+>
+> x-expires 队列在多久没有消费者访问以后会被删除 
+>
+> x-max-length 队列的最大消息数 
+>
+> x-max-length-bytes 队列的最大容量，单位 Byte 
+>
+> x-dead-letter-exchange 队列的死信交换机 
+>
+> x-dead-letter-routing-key 死信交换机的路由键 
+>
+> x-max-priority 队列中消息的最大优先级，消息的优先级不能超过它 
+
 **消费者**
 
 ```java
@@ -421,6 +507,8 @@ channel.basicConsume("work",false,new DefaultConsumer(channel){
 
 ![1596531192967](RabbitMQ.assets/1596531192967.png)
 
+以下为常用模型：
+
 ## 4.5 fanout 模型
 
 ``fanout 扇出`` 也称为广播
@@ -565,237 +653,9 @@ channel.basicConsume(queueName, true, new DefaultConsumer(channel){
 });
 ```
 
-# 5.SpringBoot 中使用 RabbitMQ
+# 5.MQ的应用场景
 
-## 5.1 搭建环境
-
-**1.引入依赖**
-
-```xml
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-amqp</artifactId>
-</dependency>
-```
-
-**2.配置文件**
-
-```yml
-server:
-  port: 83
-spring:
-  application:
-    name: chinook-order
-  rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
-    virtual-host: /ems
-```
-
-`RabbitTemplate`  用来简化操作     使用时候直接在项目中注入即可使用。
-
-## 5.2 hello world 模型
-
-**生产者**
-
-```java
-@RunWith(SpringRunner.class)
-@SpringBootTest
-public class TestRabbitMQ {
-
-    // 注入rabbitTemplate
-    @Autowired
-    private RabbitTemplate rabbitTemplate;
-
-    // hello world
-    @Test
-    public void testHelloWorld() {
-        rabbitTemplate.convertAndSend("hello", "hello world");
-    }
-
-}
-```
-
-**消费者**
-
-```java
-@Component
-// 默认持久化，非独占，不是自动删除队列
-@RabbitListener(queuesToDeclare = @Queue(value = "hello"))
-public class HelloConsumer {
-
-    @RabbitHandler
-    public void receive(String message) {
-        System.out.println("message = " + message);
-    }
-
-}
-```
-
-## 5.3 Work Queues 模型
-
-**生产者**
-
-```java
-// work
-@Test
-public void testWork() {
-    for (int i = 0; i < 10; i++) {
-        rabbitTemplate.convertAndSend("work", "work模型");
-    }
-}
-```
-
-**消费者**
-
-```java
-@Component
-public class WorkConsumer {
-
-    // 一个消费者
-    @RabbitListener(queuesToDeclare = @Queue("work"))
-    public void receive(String message) {
-        System.out.println("message1 = " + message);
-    }
-
-    @RabbitListener(queuesToDeclare = @Queue("work"))
-    public void receive2(String message) {
-        System.out.println("message2 = " + message);
-    }
-
-}
-```
-
-> 说明:默认在Spring AMQP实现中Work这种方式就是公平调度,如果需要实现能者多劳需要额外配置
-
-## 5.4 fanout 模型
-
-**生产者**
-
-```java
-// fanout 广播
-@Test
-public void testFanout() {
-    rabbitTemplate.convertAndSend("logs", "", "Fanout模型");
-}
-```
-
-**消费者**
-
-```java
-@Component
-public class FanoutConsumer {
-    @RabbitListener(bindings = {
-            @QueueBinding(
-                    value = @Queue, // 不指定名称，表示临时队列
-                    exchange = @Exchange(value = "logs", type = "fanout")     // 绑定的交换机
-            )
-    })
-    public void receive(String message) {
-        System.out.println("message = " + message);
-    }
-    @RabbitListener(bindings = {
-            @QueueBinding(
-                    value = @Queue, // 不指定名称，表示临时队列
-                    exchange = @Exchange(value = "logs", type = "fanout")     // 绑定的交换机
-            )
-    })
-    public void receive2(String message) {
-        System.out.println("message2 = " + message);
-    }
-}
-```
-
-## 5.5 Routing 路由模型
-
-**生产者**
-
-```java
-// route 路由模式
-@Test
-public void testRoute() {
-    rabbitTemplate.convertAndSend("directs", "error", "发送error key 路由信息");
-}
-```
-
-**消费者**
-
-```java
-@Component
-public class RouteConsumer {
-
-    @RabbitListener(bindings = {
-            @QueueBinding(
-                    value = @Queue,
-                    exchange = @Exchange(value = "directs"), // 默认为direct,可以省略
-                    key = {"info", "error", "warn"}
-            )
-    })
-    public void receive(String message) {
-        System.out.println("message = " + message);
-    }
-
-    @RabbitListener(bindings = {
-            @QueueBinding(
-                    value = @Queue,
-                    exchange = @Exchange(value = "directs"), // 默认为direct,可以省略
-                    key = {"error"}
-            )
-    })
-    public void receive2(String message) {
-        System.out.println("message2 = " + message);
-    }
-}
-```
-
-## 5.6 Topic 订阅模式（动态路由模型）
-
-**生产者**
-
-```java
-// topic 动态路由 订阅模式
-@Test
-public void testTopic() {
-    rabbitTemplate.convertAndSend("topics", "order.save", "发送order.save 路由信息");
-}
-```
-
-**消费者**
-
-```java
-@Component
-public class TopicConsumer {
-
-    @RabbitListener(bindings = {
-            @QueueBinding(
-                    value = @Queue,
-                    exchange = @Exchange(value = "topics", type = "topic"),
-                    key = {"user.*"}
-            )
-    })
-    public void receive(String message) {
-        System.out.println("message = " + message);
-    }
-
-    @RabbitListener(bindings = {
-            @QueueBinding(
-                    value = @Queue,
-                    exchange = @Exchange(value = "topics", type = "topic"),
-                    key = {"order.#", "product.#", "user.*"}
-            )
-    })
-    public void receive2(String message) {
-        System.out.println("message2 = " + message);
-    }
-
-}
-```
-
-# 6.MQ的应用场景
-
-### 6.1 异步处理
+### 5.1 异步通信
 
 场景说明：用户注册后，需要发注册邮件和注册短信，传统的做法有两种 ：
 
@@ -819,7 +679,9 @@ public class TopicConsumer {
 
 
 
-### 6.2 应用解耦
+### 5.2 应用解耦
+
+> 耦合是系统内部或者系统之间存在相互作用，相互影响和相互依赖。 
 
 场景：双11是购物狂节，用户下单后，订单系统需要通知库存系统,传统的做法就是订单系统调用库存系统的接口。 
 
@@ -837,7 +699,7 @@ public class TopicConsumer {
 
   
 
-### 6.3 流量削峰
+### 5.3 流量削峰
 
 场景：秒杀活动，一般会因为流量过大，导致应用挂掉,为了解决这个问题，一般在应用前端加入消息队列。  
 
@@ -853,11 +715,11 @@ public class TopicConsumer {
 
 2.秒杀业务根据消息队列中的请求信息，再做后续处理。
 
-# 7. RabbitMQ的集群
+# 6. RabbitMQ的集群
 
-## 7.1 集群架构
+## 6.1 集群架构
 
-### 7.1.1 普通集群(副本集群)
+### 6.1.1 普通集群(副本集群)
 
 > All data/state required for the operation of a RabbitMQ broker is replicated across all nodes. An exception to this are message queues, which by default reside on one node, though they are visible and reachable from all nodes. To replicate queues across nodes in a cluster, use a queue type that supports replication. This topic is covered in the Quorum Queues and Classic Mirrored Queues guides. --摘自官网
 
@@ -946,7 +808,7 @@ rabbitmqctl stop_app
 
 ---
 
-### 7.1.2 镜像集群
+### 6.1.2 镜像集群
 
 > This guide covers mirroring (queue contents replication) of classic queues  --摘自官网
 >
