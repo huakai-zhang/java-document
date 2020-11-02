@@ -719,19 +719,59 @@ channel.basicConsume(queueName, true, new DefaultConsumer(channel){
 
 ## 6.1 集群架构
 
-### 6.1.1 普通集群(副本集群)
+集群主要用于实现高可用与负载均衡。 
+
+集群有两种节点类型：
+
+`磁盘节点（Disc Node）` 将元数据（包括队列名字属性、交换机的类型名字属性、绑定、vhost）放在磁盘中。 
+
+`内存节点（RAM Node）` 将元数据放在内存中。 
+
+内存节点会将磁盘节点的地址存放在磁盘（不然重启后就没有办法同步数据了） ，RabbitMQ集群会始终同步四种类型的内部元数据（类似索引）： 
+
+* 队列元数据：队列名称和它的属性； 
+
+* 交换器元数据：交换器名称、类型和属性；
+
+* 绑定元数据：一张简单的表格展示了如何将消息路由到队列； 
+
+* vhost元数据：为vhost内的队列、交换器和绑定提供命名空间和安全属性；
+
+如果是持久化的消息，会同时存放在内存和磁盘。 
+
+集群中至少需要一个磁盘节点用来持久化元数据，否则全部内存节点崩溃时，就无从同步元数据。未指定类型的情况下，默认为磁盘节点。 
+
+我们一般把应用`连接到内存节点（读写快），磁盘节点用来备份。 `
+
+集群通过 `25672` 端口两两通信，需要开放防火墙的端口。 
+
+需要注意的是，RabbitMQ 集群`无法搭建在广域网上`，除非使用 federation 或者 shovel 等插件（没这个必要，在同一个机房做集群）。
+
+## 6.2 普通集群(副本集群)
 
 > All data/state required for the operation of a RabbitMQ broker is replicated across all nodes. An exception to this are message queues, which by default reside on one node, though they are visible and reachable from all nodes. To replicate queues across nodes in a cluster, use a queue type that supports replication. This topic is covered in the Quorum Queues and Classic Mirrored Queues guides. --摘自官网
 
-默认情况下：RabbitMQ 代理操作所需的所有数据/状态都将跨所有节点复制。这方面的一个例外是消息队列，默认情况下，消息队列位于一个节点上，尽管它们可以从所有节点看到和访问
+默认情况下：RabbitMQ 代理操作所需的所有数据/状态都将跨所有节点复制。这方面的一个例外是消息队列，默认情况下，消息队列位于一个节点上，尽管它们可以从所有节点看到和访问。普通集群模式下，不同的节点之间只会相互同步元数据。 
 
-**1.架构图**
+![image-20201102221854047](RabbitMQ.assets/image-20201102221854047.png)
+
+为什么不直接把队列的内容（消息）在所有节点上复制一份？ 
+
+主要是出于存储和同步数据的网络开销的考虑，如果所有节点都存储相同的数据，就无法达到线性地增加性能和存储容量的目的（堆机器）。 
+
+假如生产者连接的是节点 3，要将消息通过交换机 A 路由到队列 1，最终消息还是会转发到节点 1 上存储，因为队列 1 的内容只在节点 1 上。 
+
+同理，如果消费者连接是节点 2，要从队列 1 上拉取消息，消息会从节点 1 转发到节点 2。其它节点起到一个路由的作用，类似于指针。 
+
+普通集群模式不能保证队列的高可用性，因为队列内容不会复制。如果节点失效将导致相关队列不可用，因此我们需要第二种集群模式。 
+
+### 6.2.1 架构图
 
 ![image-20200320094147471](RabbitMQ.assets/image-20200320094147471.png)
 
 ​	核心解决问题：<font color="red">当集群中某一时刻 master 节点宕机，可以对 Quene 中信息，进行备份</font>
 
-**2.集群搭建**
+### 6.2.2 集群搭建
 
 ```markdown
 # 0.集群规划
@@ -752,7 +792,7 @@ channel.basicConsume(queueName, true, new DefaultConsumer(channel){
 	scp /var/lib/rabbitmq/.erlang.cookie root@mq2:/var/lib/rabbitmq/
 	scp /var/lib/rabbitmq/.erlang.cookie root@mq3:/var/lib/rabbitmq/
 
-# 3.查看cookie是否一致:
+# 3.查看cookie是否一致:RabbitMQ 通过/var/lib/rabbitmq/.erlang.cookie 来验证身份，需要在所有节点上 保持一致
 	node1: cat /var/lib/rabbitmq/.erlang.cookie 
 	node2: cat /var/lib/rabbitmq/.erlang.cookie 
 	node3: cat /var/lib/rabbitmq/.erlang.cookie 
@@ -778,11 +818,11 @@ channel.basicConsume(queueName, true, new DefaultConsumer(channel){
 	{alarms,[{rabbit@mq1,[]},{rabbit@mq2,[]},{rabbit@mq3,[]}]}]
 ```
 
-**3.登录管理界面,展示如下状态**
+#### 登录管理界面
 
 ![image-20200320095613586](RabbitMQ.assets/image-20200320095613586.png)
 
-**4.测试集群在node1上,创建队列**
+#### 测试集群在node1上创建队列
 
 ![image-20200320095743935](RabbitMQ.assets/image-20200320095743935.png)
 
@@ -794,7 +834,7 @@ channel.basicConsume(queueName, true, new DefaultConsumer(channel){
 
 ![image-20200320095843370](RabbitMQ.assets/image-20200320095843370.png)
 
-**5.关闭 node1 节点**
+#### 关闭 node1 节点
 
 执行如下命令，查看 node2 和 node3
 
@@ -808,7 +848,7 @@ rabbitmqctl stop_app
 
 ---
 
-### 6.1.2 镜像集群
+## 6.3 镜像集群
 
 > This guide covers mirroring (queue contents replication) of classic queues  --摘自官网
 >
@@ -816,13 +856,15 @@ rabbitmqctl stop_app
 
 镜像队列机制就是将队列在三个节点之间设置主从关系，消息会在三个节点之间进行自动同步，且如果其中一个节点不可用，并不会导致消息丢失或服务不可用的情况，提升 MQ 集群的整体高可用性。
 
-**1.集群架构图**
+不过也有一定的副作用，系统性能会降低，节点过多的情况下同步的代价比较大。 
+
+### 6.3.1 集群架构图
 
 ![image-20200320113423235](RabbitMQ.assets/image-20200320113423235.png)
 
 
 
-**2.配置集群架构**
+### 6.3.2 配置集群架构
 
 ```markdown
 # 0.策略说明
@@ -853,5 +895,35 @@ rabbitmqctl stop_app
 # 4.测试集群
 ```
 
-------
+## 6.4 高可用
+
+集群搭建成功后，如果有多个内存节点，那么生产者和消费者应该连接到哪个内存节点？如果在我们的代码中根据一定的策略来选择要使用的服务器，那每个地方都要修改，客户端的代码就会出现很多的重复，修改起来也比较麻烦。
+
+所以需要一个负载均衡的组件（例如 HAProxy，LVS，Nignx），由负载的组件来做路由。这个时候，只需要连接到负载组件的 IP 地址就可以了。
+
+但是，如果这个负载的组件也挂了呢？客户端就无法连接到任意一台 MQ 的服务器了。所以负载软件本身也需要做一个集群。新的问题又来了，如果有两台负载的软件，客户端应该连哪个？ 
+
+负载之上再负载？陷入死循环了。这个时候我们就要换个思路了。 
+
+我们应该需要这样一个组件： 
+
+1. 它本身有路由（负载）功能，可以监控集群中节点的状态（比如监控HAProxy），如果某个节点出现异常或者发生故障，就把它剔除掉。 
+
+2. 为了提高可用性，它也可以部署多个服务，但是只有一个自动选举出来的 MASTER 服务器（叫做主路由器），通过广播心跳消息实现。 
+
+3. MASTER 服务器对外提供一个虚拟 IP，提供各种网络功能。也就是谁抢占到 VIP，就由谁对外提供网络服务。应用端只需要连接到这一个 IP 就行了。 
+
+这个协议叫做 `VRRP 协议（虚拟路由冗余协议 Virtual Router Redundancy Protocol）`，这个组件就是 `Keepalived`，它具有 Load Balance 和 High Availability 的功能。
+
+**基于 Docker 安装 HAproxy 负载+Keepalived 高可用**
+
+![image-20201102223311182](RabbitMQ.assets/image-20201102223311182.png)
+
+
+
+
+
+
+
+
 
