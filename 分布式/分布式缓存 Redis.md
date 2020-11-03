@@ -293,8 +293,9 @@ delete from lock where methodName=''
 
 ### zookeeper实现分布式锁
 
+利用 zookeeper 的唯一节点特性或者有序临时节点特性获得最小节点作为锁. zookeeper 的实现相对简单，通过curator客户端，已经对锁的操作进行了封装，原理如下： 
 
-利用 zookeeper 的唯一节点特性或者有序临时节点特性获得最小节点作为锁. zookeeper 的实现相对简单，通过curator客户端，已经对锁的操作进行了封装，原理如下： ![img](https://img-blog.csdnimg.cn/20200611112108888.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
+![img](分布式缓存 Redis.assets/20200611112108888.png)
 
 #### zookeeper 的优势
 
@@ -676,8 +677,7 @@ redis每次更改数据的时候， aof机制都会将命令记录到aof文件�
 
 ## 复制（master、slave）
 
-
-![img](https://img-blog.csdnimg.cn/20200612125328405.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
+<img src="分布式缓存 Redis.assets/20200612125328405.png" alt="img" style="zoom:50%;" />
 
 ### 配置过程
 
@@ -711,12 +711,14 @@ slave第一次或者重连到master上以后，会向master发送一个SYNC的�
 1. 执行bgsave（rdb的快照文件） 
 2. master 会把新收到的修改命令存入到缓冲区
 
-master通过命令的方式把快照发送给slave，slave收到数据之后，会把自己的数据清空，然后加载这个文件到内存 ![img](https://img-blog.csdnimg.cn/2020061213453976.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) 
+master通过命令的方式把快照发送给slave，slave收到数据之后，会把自己的数据清空，然后加载这个文件到内存 
+
+![img](分布式缓存 Redis.assets/2020061213453976.png)
 
 当 replica 失去与 master 的连接时，或者当复制仍在进行时，replica 可以以两种不同的方式操作：
 
 1. 如果将replica serve stale data设置为“yes”（默认值），则replica仍将答复客户端请求，可能包含过期数据，或者如果这是第一次同步，则数据集可能只是空的。 
-<li>如果replica serve stale data设置为’no’，则replica将对所有类型的命令回复错误“SYNC with master in progress”。</li>
+2. 如果replica serve stale data设置为’no’，则replica将对所有类型的命令回复错误“SYNC with master in progress”。
 
 ### 缺点
 
@@ -743,7 +745,7 @@ sentinel monitor mymaster 192.168.11.11.138 6379 2
 
 通过 ./redis-sentinel ../sentinel.conf 启动哨兵。
 
-master 在挂掉动态恢复之后，会以slave的身份加入到集群（哨兵会重写redis.conf配置文件）。
+master 在挂掉动态恢复之后，会以slave的身份加入到集群（哨兵会重写redis.conf配置文件），但它也有一个问题，就是不能动态扩充。
 
 ## 集群（redis3.0以后的功能）
 
