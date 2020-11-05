@@ -1131,46 +1131,44 @@ ATM 机上运行的系统叫 C 端（ATMC），前置系统叫 P 端（ATMC）�
 
 3、生产者代码或者网络问题。 
 
-对于重复发送的消息，可以对每一条消息生成一个唯一的业务 ID，通过日志或者消息落库来做重复控制。 
+业界主流的幂等性操作：
 
-伪代码：
+- 唯一ID + 指纹码机制，利用数据库主键去重
+- 利用Redis的原子性去实现
 
-```java
-/**
-* 生产者 请求头设置消息id
-*/
-String msg = "my_fanout_msg:" + System.currentTimeMillis();
-		//请求头设置消息id（messageId）
-		Message message = MessageBuilder.withBody(msg.getBytes()).setContentType(MessageProperties.CONTENT_TYPE_JSON)
-				.setContentEncoding("utf-8").setMessageId(UUID.randomUUID() + "").build();
-System.out.println(msg + ":" + msg);
-amqpTemplate.convertAndSend(queueName, message);
+#### 唯一ID+指纹码机制
 
-/**
-* 消费者
-*/
-// 获取消息Id
-String messageId = message.getMessageProperties().getMessageId();
-String msg = new String(message.getBody(), "UTF-8");
-// 判断唯一Id是否被消费，消息消费成功后将id和状态保存在日志表中，我们从（①步骤）表中获取并判断messageId的状态即可从redis中获取messageId的value
-String value = redisUtils.get(messageId)+"";
-if(value.equals("1") ){ //表示已经消费
-	return; //结束
-}
-System.out.println("邮件消费者获取生产者消息" + "messageId:" + messageId + ",消息内容:" + msg);
-JSONObject jsonObject = JSONObject.parseObject(msg);
-// 获取email参数
-String email = jsonObject.getString("email");
-// 请求地址
-String emailUrl = "http://127.0.0.1:8083/sendEmail?email=" + email;
-JSONObject result = HttpClientUtils.httpGet(emailUrl);
-if (result == null) {
-	// 因为网络原因,造成无法访问,继续重试
-	throw new Exception("调用接口失败!");
-}
-System.out.println("执行结束....");
-// 执行到这里已经消费成功，我们可以修改messageId的状态，并存入日志表(可以存到redis中，key为消息Id、value为状态)
+```mysql
+# 唯一ID + 指纹码机制，利用数据库主键去重
+SELECT COUNT(1) FROM T_ORDER WHERE ID = 唯一ID +指纹码
 ```
+
+- 好处：实现简单
+- 坏处：高并发下有数据库写入的性能瓶颈
+- 解决方案：跟进ID进行分库分表进行算法路由
+
+整个思路就是首先我们需要根据消息生成一个全局唯一的ID，然后还需要加上一个指纹码。这个指纹码它并不一定是系统去生成的，而是一些外部的规则或者内部的业务规则去拼接，它的目的就是为了保障这次操作是绝对唯一的。
+
+将ID + 指纹码拼接好的值作为数据库主键，就可以进行去重了。即在消费消息前，先去数据库查询这条消息的指纹码标识是否存在，没有就执行insert操作，如果有就代表已经被消费了，就不需要管了。
+
+对于高并发下的数据库性能瓶颈，可以跟进ID进行分库分表策略，采用一些路由算法去进行分压分流。应该保证ID通过这种算法，消息即使投递多次都落到同一个数据库分片上，这样就由单台数据库幂等变成多库的幂等。
+
+#### 利用Redis的原子性去实现
+
+我们都知道redis是单线程的，并且性能也非常好，提供了很多原子性的命令。比如可以使用 `setnx` 命令。
+
+在接收到消息后将消息ID作为key执行 `setnx` 命令，如果执行成功就表示没有处理过这条消息，可以进行消费了，执行失败表示消息已经被消费了。
+
+使用 redis 的原子性去实现主要需要考虑两个点
+
+- 第一：我们是否要进行数据落库，如果落库的话，关键解决的问题是数据库和缓存如何做到原子性？
+- 第二：如果不进行落库，那么都存储到缓存中，如何设置定时同步的策略(同步到关系型数据库)？缓存又如何做到数据可靠性保障呢
+
+关于不落库，定时同步的策略，目前主流方案有两种：
+
+第一种为双缓存模式，异步写入到缓存中，也可以异步写到数据库，但是最终会有一个回调函数检查，这样能保障最终一致性，不能保证100%的实时性。
+
+第二种是定时同步，比如databus同步。
 
 ### 4.8 最终一致
 
