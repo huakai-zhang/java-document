@@ -1,29 +1,663 @@
-# redis 基础
+# 1 redis 基础
 
-## 存储结构
+## 1.1 Redis 定位与特性
 
-1. String 字符类型（简单动态字符串（Simple Dynamic String），简称SDS）
+### 1.1.1 SQL 与 NoSQL
 
-   ```c
-   struct sdshdr{
-       //  记录已使用长度
-       int len;
-       // 记录空闲未使用的长度
-       int free;
-       // 字符数组
-       char[] buf;
-   };
-   ```
+绝大多数情况下，我们首先考虑使用关系型数据库存储我们的数据。比如Mysql，Oracle，SQLServer等。
 
-   作为常规的key-value缓存应用。例如微博数、粉丝数等，一个键最大能存储512MB
+#### 关系型数据库
 
-2. 散列类型 ， 主要用来存储对象信息
+关系型数据库的特点：
 
-3. 列表类型 ，比如twitter的关注列表，粉丝列表等都可以用Redis的list结构来实现 
+1. 以表格形式基于行存储数据，是一个二维模式
+2. 存储的是结构化数据，数据存储有固定的模式（schema），数据需要适应表结构
+3. 表与表之间存在关联
+4. 大部分关系型数据库都支持结构化查询语言SQL的操作，支持复杂的关联查询
+5. 通过支持事务（ACID酸）来提供严格的或者实时的数据一致性
 
-4. 集合类型 ， 交集，并集，差集 
+使用关系型数据库也存在一定的限制：
 
-5. 有序集合，排行榜
+1. 需要扩容只能通过向上（垂直）扩展，比如磁盘限制了数据的存储，就要扩大磁盘的容量，通过对硬件的方式，不支持动态扩容。水平扩容需要通过负责的方式来实现（分库分表）
+2. 表结构修改困难，因此存储的数据格式也受到限制
+3. 在高并发和高数据量的情况下，关系型数据库通常会把数据持久化到磁盘，基于磁盘的读写压力比较大
+
+#### 非关系型数据库
+
+为了规避关系型数据库的一系列问题，我们就有了非关系型的数据库。
+
+`NoSQL（non-relational 或者 Not Only SQL）` 指的是非关系型的数据库，是对不同于传统的关系 型数据库的数据库管理系统的统称。NoSQL 用于超大规模数据的存储。（例如谷歌或 Facebook 每天为他们的用户收集万亿比特的数据）。这些类型的数据存储不需要固定的模式，无需多余操作就可以横向扩展。 
+
+非关系型数据库的特点：
+
+1. 存储非结构化的数据，比如文本、图片、视频、音频等
+2. 表与表之间没有关联，可扩展性强
+3. 保证数据的最终一致性。遵循 BASE（碱）理论。 
+4. 支持海量数据存储和高并发的高效读写
+5. 支持分布式，能够对数据进行分片存储，扩缩容简单
+
+#### CAP原理
+
+CAP理论的核心是<font color="red">一个分布式系统不可能同时很好的满足一致性、可用性和分区容错性这三个需求，最多只能同时较好的满足两个。</font>
+
+因此，根据 CAP 原理将 NoSQL 数据库分成了满足CA原则、满足CP原则和满足AP原则三大类：
+
+`CA` 单点集群，满足一致性、可用性的系统，通常在可扩展性上不太强大
+
+`CP` 满足一致性、分区容错性的系统，通常性能不是特别高
+
+`AP` 满足可用性、分区容错性的系统，通常可能对一致性要求低一些
+
+在计算机科学中，`CAP定理(CAP theorem)` 又被称作`布鲁尔定理( Brewer's theorem)`，它指出对于一个分布式计算系统来说，不可能同时满足以下三点：
+
+`一致性(Consistency)` 所有节点在同一时间具有相同的数据，一致性分为三种：
+
+* 强一致性：要么一起成功，要么一起失败
+* 弱一致性：最终一致性
+* 顺序一致性
+
+`可用性(Avaibility)` 保证每个请求不管成功或者失败都有响应
+
+`分区容错性(Partition tolerance)` 系统中任意信息的丢失或失败不影响系统的继续运行
+
+#### BASE理论
+
+BASS理论是对CAP定理的延伸，核心思想是即使无法做到强一致性(CAP定理中的一致性就是强一致性)，但应用可以采用适合的方式达到最终一致性。BASE是NoSQL数据库通常对可用性及一致性的弱要求原则：
+
+``基本可用(Basicall Available)`` 基本可用是指分布式系统在出现故障的时候，允许损失部分可用性，既保证核心模块可用即可。电商大促时，为了应对访问量激增，部分用户可能会被引导到降级页面，服务层也可能只提供将及服务。这就损失部分可用性的体现。
+
+``软状态(Soft state)`` 软状态是指允许系统有中间状态，而该中间状态不会影响系统整体可用性。分布式存储中一般一份数据至少会有三个副本，允许不同节点间副本同步的延时就是软状态的表现。MySQL Replication的异步复制也是一种体现。
+
+``最终一致性(Eventual Consistency)`` 最终一致性是指系统中的所有数据副本经过一定时间后，最终能达到一致的状态 。弱一致性和强一致性相反,最终一致性是弱一致性的一种特殊状态。
+
+#### NoSQL 数据库分类
+
+| <span style="white-space:nowrap;">硬件&emsp;&emsp;&emsp;&emsp;&emsp;</span> | <span style="white-space:nowrap;">典型代表&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;</span> | 特点                                                         |
+| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 列存储                                                       | Hbase <br/>Cassandra<br/>Hypertable                          | 顾名思义，是按照列存储数据的。 最大的特点是方便存储结构化和半结构化的数据，方便做数据压缩，对针对某一列或者某几列的查询有非常大的 IO 优势 |
+| 文档存储                                                     | MongoDB <br/>CounchDB                                        | 文档存储一般用类似 json 的格式存储，存储的内容是文档型的。这样也就有机会对某些字段建立索引，实现关系数据库的某些功能 |
+| Key-value 存储                                               | Tokyo Cabinet/Tyrant<br/>Berkelery DB<br />Memcache<br />Redis | 可以通过key快速查询到其 value 。 一 般来 说 ， 存储不管 value 的格式，照单全收。(Redis 包含了其他功能) |
+| 图存储                                                       | Neo4J<br />FlockDB                                           | 图形关系的最佳存储。使用传统关系数据库来解决的话性能低 下，而且设计使用不方便。 |
+| 对象存储                                                     | Db4o<br />Versant                                            | 通过类似面向对象语言的语法操作数据库，通过对象的方式存储数据。 |
+| XML 数据库                                                   | Berkeley DB XML<br/>BaseX                                    | 高效的存储 XML 数据，并存储 XML 的内部查询语法， 比如 XQuery、Xpath。 |
+
+### 1.1.2 Redis 特性
+
+硬件层面有 CPU 的缓存，浏览器也有缓存，手机的应用也有缓存。我们把数据缓存起来的原因就是从原始位置取数据的代价太大了，放在一个临时位置存储起来，取回就可以快一些。 
+
+Redis 的特性：
+
+1. 更丰富的数据类型 
+
+2. 进程内与跨进程；单机与分布式 
+
+3. 功能丰富：持久化机制、过期策略 
+
+4. 支持多种编程语言 
+
+5. 高可用，集群
+
+## 1.2 redis 安装启动
+
+### 1.2.1 redis 安装
+
+1. 下载redis安装包 
+2. tar -zxvf 安装包 
+3. 在redis目录下 执行 make 
+4. 可以通过make test测试编译状态 
+5. make install [prefix=/path]完成安装
+
+### 1.2.2 启停 redis
+
+```java
+./redis-server ../redis.conf
+./redis-cli shutdown
+```
+
+以后台进程的方式启动，修改redis.conf daemonize =yes
+
+#### 连接到redis的命令
+
+```java
+./redis-cli
+ ./redis-cli -h 127.0.0.1 -p 6379
+```
+
+#### 其他命令说明
+
+Redis-server 启动服务 
+
+Redis-cli 访问到redis的控制台 
+
+redis-benchmark 性能测试的工具 
+
+redis-check-aof aof文件进行检测的工具 
+
+redis-check-dump rdb文件检查工具 
+
+redis-sentinel sentinel 服务器配置
+
+### 1.2.3 基本操作
+
+redis 默认支持16个数据库，可以理解为一个命名空间。 可以在配置文件中修改，默认使用第一个 db0。
+
+```yml
+# redis.conf
+databases 16
+```
+
+因为没有完全隔离，不像数据库的 database，不适合把不同的库分配给不同的业务使用。
+
+```markdown
+# 切换数据库
+	select 0
+# 清空当前数据库
+	flushdb
+# 清空所有数据库
+	flushall
+```
+
+Redis 是字典结构的存储方式，采用 key-value 存储。key 和 value 的最大长度限制是 512M（来自官网 https://redis.io/topics/data-types-intro/）。 
+
+键的基本操作。 命令参考：http://redisdoc.com/index.html
+
+```markdown
+# 存值
+	set name spring
+# 取值
+	get name
+# 查看所有键
+	keys *
+# 获取键总数
+	dbsize
+# 查看键是否存在
+	exists name
+# 删除键
+	del name age
+# 重命名键
+	rename name login
+# 查看类型
+	type name
+```
+
+## 1.3 Redis 基本操作类型
+
+### 1.3.1 String 字符
+
+set 和 get 命令就是 `String（ Binary-safe strings）` 的操作命令。
+
+#### 存储类型
+
+可以用来存储字符串、整数、浮点数。
+
+#### 操作命令
+
+```markdown
+# 设置多个值（批量操作，原子性）
+	mset spring 2673 jack 666
+# 设置值，如果 key 存在，则不成功。基于此可实现分布式锁。用 del key 释放锁。
+	setnx spring 2674
+# 但如果释放锁的操作失败了，导致其他节点永远获取不到锁，怎么办？
+# 加过期时间。单独用 expire 加过期，也失败了，无法保证原子性，怎么办？多参数
+	set key value [expiration EX seconds|PX milliseconds][NX|XX]
+# 使用参数的方式
+	set lock1 1 EX 10 NX
+# （整数）值递增
+	incr spring
+	incrby spring 100
+# （整数）值递减
+	decr spring
+	decrby spring 100
+# 浮点数增量
+	set f 2.6
+	incrbyfloat f 7.3
+# 获取多个值
+	mget spring jack
+# 获取值长度
+	strlen spring
+# 字符串追加内容
+	append spring good
+# 获取指定范围的字符
+	getrange spring 0 3
+```
+
+#### 存储（实现）原理
+
+**数据模型**
+
+因为 Redis 是 KV 的数据库，它是通过 hashtable 实现的（我们把这个叫做外层的哈希）。所以每个键值对都会有一个 dictEntry（源码位置：dict.h）， 里面指向了 key 和 value 的指针。next 指向下一个 dictEntry。
+
+```c
+typedef struct dictEntry {
+	void *key; /* key 关键字定义 */
+	union {
+		void *val; uint64_t u64; /* value 定义 */
+		int64_t s64; double d;
+	} v;
+	struct dictEntry *next; /* 指向下一个键值对节点 */
+} dictEntry;
+```
+
+![image-20201105115158939](分布式缓存 Redis.assets/image-20201105115158939.png)
+
+key 是字符串，但是 Redis 没有直接使用 C 的字符数组，而是存储在自定义的 SDS 中。
+
+value 既不是直接作为字符串存储，也不是直接存储在 SDS 中，而是存储在 redisObject 中。实际上五种常用的数据类型的任何一种，都是通过 redisObject 来存储 的。
+
+**redisObject**
+
+```c
+typedef struct redisObject {
+	unsigned type:4; /* 对象的类型，包括：OBJ_STRING、OBJ_LIST、OBJ_HASH、OBJ_SET、OBJ_ZSET */
+	unsigned encoding:4; /* 具体的数据结构 */
+	unsigned lru:LRU_BITS; /* 24 位，对象最后一次被命令程序访问的时间，与内存回收有关 */
+	int refcount; /* 引用计数。当 refcount 为 0 的时候，表示该对象已经不被任何对象引用，则可以进行垃圾回收了*/
+	void *ptr; /* 指向对象实际的数据结构 */
+} robj;
+```
+
+**内部编码**
+
+字符串类型的内部编码有三种： 
+
+* int，存储 8 个字节的长整型（long，2^63-1）
+
+* embstr, 代表 embstr 格式的 SDS（Simple Dynamic String 简单动态字符串）， 存储小于 44 个字节的字符串
+
+* raw，存储大于 44 个字节的字符串
+
+```shell
+127.0.0.1:6379> set number 1
+OK
+127.0.0.1:6379> set qs "My name is spring,i'm a java development enginner.I'm 25 years old."
+OK
+127.0.0.1:6379> set jack bighead
+OK
+127.0.0.1:6379> object encoding number
+"int"
+127.0.0.1:6379> object encoding qs
+"raw"
+127.0.0.1:6379> object encoding jack
+"embstr"
+```
+
+在 3.2 以后的版本中，SDS 又有多种结构（sds.h）：sdshdr5、sdshdr8、sdshdr16、sdshdr32、sdshdr64，用于存储不同的长度的字符串，分别代表2^5=32byte， 2^8=256byte，2^16=65536byte=64KB，2^32byte=4GB。
+
+```c
+/* sds.h */
+struct __attribute__ ((__packed__)) sdshdr8 {
+	uint8_t len; /* 当前字符数组的长度 */
+	uint8_t alloc; /*当前字符数组总共分配的内存大小 */
+	unsigned char flags; /* 当前字符数组的属性、用来标识到底是 sdshdr8 还是 sdshdr16 等 */
+	char buf[]; /* 字符串真正的值 */
+};
+```
+
+**为什么 Redis 要用 SDS 实现字符串？ **
+
+我们知道，C 语言本身没有字符串类型（只能用字符数组 char[]实现）。 
+
+1. 使用字符数组必须先给目标变量分配足够的空间，否则可能会溢出。
+
+2. 如果要获取字符长度，必须遍历字符数组，时间复杂度是 O(n)。 
+
+3. C 字符串长度的变更会对字符数组做内存重分配。 
+
+4. 通过从字符串开始到结尾碰到的第一个'\0'来标记字符串的结束，因此不能保 存图片、音频、视频、压缩文件等二进制(bytes)保存的内容，二进制不安全。 
+
+SDS 的特点：
+
+1. 不用担心内存溢出问题，如果需要会对 SDS 进行扩容。 
+
+2. 获取字符串长度时间复杂度为 O(1)，因为定义了 len 属性。 
+
+3. 通过“空间预分配”（ sdsMakeRoomFor）和“惰性空间释放”，防止多次重分配内存。
+
+4. 判断是否结束的标志是 len 属性（它同样以'\0'结尾是因为这样就可以使用 C 语言中函数库操作字符串的函数了），可以包含'\0'。 
+
+| C 字符串                                       | SDS                                            |
+| ---------------------------------------------- | ---------------------------------------------- |
+| 获取字符串长度的复杂度为 O(N)                  | 获取字符串长度的复杂度为 O(1)                  |
+| API 是不安全的，可能会造成缓冲区溢出           | API 是安全的，不会早晨个缓冲区溢出             |
+| 修改字符串长度 N 次必然需要执行 N 次内存重分配 | 修改字符串长度 N 次最多需要执行 N 次内存重分配 |
+| 只能保存文本数据                               | 可以保存文本或者二进制数据                     |
+| 可以使用所有库中的函数                         | 可以使用一部分库中的函数问题                   |
+
+**embstr 和 raw 的区别？ **
+
+embstr 的使用只分配一次内存空间（因为 RedisObject 和 SDS 是连续的），而 raw 需要分配两次内存空间（分别为 RedisObject 和 SDS 分配空间）。 
+
+因此与 raw 相比，embstr 的好处在于创建时少分配一次空间，删除时少释放一次 空间，以及对象的所有数据连在一起，寻找方便。 
+
+而 embstr 的坏处也很明显，如果字符串的长度增加需要重新分配内存时，整个 RedisObject 和 SDS 都需要重新分配空间，因此 Redis 中的 embstr 实现为只读。 
+
+**int 和 embstr 什么时候转化为 raw？ **
+
+当 int 数据不再是整数 ， 或大小超过了 long 的范围 （2^63-1=9223372036854775807）时，自动转化为 embstr。
+
+```shell
+127.0.0.1:6379> set k2 9223372036854775808
+OK
+127.0.0.1:6379> object encoding k2
+"embstr"
+127.0.0.1:6379> set k1 1
+OK
+127.0.0.1:6379> append k1 a
+(integer) 2
+127.0.0.1:6379> object encoding k1
+"raw"
+```
+
+**明明没有超过阈值，为什么变成 raw 了？ **
+
+```shell
+127.0.0.1:6379> set k2 a
+OK
+127.0.0.1:6379> object encoding k2
+"embstr"
+127.0.0.1:6379> append k2 b
+(integer) 2
+127.0.0.1:6379> object encoding k2
+"raw"
+```
+
+对于 embstr，由于其实现是只读的，因此在对 embstr 对象进行修改时，都会先转化为 raw 再进行修改。 
+
+因此，只要是修改 embstr 对象，修改后的对象一定是 raw 的，无论是否达到了 44 个字节。 
+
+**当长度小于阈值时，会还原吗？ **
+
+关于 Redis 内部编码的转换，都符合以下规律：编码转换在 Redis 写入数据时完成，且转换过程不可逆，只能从小内存编码向大内存编码转换（但是不包括重新set）。 
+
+**为什么要对底层的数据结构进行一层包装呢？ **
+
+通过封装，可以根据对象的类型动态地选择存储结构和可以使用的命令，实现节省空间和优化查询速度
+
+#### 应用场景
+
+**缓存**
+
+STRING 类型
+
+例如：热点数据缓存（例如报表，明星出轨），对象缓存，全页缓存。 
+
+可以提升热点数据的访问速度。
+
+**数据共享分布式**
+
+STRING 类型
+
+因为 Redis 是分布式的独立服务，可以在多个应用之间共享 
+
+例如：分布式 Session
+
+**分布式锁**
+STRING 类型 setnx 方法，只有不存在时才能添加成功，返回 true。
+
+```java
+public Boolean getLock(Object lockObject){
+	jedisUtil = getJedisConnetion();
+	boolean flag = jedisUtil.setNX(lockObj, 1);
+	if(flag){
+		expire(locakObj,10);
+	}
+	return flag;
+}
+public void releaseLock(Object lockObject){
+	del(lockObj);
+}
+```
+
+**全局 ID**
+
+INT 类型，INCRBY，利用原子性 
+
+```markdown
+# （分库分表的场景，一次性拿一段）
+	incrby userid 1000 
+```
+
+**计数器**
+
+INT 类型，INCR 方法 
+
+例如：文章的阅读量，微博点赞数，允许一定的延迟，先写入 Redis 再定时同步到 数据库。
+
+**限流**
+
+INT 类型，INCR 方法
+
+以访问者的 IP 和其他信息作为 key，访问一次增加一次计数，超过次数则返回 false。
+
+### 1.3.2 Hash 哈希
+
+![image-20201105130501557](分布式缓存 Redis.assets/image-20201105130501557.png)
+
+#### 存储类型
+
+包含键值对的无序散列表。value 只能是字符串，不能嵌套其他类型。 
+
+同样是存储字符串，Hash 与 String 的主要区别？ 
+
+1. 把所有相关的值聚集到一个 key 中，节省内存空间 
+
+2. 只使用一个 key，减少 key 冲突 
+
+3. 当需要批量获取值的时候，只需要使用一个命令，减少内存/IO/CPU 的消耗 
+
+Hash 不适合的场景： 
+
+1. Field 不能单独设置过期时间 
+
+2. 没有 bit 操作 
+
+3. 需要考虑数据量分布的问题（value 值非常大的时候，无法分布到多个节点）
+
+#### 操作命令
+
+```markdown
+	hset h1 f 6
+	hset h1 e 5
+	hmset h1 a 1 b 2 c 3 d 4
+	hget h1 a
+	hmget h1 a b c d
+	hkeys h1
+	hvals h1
+	hgetall h1
+# key 操作
+	hget exists h1
+	hdel h1 a
+	hlen h1
+```
+
+#### 存储（实现）原理
+
+Redis 的 Hash 本身也是一个 KV 的结构，类似于 Java 中的 HashMap。 
+
+外层的哈希（Redis KV 的实现）只用到了 hashtable。当存储 hash 数据类型时， 我们把它叫做内层的哈希。内层的哈希底层可以使用两种数据结构实现： 
+
+ziplist：OBJ_ENCODING_ZIPLIST（压缩列表） 
+
+hashtable：OBJ_ENCODING_HT（哈希表）
+
+```bash
+127.0.0.1:6379> hset h2 f aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+(integer) 1
+127.0.0.1:6379> hset h3 f aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+(integer) 1
+127.0.0.1:6379> object encoding h2
+"ziplist"
+127.0.0.1:6379> object encoding h3
+"hashtable"
+```
+
+##### ziplist 压缩列表
+
+> /* ziplist.c 源码头部注释 */ 
+>
+> The ziplist is a specially encoded dually linked list that is designed to be very memory efficient. It stores both strings and integer values, where integers are encoded as actual integers instead of a series of characters. It allows push and pop operations on either side of the list in O(1) time. However, because every operation requires a reallocation of the memory used by the ziplist, the actual complexity is related to the amount of memory used by the ziplist.
+
+ziplist 是一个经过特殊编码的双向链表，它不存储指向上一个链表节点和指向下一 个链表节点的指针，而是存储上一个节点长度和当前节点长度，通过牺牲部分读写性能， 来换取高效的内存空间利用率，是一种时间换空间的思想。只用在字段个数少，字段值小的场景里面。
+
+**ziplist 的内部结构**
+
+![image-20201105133353131](分布式缓存 Redis.assets/image-20201105133353131.png)
+
+```c
+typedef struct zlentry {
+	unsigned int prevrawlensize; /* 上一个链表节点占用的长度 */
+	unsigned int prevrawlen; /* 存储上一个链表节点的长度数值所需要的字节数 */
+	unsigned int lensize; /* 存储当前链表节点长度数值所需要的字节数 */
+	unsigned int len; /* 当前链表节点占用的长度 */
+	unsigned int headersize; /* 当前链表节点的头部大小（prevrawlensize + lensize），即非数据域的大小 */
+	unsigned char encoding; /* 编码方式 */
+	unsigned char *p; /* 压缩链表以字符串的形式保存，该指针指向当前节点起始位置 */
+} zlentry;
+```
+
+![image-20201105133439104](分布式缓存 Redis.assets/image-20201105133439104.png)
+
+**什么时候使用 ziplist 存储**
+
+当 hash 对象同时满足以下两个条件的时候，使用 ziplist 编码：
+
+1. 所有的键值对的健和值的字符串长度都小于等于 64byte（一个英文字母 一个字节）
+
+2. 哈希对象保存的键值对数量小于 512 个
+
+```yml
+# src/redis.conf 配置
+hash-max-ziplist-value 64 # ziplist 中最大能存放的值长度
+hash-max-ziplist-entries 512 # ziplist 中最多能存放的 entry 节点数量
+```
+
+```c
+/* 源码位置：t_hash.c ，当达字段个数超过阈值，使用 HT 作为编码 */
+if (hashTypeLength(o) > server.hash_max_ziplist_entries)
+	hashTypeConvert(o, OBJ_ENCODING_HT);
+}
+/*源码位置： t_hash.c，当字段值长度过大，转为 HT */
+for (i = start; i <= end; i++) {
+	if (sdsEncodedObject(argv[i]) &&
+		sdslen(argv[i]->ptr) > server.hash_max_ziplist_value){
+		hashTypeConvert(o, OBJ_ENCODING_HT);
+		break;
+	}
+}
+```
+
+一个哈希对象超过配置的阈值（键和值的长度有>64byte，键值对个数>512 个）时， 会转换成哈希表（hashtable）。
+
+##### hashtable（dict）
+
+在 Redis 中，hashtable 被称为字典（dictionary），它是一个数组+链表的结构。 
+
+前面我们知道了，Redis 的 KV 结构是通过一个 dictEntry 来实现的。 Redis 又对 dictEntry 进行了多层的封装。
+
+```c
+typedef struct dictEntry {
+	void *key; /* key 关键字定义 */
+	union {
+		void *val; uint64_t u64; /* value 定义 */
+		int64_t s64; double d;
+	} v;
+	struct dictEntry *next; /* 指向下一个键值对节点 */
+} dictEntry;
+```
+
+dictEntry 放到了 dictht（hashtable 里面）：
+
+```c
+/* This is our hash table structure. Every dictionary has two of this as we
+* implement incremental rehashing, for the old to the new table. */
+typedef struct dictht {
+	dictEntry **table; /* 哈希表数组 */
+	unsigned long size; /* 哈希表大小 */
+	unsigned long sizemask; /* 掩码大小，用于计算索引值。总是等于 size-1 */
+	unsigned long used; /* 已有节点数 */
+} dictht;
+```
+
+ht 放到了 dict 里面：
+
+```c
+typedef struct dict {
+	dictType *type; /* 字典类型 */
+	void *privdata; /* 私有数据 */
+	dictht ht[2]; /* 一个字典有两个哈希表 */
+	long rehashidx; /* rehash 索引 */
+	unsigned long iterators; /* 当前正在使用的迭代器数量 */
+} dict;
+```
+
+从最底层到最高层 dictEntry —> dictht —> dict —> OBJ_ENCODING_HT 
+
+哈希的存储结构：
+
+![image-20201105134333555](分布式缓存 Redis.assets/image-20201105134333555.png)
+
+注意：dictht 后面是 NULL 说明第二个 ht 还没用到。dictEntry*后面是 NULL 说明没有 hash 到这个地址。dictEntry 后面是 NULL 说明没有发生哈希冲突。
+
+**为什么要定义两个哈希表呢？**
+
+redis 的 hash 默认使用的是 ht[0]，ht[1]不会初始化和分配空间。
+
+哈希表 dictht 是用链地址法来解决碰撞问题的。在这种情况下，哈希表的性能取决于它的大小（size 属性）和它所保存的节点的数量（used 属性）之间的比率： 
+
+* 比率在 1:1 时（一个哈希表 ht 只存储一个节点 entry），哈希表的性能最好
+* 如果节点数量比哈希表的大小要大很多的话（这个比例用 ratio 表示，5 表示平均一个 ht 存储 5 个 entry），那么哈希表就会退化成多个链表，哈希表本身的性能优势就不再存在
+
+在这种情况下需要扩容。Redis 里面的这种操作叫做 rehash。 
+
+rehash 的步骤： 
+
+1. 为字符 ht[1]哈希表分配空间，这个哈希表的空间大小取决于要执行的操作，以及 ht[0]当前包含的键值对的数量。 扩展：ht[1]的大小为第一个大于等于 ht[0].used*2
+
+2. 将所有的 ht[0]上的节点 rehash 到 ht[1]上，重新计算 hash 值和索引，然后放入指定的位置
+
+3. 当 ht[0]全部迁移到了 ht[1]之后，释放 ht[0]的空间，将 ht[1]设置为 ht[0]表， 并创建新的 ht[1]，为下次 rehash 做准备
+
+**什么时候触发扩容？**
+
+负载因子（源码位置：dict.c）： 
+
+```c
+static int dict_can_resize = 1; 
+static unsigned int dict_force_resize_ratio = 5; 
+```
+
+扩容判断 _dictExpandIfNeeded（源码 dict.c）:
+
+```c
+if (d->ht[0].used >= d->ht[0].size && (dict_can_resize || d->ht[0].used/d->ht[0].size > dict_force_resize_ratio)) {
+	return dictExpand(d, d->ht[0].used*2);
+}
+return DICT_OK;
+```
+
+当 hash 表中元素的个数等于第一维数组的长度时，就会开始扩容，扩容的新数组是原数组大小的 2 倍。
+
+不过如果 Redis 正在做 bgsave，为了减少内存页的过多分离 (Copy On Write)，Redis 尽量不去扩容 (dict_can_resize)，但是如果 hash 表已经非常满了，元素的个数已经达到了第一维数组长度的 5 倍 (dict_force_resize_ratio)，说明 hash 表已经过于拥挤了，这个时候就会强制扩容。
+
+#### 应用场景
+
+**String**
+
+String 可以做的事情，Hash 都可以做。
+
+**存储对象类型的数据** 
+
+比如对象或者一张表的数据，比 String 节省了更多 key 的空间，也更加便于集中管理。 
+
+**购物车** 
+
+key：用户 id；field：商品 id；value：商品数量。 
+
++1：hincr。-1：hdecr。删除：hdel。全选：hgetall。商品数：hlen。
+
+### 1.3.3 List 列表
+
+
 
 ## 功能
 
@@ -42,54 +676,6 @@
 3. 秒杀、抢购 
 4. 网站访问排名 
 5. 应用的模块开发
-
-## redis的安装
-
-1. 下载redis安装包 
-2. tar -zxvf 安装包 
-3. 在redis目录下 执行 make 
-4. 可以通过make test测试编译状态 
-5. make install [prefix=/path]完成安装
-
-### 启动停止 redis
-
-```java
-./redis-server ../redis.conf
-./redis-cli shutdown
-```
-
-以后台进程的方式启动，修改redis.conf daemonize =yes
-
-### 连接到redis的命令
-
-```java
-./redis-cli
- ./redis-cli -h 127.0.0.1 -p 6379
-```
-
-### 其他命令说明
-
-Redis-server 启动服务 
-
-Redis-cli 访问到redis的控制台 
-
-redis-benchmark 性能测试的工具 
-
-redis-check-aof aof文件进行检测的工具 
-
-redis-check-dump rdb文件检查工具 
-
-redis-sentinel sentinel 服务器配置
-
-## 多数据支持
-
-默认支持16个数据库，可以理解为一个命名空间。跟关系型数据库不一样的点：
-
-1. redis不支持自定义数据库名词 
-2. 每个数据库不能单独设置授权 
-3. 每个数据库之间并不是完全隔离的。 可以通过flushall命令清空redis实例面的所有数据库中的数据
-
-通过select dbid去选择不同的数据库命名空间，dbid的取值范围默认是0 -15。
 
 # redis 使用入门
 
