@@ -262,7 +262,7 @@ typedef struct redisObject {
 
 * int，存储 8 个字节的长整型（long，2^63-1）
 
-* embstr, 代表 embstr 格式的 SDS（Simple Dynamic String 简单动态字符串）， 存储小于 44 个字节的字符串
+* embstr, 代表 embstr 格式的 SDS（Simple Dynamic String 简单动态字符串），<font color=red>存储小于 44 个字节的字符串</font>
 
 * raw，存储大于 44 个字节的字符串
 
@@ -327,13 +327,17 @@ SDS 的特点：
 
 embstr 的使用只分配一次内存空间（因为 RedisObject 和 SDS 是连续的），而 raw 需要分配两次内存空间（分别为 RedisObject 和 SDS 分配空间）。 
 
-因此与 raw 相比，embstr 的好处在于创建时少分配一次空间，删除时少释放一次 空间，以及对象的所有数据连在一起，寻找方便。 
+因此与 raw 相比，embstr 的好处在于创建时少分配一次空间，删除时少释放一次空间，以及对象的所有数据连在一起，寻找方便。 
 
-而 embstr 的坏处也很明显，如果字符串的长度增加需要重新分配内存时，整个 RedisObject 和 SDS 都需要重新分配空间，因此 Redis 中的 embstr 实现为只读。 
+而 embstr 的坏处也很明显，如果字符串的长度增加需要重新分配内存时，整个 RedisObject 和 SDS 都需要重新分配空间，<font color=red>因此 Redis 中的 embstr 实现为只读。</font> 
 
 **int 和 embstr 什么时候转化为 raw？ **
 
-当 int 数据不再是整数 ， 或大小超过了 long 的范围 （2^63-1=9223372036854775807）时，自动转化为 embstr。
+当 int 数据大小超过了 long 的范围 （2^63-1=9223372036854775807）时，自动转化为 embstr。
+
+当 int 数据不再是整数时自动转化为 raw。
+
+当 embstr 数据发生修改时自动转化为 raw（只有初始化非int数据且长度小于44这一种情况下，才是 embstr 数据）。
 
 ```shell
 127.0.0.1:6379> set k2 9223372036854775808
@@ -345,6 +349,14 @@ OK
 127.0.0.1:6379> append k1 a
 (integer) 2
 127.0.0.1:6379> object encoding k1
+"raw"
+127.0.0.1:6379> set kk aa
+OK
+127.0.0.1:6379> object encoding kk
+"embstr"
+127.0.0.1:6379> append kk aa
+(integer) 4
+127.0.0.1:6379> object encoding kk
 "raw"
 ```
 
@@ -501,9 +513,25 @@ ziplist 是一个经过特殊编码的双向链表，它不存储指向上一个
 
 **ziplist 的内部结构**
 
-![image-20201105133353131](分布式缓存 Redis.assets/image-20201105133353131.png)
+```
+                                     ziplist内存布局
+|-----------|-----------|----------|---------------------------------------------------|---|
+    bytes      offset      length  content         {zlentry, zlentry ... ...}           end
+```
 
 ```c
+typedef struct ziplist{
+     /*ziplist分配的内存大小*/
+     uint32_t bytes;
+     /*达到尾部的偏移量*/
+     uint32_t tail_offset;
+     /*存储元素实体个数*/
+     uint16_t length;
+     /*存储内容实体元素*/
+     unsigned char* content[];
+     /*尾部标识*/
+     unsigned char end;
+} ziplist;
 typedef struct zlentry {
 	unsigned int prevrawlensize; /* 上一个链表节点占用的长度 */
 	unsigned int prevrawlen; /* 存储上一个链表节点的长度数值所需要的字节数 */
@@ -521,9 +549,9 @@ typedef struct zlentry {
 
 当 hash 对象同时满足以下两个条件的时候，使用 ziplist 编码：
 
-1. 所有的键值对的健和值的字符串长度都小于等于 64byte（一个英文字母 一个字节）
+1. <font color=red>所有的键值对的健和值的字符串长度都小于等于 64 byte（一个英文字母 一个字节）</font>
 
-2. 哈希对象保存的键值对数量小于 512 个
+2. <font color=red>哈希对象保存的键值对数量小于 512 个</font>
 
 ```yml
 # src/redis.conf 配置
@@ -578,7 +606,7 @@ typedef struct dictht {
 } dictht;
 ```
 
-ht 放到了 dict 里面：
+dictht 放到了 dict 里面：
 
 ```c
 typedef struct dict {
@@ -596,7 +624,7 @@ typedef struct dict {
 
 ![image-20201105134333555](分布式缓存 Redis.assets/image-20201105134333555.png)
 
-注意：dictht 后面是 NULL 说明第二个 ht 还没用到。dictEntry*后面是 NULL 说明没有 hash 到这个地址。dictEntry 后面是 NULL 说明没有发生哈希冲突。
+注意：dictht 后面是 NULL 说明第二个 dictht 还没用到。dictEntry*后面是 NULL 说明没有 hash 到这个地址。dictEntry 后面是 NULL 说明没有发生哈希冲突。
 
 **为什么要定义两个哈希表呢？**
 
@@ -657,133 +685,308 @@ key：用户 id；field：商品 id；value：商品数量。
 
 ### 1.3.3 List 列表
 
+#### 存储类型 
 
+存储有序的字符串（从左到右），元素可以重复。可以充当队列和栈的角色。
 
-## 功能
+![image-20201106104616547](分布式缓存 Redis.assets/image-20201106104616547.png)
 
-1. 可以为每个key设置超时时间 
-2. 可以通过列表类型来实现分布式队列的操作 
-3. 支持发布订阅的消息模式
+#### 操作命令
 
-## 简单
-
-提供了很多命令与redis进行交互
-
-## redis的应用场景
-
-1. 数据缓存（商品数据、新闻、热点数据） 
-2. 单点登录 
-3. 秒杀、抢购 
-4. 网站访问排名 
-5. 应用的模块开发
-
-# redis 使用入门
-
-
-1. 获得一个符合匹配规则的键名列表
-
-```java
-keys pattern ? * []
+```markdown
+# 元素增减
+	lpush queue a
+	lpush queue b c
+	rpush queue d e
+#  c b a d e
+	lpop queue
+	rpop queue
+	blpop queue
+	brpop queue
+# 取值
+	lindex queue 0
+	lrange queue 0 -1
 ```
 
-1. 判断一个键是否存在 ， EXISTS key 
-2. type key 去获得这个key的数据结构类型
+![image-20201106105648506](分布式缓存 Redis.assets/image-20201106105648506.png)
 
-## 各种数据结构的使用
+#### 存储（实现）原理 
 
-### key 的设计
+在早期版本中，数据量较小时用 ziplist 存储，达到临界值时转换为 linkedlist 进行存储，分别对应 OBJ_ENCODING_ZIPLIST 和 OBJ_ENCODING_LINKEDLIST 。 
 
-对象类型:对象id:对象属性:对象子属性，建议对key进行分类，同步在wiki统一管理
+3.2 版本之后，统一用 quicklist 来存储。quicklist 存储了一个双向链表，每个节点都是一个 ziplist。
 
-### 字符类型
+```shell
+127.0.0.1:6379> object encoding queue
+"quicklist"
+```
 
-一个字符类型的key默认存储的最大容量是512M
+**quicklist** 
 
-set key value 赋值 
+`quicklist（快速列表）`是 ziplist 和 linkedlist 的结合体，它将 linkedList 按段切分，每一段使用 zipList 来紧凑存储，多个 zipList 之间使用双向指针串接起来。 
 
-get key 取值 
+quicklist.h，head 和 tail 指向双向列表的表头和表尾：
 
-incr key 递增数字 
+```c
+typedef struct quicklist {
+	quicklistNode *head; /* 指向双向列表的表头 */
+	quicklistNode *tail; /* 指向双向列表的表尾 */
+	unsigned long count; /* 所有的 ziplist 中一共存了多少个元素 */
+	unsigned long len; /* 双向链表的长度，node 的数量 */
+	int fill : 16; /* fill factor for individual nodes */
+	unsigned int compress : 16; /* 压缩深度，0：不压缩； */
+} quicklist;
+```
 
-incryby key increment 递增指定的整数 
+```yml
+# redis.conf
+list-max-ziplist-size（fill）
+# 正数表示单个 ziplist 最多所包含的 entry 个数。
+# 负数代表单个 ziplist 的大小，默认 8k。
+# -1：4KB；-2：8KB；-3：16KB；-4：32KB；-5：64KB
+list-compress-depth（compress）
+# 压缩深度，默认是 0。
+# 1：首尾的 ziplist 不压缩；2：首尾第一第二个 ziplist 不压缩，以此类推
+```
 
-decr key 原子递减 
+quicklistNode 中的*zl 指向一个 ziplist，一个 ziplist 可以存放多个元素。
 
-append key value 向指定的key追加字符串 
+```c
+typedef struct quicklistNode {
+	struct quicklistNode *prev; /* 前一个节点 */
+	struct quicklistNode *next; /* 后一个节点 */
+	unsigned char *zl; /* 指向实际的 ziplist */
+	unsigned int sz; /* 当前 ziplist 占用多少字节 */
+	unsigned int count : 16; /* 当前 ziplist 中存储了多少个元素，占 16bit（下同），最大 65536 个 */
+	unsigned int encoding : 2; /* 是否采用了 LZF 压缩算法压缩节点，1：RAW 2：LZF */
+	unsigned int container : 2; /* 2：ziplist，未来可能支持其他结构存储 */
+	unsigned int recompress : 1; /* 当前 ziplist 是不是已经被解压出来作临时使用 */
+	unsigned int attempted_compress : 1; /* 测试用 */
+	unsigned int extra : 10; /* 预留给未来使用 */
+} quicklistNode;
+```
 
-strlen key 获得key对应的value的长度 
+![image-20201106110248982](分布式缓存 Redis.assets/image-20201106110248982.png)
 
-mget key [key...] 同时获得多个key的value 
+#### 应用场景 
 
-mset key value [key value …] 同时设置多个key的value 
+**用户消息时间线 timeline**
 
-setnx 只在键 key 不存在的情况下， 将键 key 的值设置为 value 。若键 key 已经存在， 则 SETNX 命令不做任何动作。SETNX 是『SET if Not eXists』(如果不存在，则 SET)的简写。命令在设置成功时返回 1 ， 设置失败时返回 0 。
+因为 List 是有序的，可以用来做用户时间线
 
-应用场景：短信重发机制：sms:limit:mobile 138… expire （incr）
+**消息队列**
 
-### 列表类型
+List 提供了两个阻塞的弹出操作：BLPOP/BRPOP，可以设置超时时间。 
 
-list, 可以存储一个有序的字符串列表 
+`BLPOP：BLPOP key1 timeout` 移出并获取列表的第一个元素， 如果列表没有元素 会阻塞列表直到等待超时或发现可弹出元素为止。 
 
-lpush/rpush key value [value…] 从左边或者右边push数据 
+`BRPOP：BRPOP key1 timeout` 移出并获取列表的最后一个元素， 如果列表没有元 素会阻塞列表直到等待超时或发现可弹出元素为止。 
 
-llen num 获得列表的长度 
+队列：先进先出：rpush blpop，左头右尾，右边进入队列，左边出队列。 
 
-lrange key start stop 索引可以是负数， -1表示最右边的第一个元素 
+栈：先进后出：rpush brpop
 
-lrem key count value 根据参数 COUNT 的值，移除列表中与参数 VALUE 相等的元素。count 的值可以是以下几种： 
+### 1.3.4 Set 集合
 
-count &gt; 0 : 从表头开始向表尾搜索，移除与 VALUE 相等的元素，数量为 COUNT 。 
+#### 存储类型
 
-count &lt; 0 : 从表尾开始向表头搜索，移除与 VALUE 相等的元素，数量为 COUNT 的绝对值。 
+String 类型的无序集合，最大存储数量 2^32-1（40 亿左右）。
 
-count = 0 : 移除表中所有与 VALUE 相等的值。
+![image-20201106110559361](分布式缓存 Redis.assets/image-20201106110559361.png)
 
-lset key index value 设置索引为 index 的值 
+#### 操作命令
 
-lpop/rpop 取数据(并移除)
+```markdown
+# 添加一个或者多个元素
+	sadd myset a b c d e f g
+# 获取所有元素
+	smembers myset
+# 统计元素个数
+	scard myset
+# 随机获取一个元素
+	srandmember myset
+# 随机弹出一个元素
+	spop myset
+# 移除一个或者多个元素
+	srem myset d e f
+# 查看元素是否存在
+	sismember myset a
+```
 
-应用场景：可以用来做分布式消息队列
+#### 存储（实现）原理
 
-### 散列类型
+Redis 用 intset 或 hashtable 存储 set。如果元素都是整数类型，就用 inset 存储。 如果不是整数类型，就用 hashtable（数组+链表的存来储结构）。 
 
-不支持数据类型的嵌套，比较适合存储对象 
+问题：KV 怎么存储 set 的元素？key 就是元素的值，value 为 null。 
 
-hset key field value 设置值 
+如果整数类型 intset 元素个数超过 512 个，也会用 hashtable 存储。
 
-hget key filed 取值 
+```yml
+# 配置文件 redis.conf
+set-max-intset-entries 512
+```
 
-hmset key filed value [filed value …] 一次性设置多个值 
+```shell
+127.0.0.1:6379> sadd iset 1 2 3 4 5 6 7
+(integer) 7
+127.0.0.1:6379> object encoding iset
+"intset"
+127.0.0.1:6379> sadd myset a b c d e f
+(integer) 4
+127.0.0.1:6379> object encoding myset
+"hashtable"
+```
 
-hmget key field [field …] 一次性获得多个值 
+#### 应用场景
 
-hgetall key 获得hash的所有信息，包括key和value 
+**抽奖** 
 
-hexists key field 判断字段是否存在。 存在返回1. 不存在返回0 
+随机获取元素 spop myset 
 
-hincryby/hsetnx hdel key field [field…] 删除一个或者多个字段
+**点赞、签到、打卡**
 
-### 集合类型
+微博的 ID 是 t1001，用户 ID 是 u3001。 
 
-set 跟list 不一样的点。 集合类型不能存在重复的数据，而且是无序的。 
+用 like:t1001 来维护 t1001 这条微博的所有点赞用户。 
 
-sadd key member [member...] 增加数据； 如果value已经存在，则会忽略存在的值，并且返回成功加入的元素的数量 
+点赞了这条微博：sadd like:t1001 u3001 
 
-srem key member 删除元素 
+取消点赞：srem like:t1001 u3001 
 
-smembers key 获得所有数据 
+是否点赞：sismember like:t1001 u3001 
 
-sdiff key [key…]对多个集合执行差集运算 
+点赞的所有用户：smembers like:t1001 
 
-sunion key [key…] 对多个集合执行并集操作, 同时存在在两个集合里的所有值
+点赞数：scard like:t1001 
 
-### 有序集合
+比关系型数据库简单许多。
 
-zadd key score member 
+**商品标签**
 
-zrange key start stop [withscores] 去获得元素。 withscores是可以获得元素的分数，如果两个元素的score是相同的话，那么根据(0&lt;9&lt;A&lt;Z&lt;a&lt;z) 方式从小到大。 
+用 tags:i5001 来维护商品所有的标签。
 
-应用场景：网站访问的前10名
+sadd tags:i5001 画面清晰细腻 
+
+sadd tags:i5001 真彩清晰显示屏 
+
+sadd tags:i5001 流畅至极
+
+**商品筛选**
+
+```markdown
+# 获取差集 
+	sdiff set1 set2 
+# 获取交集（intersection ） 
+	sinter set1 set2 
+# 获取并集 
+	sunion set1 set2
+
+# iPhone12 上市了。 
+	sadd brand:apple iPhone11 
+	sadd brand:ios iPhone11 
+	sad screensize:6.0-6.24 iPhone11 
+	sad screentype:lcd iPhone11 
+
+# 筛选商品，苹果的，iOS 的，屏幕在 6.0-6.24 之间的，屏幕材质是 LCD 屏幕 
+	sinter brand:apple brand:ios screensize:6.0-6.24 screentype:lcd
+```
+
+**用户关注、推荐模型**
+
+相互关注
+
+我关注的人也关注了他
+
+可能认识的人
+
+### 1.3.5 ZSet 有序集合
+
+#### 存储类型
+
+![image-20201106111933736](分布式缓存 Redis.assets/image-20201106111933736.png)
+
+sorted set，有序的 set，每个元素有个 score。 
+
+score 相同时，按照 key 的 ASCII 码排序。
+
+#### 操作命令
+
+```markdown
+# 添加元素
+	zadd myzset 10 java 20 php 30 ruby 40 cpp 50 python
+# 获取全部元素，也有倒序的 rev 操作（reverse）
+	zrange myzset 0 -1 withscores
+	zrevrange myzset 0 -1 withscores
+# 根据分值区间获取元素
+	zrangebyscore myzset 20 30
+# 移除元素，也可以根据 score rank 删除
+	zrem myzset php cpp
+# 统计元素个数
+	zcard myzset
+# 分值递增
+	zincrby myzset 5 python
+# 根据分值统计个数
+	zcount myzset 20 60
+# 获取元素 rank
+	zrank myzset java
+# 获取元素 score
+	zsocre myzset java
+```
+
+#### 存储（实现）原理
+
+同时满足以下条件时使用 ziplist 编码： 
+
+* 元素数量小于 128 个 
+
+* 所有 member 的长度都小于 64 字节 
+
+在 ziplist 的内部，按照 score 排序递增来存储。插入的时候要移动之后的数据。
+
+```yml
+# 对应 redis.conf 参数
+zset-max-ziplist-entries 128
+zset-max-ziplist-value 64
+```
+
+超过阈值之后，使用 skiplist+dict 存储。 
+
+**skiplist**
+
+我们先来看一下有序链表：
+
+![image-20201106112725545](分布式缓存 Redis.assets/image-20201106112725545.png)
+
+在这样一个链表中，如果我们要查找某个数据，那么需要从头开始逐个进行比较， 直到找到包含数据的那个节点，或者找到第一个比给定数据大的节点为止（没找到）。 也就是说，时间复杂度为 O(n)。同样，当我们要插入新数据的时候，也要经历同样的查 找过程，从而确定插入位置。 
+
+而二分查找法只适用于有序数组，不适用于链表。 
+
+假如我们每相邻两个节点增加一个指针（或者理解为有三个元素进入了第二层）， 让指针指向下下个节点。
+
+![image-20201106112809982](分布式缓存 Redis.assets/image-20201106112809982.png)
+
+这样所有新增加的指针连成了一个新的链表，但它包含的节点个数只有原来的一半 （上图中是 7, 19, 26）。在插入一个数据的时候，决定要放到那一层，取决于一个算法 （在 redis 中 t_zset.c 有一个 zslRandomLevel 这个方法）。 
+
+现在当我们想查找数据的时候，可以先沿着这个新链表进行查找。当碰到比待查数 据大的节点时，再回到原来的链表中的下一层进行查找。比如，我们想查找 23，查找的路径是沿着下图中标红的指针所指向的方向进行的：
+
+![image-20201106112848768](分布式缓存 Redis.assets/image-20201106112848768.png)
+
+1. 23 首先和 7 比较，再和 19 比较，比它们都大，继续向后比较。 
+2. 但 23 和 26 比较的时候，比 26 要小，因此回到下面的链表（原链表），与 22 比较。
+3. 23 比 22 要大，沿下面的指针继续向后和 26 比较。23 比 26 小，说明待查数 据 23 在原链表中不存在 
+
+在这个查找过程中，由于新增加的指针，我们不再需要与链表中每个节点逐个进行 比较了。需要比较的节点数大概只有原来的一半。这就是跳跃表。
+
+#### 应用场景
+
+**排行榜**
+
+```markdown
+# id 为 6001 的新闻点击数加 1
+	zincrby hotNews:20190926 1 n6001 
+# 获取今天点击最多的 15 条
+	zrevrange hotNews:20190926 0 15 withscores
+```
 
 # redis 事务处理
 
