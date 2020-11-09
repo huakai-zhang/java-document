@@ -49,15 +49,21 @@
 		yum remove mariadb-libs-5.5.64-1.el7.x86_64
 
 # 5.启动 MySQL
-	service mysql start
+	service mysqld start
+	# systemctl start mysqld.service
 
 # 6.设置帐号密码
 	mysqladmin -u root password root
     mysql
 		ERROR 1045 (28000): Access denied for user 'root'@'localhost' (using password: NO)
+	# 5.7 版本中需要去日志文件查看初始密码
+		grep "password" /var/log/mysqld.log
 
 # 7.连接数据库
 	 mysql -u root -p
+	 # 输入初始密码后，此时不能做任何事情，因为MySQL默认必须修改密码之后才能操作数据库
+		ALTER USER 'root'@'localhost' IDENTIFIED BY 'new password';
+	 # 其中‘new password’替换成你要设置的密码，注意:密码设置必须要大小写字母数字和特殊符号（,/';:等）,不然不能配置成功
 
 # 8.授权远程连接
 	use mysql;
@@ -67,10 +73,18 @@
 	FLUSH PRIVILEGES;
 
 # 9.设置开机自启动mysql
-	chkconfig mysql on
+	# 查看系统centos的开机启动项目，主要针对centos6 chkconfig查看
+	chkconfig mysqld on
 	chkconfig --list|grep mysql
 		mysql          	0:关	1:关	2:开	3:开	4:开	5:开	6:关
+	# centos7系统，是systemctl来管理服务。可以通过systemctl enable mysqld来设置 mysql开机启动自动
+	systemctl enable mysqld
+	systemctl list-unit-files | grep mysqld
 ```
+
+日志文件中的初始密码：
+
+![image-20201109134356295](mysql基础.assets/image-20201109134356295.png)
 
 ### 2.2 MySQL 安装完成相关命令
 
@@ -86,8 +100,11 @@
 		mysqladmin  Ver 8.42 Distrib 5.5.62, for Linux on x86_64
 
 # MySQL 服务启停
-	service mysql start
-	service mysql stop
+	service mysqld start
+	service mysqld stop
+	
+# 查看 MySQL 状态
+	service mysqld status
 
 # 连接数据库
 	mysql -u root -p

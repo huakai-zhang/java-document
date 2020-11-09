@@ -101,6 +101,25 @@ Redis 的特性：
 
 ### 1.2.1 redis 安装
 
+由于 redis 是用 C 语言开发，安装之前必先确认是否安装 gcc 环境（gcc -v），如果没有安装，执行以下命令进行安装：
+
+```markdown
+# 安装gcc套装
+	yum install cpp
+	yum install binutils
+	yum install glibc
+	yum install glibc-kernheaders
+	yum install glibc-common
+	yum install glibc-devel
+    yum install gcc
+    yum install make
+# 升级gcc
+	yum -y install centos-release-scl
+	yum -y install devtoolset-9-gcc devtoolset-9-gcc-c++ devtoolset-9-binutils
+	scl enable devtoolset-9 bash
+# 当上面这几步完成后，再执行make命令即可
+```
+
 1. 下载redis安装包 
 2. tar -zxvf 安装包 
 3. 在redis目录下 执行 make 
@@ -123,11 +142,42 @@ Redis 的特性：
  ./redis-cli -h 127.0.0.1 -p 6379
 ```
 
+#### 配置开机自启
+
+```markdown
+# 前提需要配置redis.conf
+	daemonize yes # 后台运行
+# 添加开机启动服务
+	vim /etc/systemd/system/redis-server.service
+	# 服务文件内容
+	[Unit]
+	Description=The redis-server Process Manager
+	After=syslog.target network.target
+
+	[Service]
+	Type=forking
+	PIDFile=/var/run/redis_6379.pid
+	ExecStart=/usr/local/redis-6.0.5/src/redis-server /usr/local/redis-6.0.5/redis.conf
+	PrivateTmp=true
+
+	[Install]
+	WantedBy=multi-user.target
+# 设置开机启动
+	# 新服务的服务程序配置文件生效，需重新加载
+	systemctl daemon-reload
+	# 前提先关闭运行中的redis，测试使用服务启动
+	systemctl start redis-server.service
+	# 开启成功，将服务加入开机自启
+	systemctl enable redis-server.service
+	# 查看服务自启状态
+	systemctl list-unit-files | grep redis
+```
+
 #### 其他命令说明
 
-Redis-server 启动服务 
+redis-server 启动服务 
 
-Redis-cli 访问到redis的控制台 
+redis-cli 访问到redis的控制台 
 
 redis-benchmark 性能测试的工具 
 
