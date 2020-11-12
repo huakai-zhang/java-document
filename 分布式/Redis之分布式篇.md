@@ -335,7 +335,9 @@ Sentinle 的 Raft 算法和 Raft 论文略有不同。
 Jedis 连接 Sentinel，master name 来自于 sentinel.conf 的配置。
 
 ```java
+private static JedisSentinelPool pool;
 private static JedisSentinelPool createJedisPool() { 
+  // master的名字是sentinel.conf配置文件里面的名称
   String masterName = "redis-master"; 
   Set<String> sentinels = new HashSet<String>(); 
   sentinels.add("192.168.8.203:26379"); 
@@ -616,14 +618,810 @@ Redis Cluster 既能够实现主从的角色分配，又能够实现主从切换
 
 4. 多个业务使用同一套集群时，无法根据统计区分冷热数据，资源隔离性较差，容易出现相互影响的情况。
 
-# redis 缓存的更新
+# 5 Redis 客户端
+
+## 5.1 客户端通信原理
+
+客户端和服务器通过 TCP 来进行数据交互，服务器默认端口为 6379。
+
+客户端和服务器发送的命令或数据一律以 \r\n 结尾。
+
+如果使用 wireshark 对 jedis 抓包： 
+
+环境：Jedis 连接到虚拟机 128，运行 main，对 VMnet8 抓包。 
+
+过滤条件：`ip.dst==192.168.25.128 and tcp.port in {6379}` 
+
+set spring 抓包：
+
+![image-20201112133419819](Redis之分布式篇.assets/image-20201112133419819.png)
+
+可以看到实际发出的数据包是： 
+
+```
+*3\r\n$3\r\nSET\r\n$6\r\nspring\r\n$3\r\n666\r\n
+```
+
+get qingshan 抓包：
+
+![image-20201112133548706](Redis之分布式篇.assets/image-20201112133548706.png)
+
+```
+*2\r\n$3\r\nGET\r\n$6\r\nspring\r\n
+```
+
+客户端和 Redis 之间使用一种特殊的编码格式（在 AOF 文件里面可以看到），叫做 `Redis Serialization Protocol (Redis 序列化协议)`。
+
+特点：容易实现、解析快、可读 性强。客户端发给服务端的消息需要经过编码，服务端收到之后会按约定进行解码，反之亦然。
+
+基于此，我们可以自己实现一个 Redis 客户端。 
+
+1. 建立 Socket 连接 
+
+2. OutputStream 写入数据（发送到服务端） 
+
+3. InputStream 读取数据（从服务端接口） 
+
+```java
+public class MyClient {
+    private Socket socket;
+    private OutputStream write;
+    private InputStream read;
+
+    public MyClient(String host, int port) throws IOException {
+        socket = new Socket(host, port);
+        write = socket.getOutputStream();
+        read = socket.getInputStream();
+    }
+
+    public void set(String key, String val) throws IOException {
+        StringBuffer sb = new StringBuffer();
+        // 代表3个参数
+        sb.append("*3").append("\r\n");
+        // 第一个参数（get）的长度
+        sb.append("$3").append("\r\n");
+        // 第一个参数的内容
+        sb.append("SET").append("\r\n");
+
+        // 第二个参数key的长度
+        sb.append("$").append(key.getBytes().length).append("\r\n");
+        // 第二个参数key的内容
+        sb.append(key).append("\r\n");
+        // 第三个参数value的长度
+        sb.append("$").append(val.getBytes().length).append("\r\n");
+        // 第三个参数value的内容
+        sb.append(val).append("\r\n");
+
+        write.write(sb.toString().getBytes());
+        byte[] bytes = new byte[1024];
+        read.read(bytes);
+        System.out.println("-------------set-------------");
+        System.out.println(new String(bytes));
+    }
+
+    public void get(String key) throws IOException {
+        StringBuffer sb = new StringBuffer();
+        // 代表2个参数
+        sb.append("*2").append("\r\n");
+        // 第一个参数(get)的长度
+        sb.append("$3").append("\r\n");
+        // 第一个参数的内容
+        sb.append("GET").append("\r\n");
+
+        // 第二个参数长度
+        sb.append("$").append(key.getBytes().length).append("\r\n");
+        // 第二个参数内容
+        sb.append(key).append("\r\n");
+
+        write.write(sb.toString().getBytes());
+        byte[] bytes = new byte[1024];
+        read.read(bytes);
+        System.out.println("-------------get-------------");
+        System.out.println(new String(bytes));
+    }
+
+    public static void main(String[] args) throws IOException {
+        MyClient client = new MyClient("192.168.25.128", 6379);
+        client.set("spring", "2673");
+        client.get("spring");
+    }
+
+}
+```
+
+基于这种协议，我们可以用 Java 实现所有的 Redis 操作命令。当然，我们不需要这 么做，因为已经有很多比较成熟的 Java 客户端，实现了完整的功能和高级特性，并且提供了良好的性能。
+
+官网推荐的 Java 客户端有 3 个 Jedis，Redisson 和 Luttuce。
+
+Spring 连接 Redis 用的是什么？RedisConnectionFactory 接口支持多种实现，例 如 ： JedisConnectionFactory 、 JredisConnectionFactory 、 LettuceConnectionFactory、SrpConnectionFactory。
+
+## 5.2 Jedis
+
+### 5.2.1 特点
+
+Jedis 是我们最熟悉和最常用的客户端。轻量，简洁，便于集成和改造。
+
+```java
+public static void main(String[] args) {
+    Jedis jedis = new Jedis("192.168.25.128", 6379);
+    jedis.auth("1234");
+    jedis.set("spring", "666");
+    System.out.println(jedis.get("spring"));
+    jedis.close();
+}
+```
+
+Jedis 多个线程使用一个连接的时候线程不安全。可以使用连接池，为每个请求创建 不同的连接，基于 Apache common pool 实现。跟数据库一样，可以设置最大连接数 等参数。Jedis 中有多种连接池的子类。
+
+![image-20201112135301180](Redis之分布式篇.assets/image-20201112135301180.png)
+
+```java
+public static void main(String[] args) {
+	JedisPool pool = new JedisPool(ip, port);
+	Jedis jedis = jedisPool.getResource();
+	//
+}
+```
+
+Jedis 有 4 种工作模式：单节点、分片、哨兵、集群。 
+
+3 种请求模式：Client、Pipeline、事务。
+
+`Client 模式`就是客户端发送一个命令，阻塞等待服务端执行，然后读取返回结果。
+
+`Pipeline 模式`是一次性发送多个命令，最后一 次取回所有的返回结果，这种模式通过减少网络的往返时间和 io 读写次数，大幅度提高 通信性能。
+
+`Transaction 模式`即开启 Redis 的事务管理，事务模式开 启后，所有的命令（除了 exec，discard，multi 和 watch）到达服务端以后不会立即执 行，会进入一个等待队列。
+
+### 5.2.2 Sentinel 获取连接原理
+
+**问题：Jedis 连接 Sentinel 的时候，我们配置的是全部哨兵的地址。Sentinel 是如 何返回可用的 master 地址的呢？**
+
+```java
+// 构造方法中调用
+HostAndPort master = initSentinels(sentinels, masterName);
+
+private HostAndPort initSentinels(Set<String> sentinels, final String masterName) {
+  HostAndPort master = null;
+  boolean sentinelAvailable = false;
+  log.info("Trying to find master from available Sentinels...");
+  // 有多个 sentinel,遍历sentinels
+  for (String sentinel : sentinels) {
+    // host:port 表示的 sentinel 地址转化为一个 HostAndPort 对象
+    final HostAndPort hap = HostAndPort.parseString(sentinel);
+    log.fine("Connecting to Sentinel " + hap);
+    Jedis jedis = null;
+    try {
+      // 连接到 sentinel
+      jedis = new Jedis(hap.getHost(), hap.getPort());
+      // 根据 masterName 得到 master 的地址，返回一个list,host=list[0],port=list[1]
+      List<String> masterAddr = jedis.sentinelGetMasterAddrByName(masterName);
+      sentinelAvailable = true;
+      if (masterAddr == null || masterAddr.size() != 2) {
+        log.warning("Can not get master addr, master name: " + masterName + ". Sentinel: " + hap
+            + ".");
+        continue;
+      }
+      // 如果在任何一个 sentinrl 中找到master，不再遍历 sentinels
+      master = toHostAndPort(masterAddr);
+      log.fine("Found Redis master at " + master);
+      break;
+    } catch (JedisException e) {
+      log.warning("Cannot get master address from sentinel running @ " + hap + ". Reason: " + e
+          + ". Trying next one.");
+    } finally {
+      if (jedis != null) {
+        jedis.close();
+      }
+    }
+  }
+  // 到这里，如果 master 为 null，则说明有两种情况，一种是所有的 sentinels 节点都 down 掉了，一种是 master节点没有被存活的 sentinels 监控到
+  if (master == null) {
+    if (sentinelAvailable) {
+      throw new JedisException("Can connect to sentinel, but " + masterName
+          + " seems to be not monitored...");
+    } else {
+      throw new JedisConnectionException("All sentinels down, cannot determine where is "
+          + masterName + " master is running...");
+    }
+  }
+  log.info("Redis master running at " + master + ", starting Sentinel listeners...");
+  // 启动对每个 sentinels 的监听为每个 sentinel 都启动了一个监听者 MasterListener。MasterListener 本身是一个线程，它会去订阅 sentinel 上关于 master 节点地址改变的消息。 
+  for (String sentinel : sentinels) {
+    final HostAndPort hap = HostAndPort.parseString(sentinel);
+    MasterListener masterListener = new MasterListener(masterName, hap.getHost(), hap.getPort());
+    // whether MasterListener threads are alive or not, process can be stopped
+    masterListener.setDaemon(true);
+    masterListeners.add(masterListener);
+    masterListener.start();
+  }
+  return master;
+}
+```
+
+### 5.2.3 Cluster 获取连接原理
+
+**问题：使用 Jedis 连接 Cluster 的时候，我们只需要连接到任意一个或者多个 redis group 中的实例地址，那我们是怎么获取到需要操作的 Redis Master 实例的？**
+
+关键问题：在于如何存储 slot 和 Redis 连接池的关系。 
+
+1. 程序启动初始化集群环境，读取配置文件中的节点配置，无论是主从，无论多少 个，只拿第一个，获取 redis 连接实例（后面有个 break）。
+
+```java
+private void initializeSlotsCache(Set<HostAndPort> startNodes, GenericObjectPoolConfig poolConfig, String password) {
+  for (HostAndPort hostAndPort : startNodes) {
+    // 获取一个 Jedis 实例
+    Jedis jedis = new Jedis(hostAndPort.getHost(), hostAndPort.getPort());
+    if (password != null) {
+      jedis.auth(password);
+    }
+    try {
+      // 获取 Redis 节点和 Slot 虚拟槽
+      cache.discoverClusterNodesAndSlots(jedis);
+      // 直接跳出循环
+      break;
+    } catch (JedisConnectionException e) {
+      // try next nodes
+    } finally {
+      if (jedis != null) {
+        jedis.close();
+      }
+    }
+  }
+}
+```
+
+2. 用获取的 redis 连接实例执行 clusterSlots ()方法，实际执行 redis 服务端 cluster slots 命令，获取虚拟槽信息。
+
+   该集合的基本信息为[long, long, List, List]，第一二个元素是该节点负责槽点的起始位置，第三个元素是主节点信息，第四个元素为主节点对应的从节点信息。该 list 的 基本信息为[string,int,string]，第一个为 host 信息，第二个为 port 信息，第三个为唯一 id。
+
+3. 获取有关节点的槽点信息后，调用 getAssignedSlotArray(slotinfo)来获取所有 的槽点值。 
+4. 再获取主节点的地址信息，调用 generateHostAndPort(hostInfo)方法，生成一 个 ostAndPort 对象。 
+5. 再根据节点地址信息来设置节点对应的 JedisPool，即设置 Map nodes 的值。
+
+接下来判断若此时节点信息为主节点信息时，则调用 assignSlotsToNodes 方法，设 置每个槽点值对应的连接池，即设置 Map slots 的值。
+
+```java
+public void discoverClusterNodesAndSlots(Jedis jedis) {
+  w.lock();
+  try {
+    reset();
+    // 获取节点集合
+    List<Object> slots = jedis.clusterSlots();
+    // 遍历 3 个 master 节点
+    for (Object slotInfoObj : slots) {
+      // slotInfo 槽开始，槽结束，主，从
+      // {[0,5460,7291,7294],[5461,10922,7292,7295],[10923,16383,7293,7296]}
+      List<Object> slotInfo = (List<Object>) slotInfoObj;
+      // 如果<=2，代表没有分配 slot
+      if (slotInfo.size() <= MASTER_NODE_INDEX) {
+        continue;
+      }
+      // 获取分配到当前 master 节点的数据槽，例如 7291 节点的{0,1,2,3……5460}
+      List<Integer> slotNums = getAssignedSlotArray(slotInfo);
+      // hostInfos
+      // size 是 4，槽最小最大，主，从
+      int size = slotInfo.size();
+      // 第 3 位和第 4 位是主从端口的信息
+      for (int i = MASTER_NODE_INDEX; i < size; i++) {
+        List<Object> hostInfos = (List<Object>) slotInfo.get(i);
+        if (hostInfos.size() <= 0) {
+          continue;
+        }
+        // 根据 IP 端口生成 HostAndPort 实例
+        HostAndPort targetNode = generateHostAndPort(hostInfos);
+        // 据 HostAndPort 解析出 ip:port 的 key 值，再根据 key 从缓存中查询对应的 jedisPool 实例。如果没有 jedisPool实例，就创建 JedisPool 实例，最后放入缓存中。nodeKey 和 nodePool 的关系
+        setupNodeIfNotExist(targetNode);
+        if (i == MASTER_NODE_INDEX) {
+          assignSlotsToNode(slotNums, targetNode);
+        }
+      }
+    }
+  } finally {
+    w.unlock();
+  }
+}
+private HostAndPort generateHostAndPort(List<Object> hostInfos) {
+  return new HostAndPort(SafeEncoder.encode((byte[]) hostInfos.get(0)),
+      ((Long) hostInfos.get(1)).intValue());
+}
+private List<Integer> getAssignedSlotArray(List<Object> slotInfo) {
+  List<Integer> slotNums = new ArrayList<Integer>();
+  // 创建一个起止于槽点起止点的Integer集合
+  for (int slot = ((Long) slotInfo.get(0)).intValue(); slot <= ((Long) slotInfo.get(1)).intValue(); slot++) {
+    slotNums.add(slot);
+  }
+  return slotNums;
+}
+public JedisPool setupNodeIfNotExist(HostAndPort node) {
+  w.lock();
+  try {
+    String nodeKey = getNodeKey(node);
+    JedisPool existingPool = nodes.get(nodeKey);
+    if (existingPool != null) return existingPool;
+    JedisPool nodePool = new JedisPool(poolConfig, node.getHost(), node.getPort(),
+        connectionTimeout, soTimeout, password, 0, null, false, null, null, null);
+    nodes.put(nodeKey, nodePool);
+    return nodePool;
+  } finally {
+    w.unlock();
+  }
+}
+public void assignSlotsToNode(List<Integer> targetSlots, HostAndPort targetNode) {
+  w.lock();
+  try {
+    JedisPool targetPool = setupNodeIfNotExist(targetNode);
+    for (Integer slot : targetSlots) {
+      slots.put(slot, targetPool);
+    }
+  } finally {
+    w.unlock();
+  }
+}
+private final Map<String, JedisPool> nodes = new HashMap<String, JedisPool>();
+private final Map<Integer, JedisPool> slots = new HashMap<Integer, JedisPool>();
+```
+
+从集群环境存取值： 
+
+1. 把 key 作为参数，执行 CRC16 算法，获取 key 对应的 slot 值。 
+2. 通过该 slot 值，去 slots 的 map 集合中获取 jedisPool 实例。
+3.  通过 jedisPool 实例获取 jedis 实例，最终完成 redis 数据存取工作。
+
+### 5.2.4 Pipeline
+
+set 2 万个 key 用了好几分钟，这个速度太慢了，完全没有把 Redis 10 万的 QPS 利用起来。但是单个命令的执行到底慢在哪里？
+
+Redis 使用的是客户端/服务器（C/S）模型和请求/响应协议的 TCP 服务器。这意味 着通常情况下一个请求会遵循以下步骤： 
+
+* 客户端向服务端发送一个查询请求，并监听 Socket 返回，通常是以阻塞模式，等待服务端响应。 
+
+* 服务端处理命令，并将结果返回给客户端。 Redis 客户端与 Redis 服务器之间使用 TCP 协议进行连接，一个客户端可以通过一 个 socket 连接发起多个请求命令。每个请求命令发出后 client 通常会阻塞并等待 redis 服务器处理，redis 处理完请求命令后会将结果通过响应报文返回给 client，因此当执行多条命令的时候都需要等待上一条命令执行完毕才能执行。执行过程如图：
+
+![image-20201112144116364](Redis之分布式篇.assets/image-20201112144116364.png)
+
+Redis 本身提供了一些批量操作命令，比如 mget，mset，可以减少通信的时间，但是大部分命令是不支持 multi 操作的，例如 hash 就没有。 
+
+由于通信会有网络延迟，假如 client 和 server 之间的包传输时间需要 10 毫秒，一次交互就是 20 毫秒（RTT：Round Trip Time）。这样的话，client 1 秒钟也只能也只能发送 50 个命令。这显然没有充分利用 Redis 的处理能力。另外一个，Redis 服务端执 行 I/O 的次数过多。
+
+#### Pipeline 管道
+
+那我们能不能像数据库的 batch 操作一样，把一组命令组装在一起发送给 Redis 服务端执行，然后一次性获得返回结果呢？这个就是 Pipeline 的作用。Pipeline 通过一个 队列把所有的命令缓存起来，然后把多个命令在一次连接中发送给服务器。
+
+```java
+public class PipelineSet {
+    public static void main(String[] args) {
+        Jedis jedis = new Jedis("192.168.25.128", 6379);
+        jedis.auth("1234");
+        Pipeline pipelined = jedis.pipelined();
+        long t1 = System.currentTimeMillis();
+        for (int i=0; i < 100000; i++) {
+            pipelined.set("batch"+i,""+i);
+        }
+        pipelined.syncAndReturnAll();
+        long t2 = System.currentTimeMillis();
+        System.out.println("耗时："+(t2-t1)+"ms");
+    }
+}
+public class PipelineGet {
+    public static void main(String[] args) {
+        new Thread(){
+            public void run(){
+                Jedis jedis = new Jedis("192.168.25.128", 6379);
+                jedis.auth("1234");
+                Set<String> keys = jedis.keys("batch*");
+                List<String> result = new ArrayList();
+                long t1 = System.currentTimeMillis();
+                for (String key : keys) {
+                    result.add(jedis.get(key));
+                }
+                for (String src : result) {
+                    //System.out.println(src);
+                }
+                System.out.println("直接get耗时："+(System.currentTimeMillis() - t1));
+            }
+        }.start();
+
+        new Thread(){
+            public void run(){
+                Jedis jedis = new Jedis("192.168.25.128", 6379);
+                jedis.auth("1234");
+                Set<String> keys = jedis.keys("batch*");
+                List<Object> result = new ArrayList();
+                Pipeline pipelined = jedis.pipelined();
+                long t1 = System.currentTimeMillis();
+                for (String key : keys) {
+                    pipelined.get(key);
+                }
+                result = pipelined.syncAndReturnAll();
+                for (Object src : result) {
+                    //System.out.println(src);
+                }
+                System.out.println("Pipeline get耗时："+(System.currentTimeMillis() - t1));
+            }
+        }.start();
+    }
+}
+```
+
+要实现 Pipeline，既要服务端的支持，也要客户端的支持。
+
+对于服务端来说，需要能够处理客户端通过一个 TCP 连接发来的多个命令，并且逐个地执行命令一起返回 。
+
+对于客户端来说，要把多个命令缓存起来，达到一定的条件就发送出去，最后才处 理 Redis 的应答（这里也要注意对客户端内存的消耗）。
+
+jedis-pipeline 的 client-buffer 限制：`8192bytes`，客户端堆积的命令超过 8192 bytes 时，会发送给服务端。 
+
+源码：redis.clients.util.RedisOutputStream.java
+
+```java
+public RedisOutputStream(final OutputStream out) {
+  this(out, 8192);
+}
+```
+
+pipeline 对于命令条数没有限制，但是命令可能会受限于 TCP 包大小。
+
+如果 Jedis 发送了一组命令，而发送请求还没有结束，Redis 响应的结果会放在接收缓冲区。如果接收缓冲区满了，jedis 会通知 redis win=0，此时 redis 不会再发送结果给 jedis 端，转而把响应结果保存在 Redis 服务端的输出缓冲区中。 
+
+输出缓冲区的配置：redis.conf
+
+```markdown
+# class：客户端类型，分为三种。a）normal：普通客户端；b）slave：slave 客户端，用于复制；c）pubsub：发布订阅客户端
+# 如果客户端使用的输出缓冲区大于hard limit，客户端会被立即关闭，0 代表不限制
+# 如果客户端使用的输出缓冲区超过了soft limit并且持续了soft limit秒，客户端会被立即关闭
+# client-output-buffer-limit <class> <hard limit> <soft limit> <soft seconds>
+	client-output-buffer-limit normal 0 0 0
+	client-output-buffer-limit replica 256mb 64mb 60
+	client-output-buffer-limit pubsub 32mb 8mb 60
+```
+
+每个客户端使用的输出缓冲区的大小可以用 client list 命令查看：
+
+```shell
+127.0.0.1:6379> client list
+id=14 addr=127.0.0.1:59904 fd=7 name= age=562 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=26 qbuf-free=32742 obl=0 oll=0 omem=0 events=r cmd=client user=default
+```
+
+* obl ： 输出缓冲区的长度（字节为单位， 0 表示没有分配输出缓冲区） 
+* oll ： 输出列表包含的对象数量（当输出缓冲区没有剩余空间时，命令回复会以字符串对象的形式被入队到这个 队列里） 
+* omem ： 输出缓冲区和输出列表占用的内存总量
+
+#### 使用场景
+
+如果某些操作需要马上得到 Redis 操作是否成功的结果，这种场景就不适合。 
+
+有些场景，例如批量写入数据，对于结果的实时性和成功性要求不高，就可以用 Pipeline。
+
+### 5.2.5 Jedis 实现分布式锁
+
+分布式锁的基本特性或者要求： 
+
+1. 互斥性：只有一个客户端能够持有锁。 
+
+2. 不会产生死锁：即使持有锁的客户端崩溃，也能保证后续其他客户端可以获 取锁。 
+
+3. 只有持有这把锁的客户端才能解锁。
+
+```java
+public class DistLock {
+    private static final String LOCK_SUCCESS = "OK";
+    // SET_IF_NOT_EXIST 是我们的命令里面加上 NX（保证第 1 点）
+    private static final String SET_IF_NOT_EXIST = "NX";
+    // PX 代表以毫秒为单位设置 key 的过期时间（保证第 2 点）。expireTime 是
+    private static final String SET_WITH_EXPIRE_TIME = "PX";
+    private static final Long RELEASE_SUCCESS = 1L;
+
+    /**
+     * 尝试获取分布式锁
+     * @param jedis Redis客户端
+     * @param lockKey 锁，Redis key 的名称，也就是谁添加成功这个 key 代表谁获取锁成功
+     * @param requestId 请求标识，客户端的 ID（设置成 value），如果我们要保证只有加锁的客户端才能释放锁，就必须获得客户端的 ID（保证第 3 点）
+     * @param expireTime 超期时间，自动释放锁的时间，比如 5000 代表 5 秒。
+     * @return 是否获取成功
+     */
+    public static boolean tryGetDistributedLock(Jedis jedis, String lockKey, String requestId, int expireTime) {
+        // set支持多个参数 NX（not exist） XX（exist） EX（seconds） PX（million seconds）
+        String result = jedis.set(lockKey, requestId, SET_IF_NOT_EXIST, SET_WITH_EXPIRE_TIME, expireTime);
+        if (LOCK_SUCCESS.equals(result)) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 释放分布式锁
+     * @param jedis Redis客户端
+     * @param lockKey 锁
+     * @param requestId 请求标识
+     * @return 是否释放成功
+     */
+    public static boolean releaseDistributedLock(Jedis jedis, String lockKey, String requestId) {
+        String script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+        Object result = jedis.eval(script, Collections.singletonList(lockKey), Collections.singletonList(requestId));
+
+        if (RELEASE_SUCCESS.equals(result)) {
+            return true;
+        }
+        return false;
+    }
+}
+```
+
+释放锁，直接删除 key 来释放锁可以吗？就像这样：
+
+```java
+public static void wrongReleaseLock1(Jedis jedis, String lockKey) { 
+    jedis.del(lockKey); 
+} 
+```
+
+没有对客户端 requestId 进行判断，可能会释放其他客户端持有的锁。 先判断后删除呢？ 
+
+```java
+public static void wrongReleaseLock2(Jedis jedis, String lockKey, String requestId) { 
+    // 判断加锁与解锁是不是同一个客户端 
+    if (requestId.equals(jedis.get(lockKey))) { 
+        // 若在此时，这把锁突然不是这个客户端的，则会误解锁 
+        jedis.del(lockKey); 
+    } 
+} 
+```
+
+如果在释放锁的时候，这把锁已经不属于这个客户端（例如已经过期，并且被别的客户端获取锁成功了），那就会出现释放了其他客户端的锁的情况。 
+
+所以我们把判断客户端是否相等和删除 key 的操作放在 Lua 脚本里面执行。 
+
+#### 分布式锁的其他解决方案
+
+**数据库**
+
+通过唯一约束
+
+```java
+lock(
+  id  int(11)
+  methodName  varchar(100)
+  memo varchar(1000) 
+  modifyTime timestamp
+  unique key mn (methodName)  --唯一约束
+)
+```
+
+获取锁的伪代码
+
+```java
+try{
+	exec insert into lock(methodName,memo) values(‘method’,’desc’);
+	return true;
+}Catch(DuplicateException e){
+	return false;
+}
+```
+
+释放锁
+
+```java
+delete from lock where methodName=''
+```
+
+存在的需要思考的问题：
+
+1. 锁没有失效时间，一旦解锁操作失败，就会导致锁记录一直在数据库中，其他线程无法再获得到锁 
+2. 锁是非阻塞的，数据的insert操作，一旦插入失败就会直接报错。没有获得锁的线程并不会进入排队队列，要想再次获得锁就要再次触发获得锁操作 
+3. 锁是非重入的，同一个线程在没有释放锁之前无法再次获得该锁
+
+**zookeeper实现分布式锁**
+
+利用 zookeeper 的唯一节点特性或者有序临时节点特性获得最小节点作为锁. zookeeper 的实现相对简单，通过curator客户端，已经对锁的操作进行了封装，原理如下： 
+
+![img](Redis之分布式篇.assets/20200611112108888.png)
+
+zookeeper 的优势：
+
+1. 可靠性高、实现简单 
+2. zookeeper因为临时节点的特性，如果因为其他客户端因为异常和zookeeper连接中断了，那么节点会被删除，意味着锁会被自动释放 
+3. zookeeper本身提供了一套很好的集群方案，比较稳定 
+4. 释放锁操作，会有watch通知机制，也就是服务器端会主动发送消息给客户端这个锁已经被释放了
+
+## 5.3 Lettuce
+
+与 Jedis 相比，Lettuce 则完全克服了其线程不安全的缺点：Lettuce 是一个可伸缩的线程安全的 Redis 客户端，支持同步、异步和响应式模式（Reactive）。多个线程可 以共享一个连接实例，而不必担心多线程并发问题。 
+
+```java
+public class LettuceSyncTest {
+    public static void main(String[] args) {
+        // 创建客户端
+        RedisClient client = RedisClient.create(RedisURI.Builder.redis("192.168.25.128", 6379).withPassword("1234").build());
+        // 线程安全的长连接，连接丢失时会自动重连
+        StatefulRedisConnection<String, String> connection = client.connect();
+        // 获取同步执行命令，默认超时时间为 60s
+        RedisCommands<String, String> sync = connection.sync();
+        // 发送get请求，获取值
+        sync.set("spring:sync","lettuce-sync-666" );
+        String value = sync.get("spring:sync");
+        System.out.println("------"+value);
+        //关闭连接
+        connection.close();
+        //关掉客户端
+        client.shutdown();
+    }
+}
+```
+
+异步的结果使用 RedisFuture 包装，提供了大量回调的方法。
+
+```java
+public class LettuceASyncTest {
+    public static void main(String[] args) {
+        RedisClient client = RedisClient.create(RedisURI.Builder.redis("192.168.25.128", 6379).withPassword("1234").build());
+        // 线程安全的长连接，连接丢失时会自动重连
+        StatefulRedisConnection<String, String> connection = client.connect();
+        // 获取异步执行命令api
+        RedisAsyncCommands<String, String> commands = connection.async();
+        // 获取RedisFuture<T>
+        commands.set("gupao:async","lettuce-async-666");
+        RedisFuture<String> future = commands.get("gupao:async");
+        try {
+            String value = future.get(60, TimeUnit.SECONDS);
+            System.out.println("------"+value);
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+它基于 Netty 框架构建，支持 Redis 的高级功能，如 Pipeline、发布订阅，事务、 Sentinel，集群，支持连接池。
+
+Lettuce 是 Spring Boot 2.x 默认的客户端，替换了 Jedis。集成之后我们不需要单 独使用它，直接调用 Spring 的 RedisTemplate 操作，连接和创建和关闭也不需要我们 操心。
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-redis</artifactId>
+</dependency>
+```
+
+## 5.4 Redisson
+
+### 5.4.1 本质
+
+Redisson 是一个在 Redis 的基础上实现的 Java 驻内存数据网格（In-Memory Data Grid），提供了分布式和可扩展的 Java 数据结构。 
+
+### 5.4.2 特点
+
+基于 Netty 实现，采用非阻塞 IO，性能高 
+
+支持异步请求 
+
+支持连接池、pipeline、LUA Scripting、Redis Sentinel、Redis Cluster 
+
+不支持事务，官方建议以 LUA Scripting 代替事务 
+
+主从、哨兵、集群都支持。Spring 也可以配置和注入 RedissonClient
+
+### 5.4.3 实现分布式锁
+
+在 Redisson 里面提供了更加简单的分布式锁的实现。
+
+```java
+public class RedissonTest {
+    private static RedissonClient redissonClient;
+
+    static {
+        Config config=new Config();
+        config.useSingleServer().setAddress("redis://192.168.25.128:6379").setPassword("1234");
+        redissonClient= Redisson.create(config);
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        RLock rLock= redissonClient.getLock("updateAccount");
+        // 最多等待 100 秒、上锁 60s 以后自动解锁
+        if(rLock.tryLock(100,60, TimeUnit.SECONDS)){
+            System.out.println("获取锁成功");
+        } else {
+            System.out.println("获取锁失败");
+        }
+        // dosomething
+        Thread.sleep(20000);
+        rLock.unlock();
+        redissonClient.shutdown();
+    }
+}
+```
+
+在获得 RLock 之后，只需要一个 tryLock 方法，里面有 3 个参数： 
+
+1. watiTime：获取锁的最大等待时间，超过这个时间不再尝试获取锁 
+
+2. leaseTime：如果没有调用 unlock，超过了这个时间会自动释放锁 
+
+3. TimeUnit：释放时间的单位 
+
+Redisson 的分布式锁是怎么实现的呢？ 
+
+在加锁的时候，在 Redis 写入了一个 HASH，key 是锁名称，field 是线程名称，value 是 1（表示锁的重入次数）。
+
+![image-20201112154459387](Redis之分布式篇.assets/image-20201112154459387.png)
+
+源码： tryLock() —> tryAcquire() —> tryAcquireAsync() —> tryLockInnerAsync() 
+
+最终也是调用了一段 Lua 脚本。里面有一个参数，两个参数的值。
+
+```lua
+// KEYS[1] 锁名称 updateAccount
+// ARGV[1] key 过期时间 10000ms
+// ARGV[2] 线程名称
+// 锁名称不存在
+if (redis.call('exists', KEYS[1]) == 0) then
+    // 创建一个 hash，key=锁名称，field=线程名，value=1
+    redis.call('hset', KEYS[1], ARGV[2], 1); 
+    // 设置 hash 的过期时间
+    redis.call('pexpire', KEYS[1], ARGV[1]); 
+    return nil; 
+end; 
+// 锁名称存在，判断是否当前线程持有的锁
+if (redis.call('hexists', KEYS[1], ARGV[2]) == 1) then
+    // 如果是，value+1，代表重入次数+1
+    redis.call('hincrby', KEYS[1], ARGV[2], 1); 
+    // 重新获得锁，需要重新设置 Key 的过期时间
+    redis.call('pexpire', KEYS[1], ARGV[1]); 
+    return nil; 
+end;
+// 锁存在，但是不是当前线程持有，返回过期时间（毫秒）
+return redis.call('pttl', KEYS[1]);
+```
+
+释放锁，源码：
+
+unlock —> unlockInnerAsync
+
+```lua
+// KEYS[1] 锁的名称 updateAccount
+// KEYS[2] 频道名称 redisson_lock__channel:{updateAccount}
+// ARGV[1] 释放锁的消息 0
+// ARGV[2] 锁释放时间 10000
+// ARGV[3] 线程名称
+// 锁不存在（过期或者已经释放了）
+if (redis.call('exists', KEYS[1]) == 0) then
+    // 发布锁已经释放的消息
+    redis.call('publish', KEYS[2], ARGV[1]); 
+    return 1; 
+end;
+// 锁存在，但是不是当前线程加的锁
+if (redis.call('hexists', KEYS[1], ARGV[3]) == 0) then 
+    return nil;
+end; 
+// 锁存在，是当前线程加的锁
+// 重入次数-1
+local counter = redis.call('hincrby', KEYS[1], ARGV[3], -1); 
+// -1 后大于 0，说明这个线程持有这把锁还有其他的任务需要执行
+if (counter > 0) then redis.call('pexpire', KEYS[1], ARGV[2]); 
+    return 0; 
+else 
+    // -1 之后等于 0，现在可以删除锁了
+    redis.call('del', KEYS[1]);
+    // 删除之后发布释放锁的消息
+    redis.call('publish', KEYS[2], ARGV[1]); 
+    return 1; 
+end;
+// 其他情况返回 nil
+return nil;
+```
+
+这个是 Redisson 里面分布式锁的实现，我们在调用的时候非常简单。 
+
+Redisson 跟 Jedis 定位不同，它不是一个单纯的 Redis 客户端，而是基于 Redis 实 现的分布式的服务，如果有需要用到一些分布式的数据结构，比如我们还可以基于 Redisson 的分布式队列实现分布式事务，就可以引入 Redisson 的依赖实现。
+
+# 6 数据一致性
 
 
 1. 先删除缓存， 再更新数据库 
 2. 先更新数据库，更新成功后，让缓存失效 
 3. 更新数据的时候， 只更新缓存，不更新数据库，然后同步异步调度去批量更新数据库
 
-# 缓存击穿
+# 7 高并发问题
 
 ## 缓存穿透
 
@@ -664,174 +1462,3 @@ Redis Cluster 既能够实现主从的角色分配，又能够实现主从切换
 ## 缓存失效
 
 如果缓存集中在一段时间内失效，DB的压力凸显。这个没有完美解决办法，但可以分析用户行为，尽量让失效时间点均匀分布。 
-
-# redis 分布式锁
-
-## 分布式锁的实现
-
-锁是用来解决什么问题的：
-
-1. 一个进程中的多个线程，多个线程并发访问同一个资源的时候，如何解决线程安全问题。 
-2. 一个分布式架构系统中的两个模块同时去访问一个文件对文件进行读写操作 
-3. 多个应用对同一条数据做修改的时候，如何保证数据的安全性
-
-在进程中，我们可以用到synchronized、lock之类的同步操作去解决，但是对于分布式架构下多进程的情况下，如何做到跨进程的锁。就需要借助一些第三方手段来完成。
-
-## 分布式锁的解决方案
-
-### 数据库
-
-通过唯一约束
-
-```java
-lock(
-  id  int(11)
-  methodName  varchar(100)
-  memo varchar(1000) 
-  modifyTime timestamp
-  unique key mn (methodName)  --唯一约束
-)
-```
-
-获取锁的伪代码
-
-```java
-try{
-	exec insert into lock(methodName,memo) values(‘method’,’desc’);
-	return true;
-}Catch(DuplicateException e){
-	return false;
-}
-```
-
-释放锁
-
-```java
-delete from lock where methodName=''
-```
-
-#### 存在的需要思考的问题
-
-1. 锁没有失效时间，一旦解锁操作失败，就会导致锁记录一直在数据库中，其他线程无法再获得到锁 
-2. 锁是非阻塞的，数据的insert操作，一旦插入失败就会直接报错。没有获得锁的线程并不会进入排队队列，要想再次获得锁就要再次触发获得锁操作 
-3. 锁是非重入的，同一个线程在没有释放锁之前无法再次获得该锁
-
-### zookeeper实现分布式锁
-
-利用 zookeeper 的唯一节点特性或者有序临时节点特性获得最小节点作为锁. zookeeper 的实现相对简单，通过curator客户端，已经对锁的操作进行了封装，原理如下： 
-
-![img](Redis之分布式篇.assets/20200611112108888.png)
-
-#### zookeeper 的优势
-
-1. 可靠性高、实现简单 
-2. zookeeper因为临时节点的特性，如果因为其他客户端因为异常和zookeeper连接中断了，那么节点会被删除，意味着锁会被自动释放 
-3. zookeeper本身提供了一套很好的集群方案，比较稳定 
-4. 释放锁操作，会有watch通知机制，也就是服务器端会主动发送消息给客户端这个锁已经被释放了
-
-### 基于缓存的分布式锁实现
-
-redis中有一个setNx命令，这个命令只有在key不存在的情况下为key设置值。所以可以利用这个特性来实现分布式锁的操作。
-
-1. 添加依赖
-
-```XML
-<dependency>
-  <groupId>redis.clients</groupId>
-  <artifactId>jedis</artifactId>
-  <version>2.9.0</version>
-</dependency>
-```
-
-1. 编写 redis 连接的代码
-
-```java
-public class RedisManager {
-
-    private static JedisPool jedisPool;
-
-    static {
-        JedisPoolConfig jedisPoolConfig = new JedisPoolConfig();
-        jedisPoolConfig.setMaxTotal(20);
-        jedisPoolConfig.setMaxIdle(10);
-        jedisPool = new JedisPool(jedisPoolConfig, "127.0.0.1", 6379, 10000, "1234");
-
-    }
-
-    public static Jedis getJedis() throws Exception {
-        if (null != jedisPool) {
-            return jedisPool.getResource();
-        }
-        throw new Exception("Jedispool was not init");
-    }
-}
-```
-
-1. 分布式锁的具体实现
-
-```java
-public class RedisLock {
-
-    public String getLock(String key, int timeout) {
-        try {
-            Jedis jedis = RedisManager.getJedis();
-            String value = UUID.randomUUID().toString();
-
-            long end = System.currentTimeMillis() + timeout;
-            // 阻塞
-            while (System.currentTimeMillis() < end) {
-                if (jedis.setnx(key, value) == 1) {
-                    jedis.expire(key, timeout);
-                    // 锁设置成功，redis 操作成功
-                    return value;
-                }
-                if (jedis.ttl(key) == -1) {
-                    jedis.expire(key, timeout);
-                }
-                Thread.sleep(1000);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    public boolean releaseLock(String key, String value) {
-        try {
-            Jedis jedis = RedisManager.getJedis();
-            while (true) {
-                jedis.watch(key);
-                // 判断获得锁的线程和当前 redis 中存的锁是同一个
-                if (value.equals(jedis.get(key))) {
-                    Transaction transaction = jedis.multi();
-                    transaction.del(key);
-
-                    List<Object> list = transaction.exec();
-                    if (list == null) {
-                        continue;
-                    }
-                    return true;
-                }
-                jedis.unwatch();
-                break;
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return false;
-    }
-
-    public static void main(String[] args) {
-        RedisLock lock = new RedisLock();
-        String lockId = lock.getLock("lock:first", 10000);
-        if (null != lockId) {
-            System.out.println("获得锁成功");
-        }
-
-        String lockId1 = lock.getLock("lock:first", 10000);
-        System.out.println(lockId1);
-    }
-}
-```
-
