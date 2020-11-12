@@ -465,6 +465,98 @@ protected ModelAndView invokeHandlerMethod(HttpServletRequest request,
 
 `invocableMethod.invokeAndHandle()` 最终要实现的目的就是：完成request中的参数和方法参数上数据的绑定。springmvc中提供两种request参数到方法中参数的绑定方式（前面已有介绍）。
 
+最终调用 doDispatch() 中的 processDispatchResult() 对最终结果进行渲染，将 mv 渲染（根据 ModelAndView 使用 ViewResolver 进行解析得到 View）从response可以输出的结果：
+
+```java
+private void processDispatchResult(HttpServletRequest request, HttpServletResponse response,
+		@Nullable HandlerExecutionChain mappedHandler, @Nullable ModelAndView mv,
+		@Nullable Exception exception) throws Exception {
+	boolean errorView = false;
+	if (exception != null) {
+		if (exception instanceof ModelAndViewDefiningException) {
+			logger.debug("ModelAndViewDefiningException encountered", exception);
+			mv = ((ModelAndViewDefiningException) exception).getModelAndView();
+		}
+		else {
+			Object handler = (mappedHandler != null ? mappedHandler.getHandler() : null);
+			mv = processHandlerException(request, response, handler, exception);
+			errorView = (mv != null);
+		}
+	}
+	// Did the handler return a view to render?
+	if (mv != null && !mv.wasCleared()) {
+		render(mv, request, response);
+		if (errorView) {
+			WebUtils.clearErrorRequestAttributes(request);
+		}
+	}
+	else {
+		if (logger.isTraceEnabled()) {
+			logger.trace("No view rendering, null ModelAndView returned.");
+		}
+	}
+	if (WebAsyncUtils.getAsyncManager(request).isConcurrentHandlingStarted()) {
+		// Concurrent handling started during a forward
+		return;
+	}
+	if (mappedHandler != null) {
+		mappedHandler.triggerAfterCompletion(request, response, null);
+	}
+}
+protected void render(ModelAndView mv, HttpServletRequest request, HttpServletResponse response) throws Exception {
+	// Determine locale for request and apply it to the response.
+	Locale locale =
+			(this.localeResolver != null ? this.localeResolver.resolveLocale(request) : request.getLocale());
+	response.setLocale(locale);
+	View view;
+	String viewName = mv.getViewName();
+	if (viewName != null) {
+		// We need to resolve the view name.
+		view = resolveViewName(viewName, mv.getModelInternal(), locale, request);
+		if (view == null) {
+			throw new ServletException("Could not resolve view with name '" + mv.getViewName() +
+					"' in servlet with name '" + getServletName() + "'");
+		}
+	}
+	else {
+		// No need to lookup: the ModelAndView object contains the actual View object.
+		view = mv.getView();
+		if (view == null) {
+			throw new ServletException("ModelAndView [" + mv + "] neither contains a view name nor a " +
+					"View object in servlet with name '" + getServletName() + "'");
+		}
+	}
+	// Delegate to the View object for rendering.
+	if (logger.isTraceEnabled()) {
+		logger.trace("Rendering view [" + view + "] ");
+	}
+	try {
+		if (mv.getStatus() != null) {
+			response.setStatus(mv.getStatus().value());
+		}
+		view.render(mv.getModelInternal(), request, response);
+	}
+	catch (Exception ex) {
+		if (logger.isDebugEnabled()) {
+			logger.debug("Error rendering view [" + view + "]", ex);
+		}
+		throw ex;
+	}
+}
+protected View resolveViewName(String viewName, @Nullable Map<String, Object> model,
+		Locale locale, HttpServletRequest request) throws Exception {
+	if (this.viewResolvers != null) {
+		for (ViewResolver viewResolver : this.viewResolvers) {
+			View view = viewResolver.resolveViewName(viewName, locale);
+			if (view != null) {
+				return view;
+			}
+		}
+	}
+	return null;
+}
+```
+
 到这里,方法的参数值列表也获取到了,就可以直接进行方法的调用了。整个请求过程 中最复杂的一步就是在这里了。到这里整个请求处理过程的关键步骤都已了解。理解了Spring MVC 中的请求处理流程,整个代码还是比较清晰的。最后我们再来梳理一下 Spring MVC 核心组件的关联关系（如下图）：
 
 ![img](Spring MVC 设计原理.assets/20200401100000571.png)
