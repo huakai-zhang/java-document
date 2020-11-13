@@ -1416,28 +1416,561 @@ Redisson 跟 Jedis 定位不同，它不是一个单纯的 Redis 客户端，而
 
 # 6 数据一致性
 
+## 6.1 缓存使用场景
 
-1. 先删除缓存， 再更新数据库 
-2. 先更新数据库，更新成功后，让缓存失效 
-3. 更新数据的时候， 只更新缓存，不更新数据库，然后同步异步调度去批量更新数据库
+针对读多写少的高并发场景，我们可以使用缓存来提升查询速度。
+
+当我们使用 Redis 作为缓存的时候，一般流程是这样的： 
+
+如果数据在 Redis 存在，应用就可以直接从 Redis 拿到数据，不用访问数据库。
+
+![image-20201113112502698](Redis之分布式篇.assets/image-20201113112502698.png)
+
+如果 Redis 里面没有，先到数据库查询，然后写入到 Redis，再返回给应用。
+
+![image-20201113112529033](Redis之分布式篇.assets/image-20201113112529033.png)
+
+## 6.2 一致性问题的定义
+
+因为这些数据是很少修改的，所以在绝大部分的情况下可以命中缓存。但是，一旦被缓存的数据发生变化的时候，我们既要操作数据库的数据，也要操作 Redis 的数据， 所以问题来了。现在我们有两种选择： 
+
+1. 先操作 Redis 的数据再操作数据库的数据
+
+2. 先操作数据库的数据再操作 Redis 的数据
+
+到底选哪一种？
+
+首先需要明确的是，不管选择哪一种方案， 我们肯定是希望两个操作要么都成功，要么都一个都不成功。不然就会发生 Redis 跟数据库的数据不一致的问题。
+
+但是，Redis 的数据和数据库的数据是不可能通过事务达到统一的，我们只能根据相应的场景和所需要付出的代价来采取一些措施降低数据不一致的问题出现的概率，在数据一致性和性能之间取得一个权衡。
+
+对于数据库的实时性一致性要求不是特别高的场合，比如 T+1 的报表，可以采用定时任务查询数据库数据同步到 Redis 的方案。
+
+由于我们是以数据库的数据为准的，所以给缓存设置一个过期时间，是保证最终一 致性的解决方案。
+
+## 6.3 方案选择
+
+### 6.3.1 Redis：删除还是更新？
+
+这里我们先要补充一点，当存储的数据发生变化，Redis 的数据也要更新的时候，我 们有两种方案，一种就是直接更新，调用 set；还有一种是直接删除缓存，让应用在下次 查询的时候重新写入。
+
+这两种方案怎么选择呢？这里我们主要考虑更新缓存的代价。 
+
+更新缓存之前，是不是要经过其他表的查询、接口调用、计算才能得到最新的数据。如果不是直接从数据库拿到值的话，建议直接删除缓存，这种方案更加简单， 而且避免了数据库的数据和缓存不一致的情况。在一般情况下，我们也推荐使用删除的方案。 
+
+这一点明确之后，现在我们就剩一个问题： 
+
+1. 到底是先更新数据库，再删除缓存
+
+2. 还是先删除缓存，再更新数据库 我们先看第一种方案
+
+### 6.3.2 先更新数据库，再删除缓存
+
+正常情况
+
+​	更新数据库，成功
+
+​	删除缓存，成功
+
+异常情况：
+
+1. 更新数据库失败，程序捕获异常，不会走到下一步，所以数据不会出现不一致
+
+2. 更新数据库成功，删除缓存失败。数据库是新数据，缓存是旧数据，发生了不一致的情况
+
+这种问题怎么解决呢？我们可以提供一个`重试的机制`。
+
+比如：如果删除缓存失败，我们捕获这个异常，把需要删除的 key 发送到消息队列。 然后自己创建一个消费者消费，尝试再次删除这个 key。 这种方式有个缺点，会对业务代码造成入侵。 
+
+所以我们又有了第二种方案（异步更新缓存）： 
+
+因为更新数据库时会往 binlog 写入日志，所以我们可以通过一个服务来监听 binlog 的变化（比如阿里的 canal），然后在客户端完成删除 key 的操作。如果删除失败的话， 再发送到消息队列。 
+
+总之，对于后删除缓存失败的情况，我们的做法是不断地重试删除，直到成功。
+
+无论是重试还是异步删除，都是最终一致性的思想。
+
+### 6.3.3 先删除缓存，再更新数据库
+
+正常情况： 
+
+​	删除缓存，成功 
+
+​	更新数据库，成功
+
+异常情况： 
+
+1. 删除缓存，程序捕获异常，不会走到下一步，所以数据不会出现不一致
+
+2. 删除缓存成功，更新数据库失败。 因为以数据库的数据为准，所以不存在数据不一致的情况
+
+看起来好像没问题，但是如果有程序并发操作的情况下：
+
+1. 线程 A 需要更新数据，首先删除了 Redis 缓存 
+
+2. 线程 B 查询数据，发现缓存不存在，到数据库查询旧值，写入 Redis，返回
+
+3. 线程 A 更新了数据库
+
+这个时候，Redis 是旧的值，数据库是新的值，发生了数据不一致的情况。
+
+那问题就变成了：能不能让对同一条数据的访问串行化呢？代码肯定保证不了，因为有多个线程，即使做了任务队列也可能有多个服务实例。数据库也保证不了，因为会有多个数据库的连接。只有一个数据库只提供一个连接的情况下，才能保证读写的操作是串行的，或者我们把所有的读写请求放到同一个内存队列当中，但是这种情况吞吐量太低了。 
+
+所以我们有一种延时双删的策略，在写入数据之后，再删除一次缓存。
+
+A 线程： 
+
+1. 删除缓存
+
+2. 更新数据库 
+
+3. 休眠 500ms（这个时间，依据读取数据的耗时而定）
+
+4. 再次删除缓存 伪代码：
+
+伪代码：
+
+```java
+public void write(String key,Object data){ 
+    redis.delKey(key);
+    db.updateData(data);
+    Thread.sleep(500);
+    redis.delKey(key);
+}
+```
 
 # 7 高并发问题
 
-## 缓存穿透
+在 Redis 存储的所有数据中，有一部分是被频繁访问的。有两种情况可能会导致热点问题的产生，一个是用户集中访问的数据，比如抢购的商品，明星结婚和明星出轨的 微博。还有一种就是在数据进行分片的情况下，负载不均衡，超过了单个服务器的承受能力。热点问题可能引起缓存服务的不可用，最终造成压力堆积到数据库。 出于存储和流量优化的角度，我们必须要找到这些热点数据。 
 
-缓存穿透是指用户查询数据，在数据库没有，自然在缓存中也不会有。这样就导致用户查询的时候，在缓存中找不到，每次都要去数据库中查询。 
+## 7.1 热点数据发现
 
-解决思路：
+除了自动的缓存淘汰机制之外，怎么找出那些访问频率高的 key 呢？或者说，我们可以在哪里记录 key 被访问的情况呢？ 
 
-1，如果查询数据库也为空，直接设置一个默认值存放到缓存，这样第二次到缓冲中获取就有值了，而不会继续访问数据库，这种办法最简单粗暴。
+### 7.1.1 客户端
 
-2，根据缓存数据Key的规则。例如我们公司是做机顶盒的，缓存数据以Mac为Key，Mac是有规则，如果不符合规则就过滤掉，这样可以过滤一部分查询。在做缓存规划的时候，Key有一定规则的话，可以采取这种办法。这种办法只能缓解一部分的压力，过滤和系统无关的查询，但是无法根治。
+第一个当然是在客户端了，比如我们可不可以在所有调用了 get、set 方法的地方，加上 key 的计数。但是这样的话，每一个地方都要修改，重复的代码也多。如果我们用 的是 Jedis 的客户端，我们可以在 Jedis 的 Connection 类的 sendCommand()里面，用 一个 HashMap 进行 key 的计数。 
 
-3，采用布隆过滤器，将所有可能存在的数据哈希到一个足够大的BitSet中，不存在的数据将会被拦截掉，从而避免了对底层存储系统的查询压力。
+但是这种方式有几个问题：
 
-大并发的缓存穿透会导致缓存雪崩。
+1. 不知道要存多少个 key，可能会发生内存泄露的问题
 
-## 缓存击穿
+2. 会对客户端的代码造成入侵
+
+3. 只能统计当前客户端的热点 key
+
+### 7.1.2 代理层
+
+第二种方式就是在代理端实现，比如 TwemProxy 或者 Codis，但是不是所有的项目都使用了代理的架构。 
+
+### 7.1.3 服务端
+
+第三种就是在服务端统计，Redis 有一个 monitor 的命令，可以监控到所有 Redis 执行的命令。 代码：
+
+```java
+jedis.monitor(new JedisMonitor() {
+	@Override
+	public void onCommand(String command) {
+		System.out.println("#monitor: " + command);
+	}
+});
+```
+
+```
+redis 命令操作：
+127.0.0.1:6379> set spring 666
+OK
+127.0.0.1:6379> get spring
+"666"
+日志打印：
+#monitor: 1605239191.316966 [0 127.0.0.1:59906] "set" "spring" "666"
+#monitor: 1605239194.459776 [0 127.0.0.1:59906] "get" "spring"
+```
+
+Facebook 的开源项目 redis-faina（https://github.com/facebookarchive/redis-faina.git）就是基于这个原理实现的。 
+
+它是一个 python 脚本，可以分析 monitor 的数据。
+
+```shell
+redis-cli -p 6379 monitor | head -n 100000 | ./redis-faina.py
+```
+
+这种方法也会有两个问题：
+
+1. monitor 命令在高并发的场景下，会影响性能，所以 不适合长时间使用
+
+2. 只能统计一个 Redis 节点的热点 key
+
+### 7.1.4 机器层面
+
+还有一种方法就是机器层面的，通过对 TCP 协议进行抓包，也有一些开源的方案， 比如 ELK 的 packetbeat 插件。
+
+当我们发现了热点 key 之后，我们来看下热点数据在高并发的场景下可能会出现的问题，以及怎么去解决。
+
+## 7.2 缓存雪崩
+
+### 7.2.1 什么是缓存雪崩
+
+缓存雪崩就是 Redis 的大量热点数据同时过期（失效），因为设置了相同的过期时间，刚好这个时候 Redis 请求的并发量又很大，就会导致所有的请求落到数据库，导致数据库CPU和内存负载过高，甚至宕机。（也可能是因为数据未加载到缓存中或缓存宕机）
+
+**缓存失效**
+
+如果缓存集中在一段时间内失效，DB的压力凸显。这个没有完美解决办法，但可以分析用户行为，尽量让失效时间点均匀分布。 
+
+### 7.2.2 缓存雪崩的解决方案
+
+1）加互斥锁或者使用队列，针对同一个 key 只允许一个线程到数据库查询，这种办法虽然能缓解数据库的压力，但是同时又降低了系统的吞吐量
+
+2）缓存定时预先更新，避免同时失效 
+
+3）通过加随机数，尽量让失效时间点均匀分布，使 key 在不同的时间过期 
+
+4）缓存永不过期
+
+如果是因为某台缓存服务器宕机，可以考虑做主备，比如：redis主备，但是双缓存涉及到更新事务的问题，update可能读到脏数据，需要好好解决。
+
+## 7.3 缓存穿透
+
+### 7.3.1 缓存穿透何时发生
+
+我们已经知道了 Redis 使用的场景了。在缓存存在和缓存不存在的情况下的什么情况我们都了解了。
+
+![image-20201113115549777](Redis之分布式篇.assets/image-20201113115549777.png)
+
+还有一种情况，数据在数据库和 Redis 里面都不存在，可能是一次条件错误的查询。 在这种情况下，因为数据库值不存在，所以肯定不会写入 Redis，那么下一次查询相同的 key 的时候，肯定还是会再到数据库查一次。那么这种循环查询数据库中不存在的值，并且每次使用的是相同的 key 的情况，我们有没有什么办法避免应用到数据库查询呢？ 
+
+我们可以`在 Redis 缓存一个空字符串，或者缓存一个特殊的字符串`，那么在应用里面拿到这个特殊字符串的时候，就知道数据库没有值了，也没有必要再到数据库查询了。
+
+但是这里需要设置一个过期时间，不然的话数据库已经新增了这一条记录，应用也还是拿不到值。 
+
+这个是应用重复查询同一个不存在的值的情况，如果应用每一次查询的不存在的值是不一样的呢？即使你每次都缓存特殊字符串也没用，因为它的值不一样，比如我们的用户系统登录的场景。如果不符合 ID 规则就过滤掉，这样可以过滤一部分查询。如果是恶意的请求，它每次都生成了一个符合 ID 规则的账号，但是这个账号在我们的数据库是不存在的，那 Redis 就完全失去了作用。
+
+<font color=red>这种因为每次查询的值都不存在导致的 Redis 失效的情况，我们就把它叫做缓存穿透。</font>这个问题我们应该怎么去解决呢？
+
+其实它也是一个通用的问题，关键就在于我们怎么知道请求的 key 在我们的数据库里面是否存在，如果数据量特别大的话，我们怎么去快速判断。 
+
+这也是一个非常经典的面试题： 
+
+**如何在海量元素中（例如 10 亿无序、不定长、不重复）快速判断一个元素是否存在？**
+
+如果是缓存穿透的这个问题，我们要避免到数据库查询不存的数据，肯定要把这 10 亿放在别的地方。这些数据在 Redis 里面也是没有的，为了加快检索速度，我们要把数据放到内存里面来判断，问题来了： 
+
+如果我们直接把这些元素的值放到基本的数据结构（List、Map、Tree）里面，比如 一个元素 1 字节的字段，10 亿的数据大概需要 900G 的内存空间，这个对于普通的服务器来说是承受不了的。 
+
+所以，我们存储这几十亿个元素，不能直接存值，我们应该找到一种最简单的最节省空间的数据结构，用来标记这个元素有没有出现。 这个东西我们就把它叫做`位图(BitMap)`，他是一个有序的数组，只有两个值，0 和 1。0 代表 不存在，1 代表存在。
+
+![image-20201113120421040](Redis之分布式篇.assets/image-20201113120421040.png)
+
+那我们怎么用这个数组里面的有序的位置来标记这10亿个元素是否存在呢？我们是不是必须要有一个映射方法，把元素映射到一个下标位置上？ 
+
+对于这个映射方法，我们有几个基本的要求： 
+
+1. 因为我们的值长度是不固定的，我希望不同长度的输入，可以得到固定长度的输出
+
+2. 转换成下标的时候，我希望他在我的这个有序数组里面是分布均匀的，不然的话全部挤到一对去了，我也没法判断到底哪个元素存了，哪个元素没存
+
+这个就是哈希函数，比如 MD5、SHA-1 等等这些都是常见的哈希算法。
+
+![image-20201113120550758](Redis之分布式篇.assets/image-20201113120550758.png)
+
+比如，这 6 个元素，我们经过哈希函数和位运算，得到了相应的下标。
+
+### 7.3.3 哈希碰撞
+
+这个时候，Tom 和 Mic 经过计算得到的哈希值是一样的，那么再经过位运算得到的下标肯定是一样的，我们把这种情况叫做`哈希冲突或者哈希碰撞`。 
+
+如果发生了哈希碰撞，这个时候对于我们的容器存值肯定是有影响的，我们可以通 过哪些方式去降低哈希碰撞的概率呢？
+
+第一种就是扩大维数组的长度或者说位图容量。因为我们的函数是分布均匀的，所以，位图容量越大，在同一个位置发生哈希碰撞的概率就越小。 
+
+是不是位图容量越大越好呢？不管存多少个元素，都创建一个几万亿大小的位图， 可以吗？当然不行，因为越大的位图容量，意味着越多的内存消耗，所以我们要创建一 个合适大小的位图容量。 
+
+除了扩大位图容量，我们还有什么降低哈希碰撞概率的方法呢？ 
+
+如果两个元素经过一次哈希计算，得到的相同下标的概率比较高，我可以不可以计算多次呢？ 原来我只用一个哈希函数，现在我对于每一个要存储的元素都用多个哈希函数计算，这样每次计算出来的下标都相同的概率就小得多了。 
+
+同样的，我们能不能引入很多个哈希函数呢？比如都计算 100 次，都可以吗？当然也会有问题，第一个就是它会填满位图的更多空间，第二个是计算是需要消耗时间的。 
+
+所以总的来说，我们既要节省空间，又要很高的计算效率，就必须在位图容量和函数个数之间找到一个最佳的平衡。
+
+比如说：我们存放 100 万个元素，到底需要多大的位图容量，需要多少个哈希函数 呢？
+
+### 7.3.4 布隆过滤器原理
+
+当然，这个事情早就有人研究过了，在 1970 年的时候，有一个叫做布隆的前辈对于判断海量元素中元素是否存在的问题进行了研究，也就是到底需要多大的位图容量和多少个哈希函数，它发表了一篇论文，提出的这个容器就叫做布隆过滤器。 
+
+我们来看一下布隆过滤器的工作原理。 
+
+首先，布隆过滤器的本质就是我们刚才分析的，一个位数组，和若干个哈希函数。
+
+![image-20201113121025160](Redis之分布式篇.assets/image-20201113121025160.png)
+
+集合里面有 3 个元素，要把它存到布隆过滤器里面去，应该怎么做？首先是 a 元素， 这里我们用 3 次计算。b、c 元素也一样。
+
+元素已经存进去之后，现在我要来判断一个元素在这个容器里面是否存在，就要使用同样的三个函数进行计算。
+
+比如 d 元素，我用第一个函数 f1 计算，发现这个位置上是 1，没问题。第二个位置也是 1，第三个位置也是 1 。 
+
+如果经过三次计算得到的下标位置值都是 1，这种情况下，能不能确定 d 元素一定在这个容器里面呢？ 实际上是不能的。比如这张图里面，这三个位置分别是把 a,b,c 存进去的时候置成 1 的，所以即使 d 元素之前没有存进去，也会得到三个 1，判断返回 true。 
+
+所以，这个是布隆过滤器的一个很重要的特性，因为哈希碰撞不可避免，所以它会 存在一定的误判率。这种把本来不存在布隆过滤器中的元素误判为存在的情况，我们把它叫做`假阳性（False Positive Probability，FPP）`。 
+
+我们再来看另一个元素，e 元素。我们要判断它在容器里面是否存在，一样地要用这三个函数去计算。第一个位置是 1，第二个位置是 1，第三个位置是 0。 
+
+e 元素是不是一定不在这个容器里面呢？ 可以确定一定不存在。如果说当时已经把 e 元素存到布隆过滤器里面去了，那么这三个位置肯定都是 1，不可能出现 0。
+
+总结：布隆过滤器的特点：
+
+从容器的角度来说： 
+
+1. 如果布隆过滤器判断元素在集合中存在，不一定存在 
+
+2. 如果布隆过滤器判断不存在，一定不存在 
+
+从元素的角度来说： 
+
+3. 如果元素实际存在，布隆过滤器一定判断存在 
+
+4. 如果元素实际不存在，布隆过滤器可能判断存在
+
+利用，第二个特性，我们是不是就能解决持续从数据库查询不存在的值的问题？
+
+### 7.3.5 Guava 的实现
+
+谷歌的 Guava 里面就提供了一个现成的布隆过滤器。
+
+```xml
+<!-- Guava布隆过滤器-->
+<dependency>
+    <groupId>com.google.guava</groupId>
+    <artifactId>guava</artifactId>
+    <version>21.0</version>
+</dependency>
+```
+
+```java
+public class BloomFilterDemo {
+    private static final int insertions = 1000000;
+
+    public static void main(String[] args) {
+
+        // 初始化一个存储string数据的布隆过滤器，初始化大小为100W
+        // 默认误判率是0.03
+        BloomFilter<String> bf = BloomFilter.create(
+                Funnels.stringFunnel(Charsets.UTF_8), insertions);
+
+        // 用于存放所有实际存在的key，判断key是否存在
+        Set<String> sets = new HashSet<String>(insertions);
+
+        // 用于存放所有实际存在的key，可以取出使用
+        List<String> lists = new ArrayList<String>(insertions);
+
+        // 向三个容器初始化100W个随机并且唯一的字符串
+        for (int i = 0; i < insertions; i++) {
+            String uuid = UUID.randomUUID().toString();
+            // 布隆过滤器提供的存放元素的方法是 put()
+            bf.put(uuid);
+            sets.add(uuid);
+            lists.add(uuid);
+        }
+
+        int right = 0; // 正确判断的次数
+        int wrong = 0; // 错误判断的次数
+
+        for (int i = 0; i < 10000; i++) {
+            // 可以被100整除的时候，取一个存在的数。否则随机生成一个UUID
+            // 0-10000之间，可以被100整除的数有100个（100的倍数）
+            String data = i % 100 == 0 ? lists.get(i / 100) : UUID.randomUUID().toString();
+			// 布隆过滤器提供的判断元素是否存在的方法是 mightContain()
+            if (bf.mightContain(data)) {
+                if (sets.contains(data)) {
+                    // 判断存在实际存在的时候，命中
+                    right++;
+                    continue;
+                }
+                // 判断存在却不存在的时候，错误
+                wrong++;
+            }
+        }
+
+        NumberFormat percentFormat =NumberFormat.getPercentInstance();
+        percentFormat.setMaximumFractionDigits(2); //最大小数位数
+        float percent = (float) wrong / 9900;
+        float bingo = (float) (9900 - wrong) / 9900;
+
+        System.out.println("在100W个元素中，判断100个实际存在的元素，布隆过滤器认为存在的："+right);
+        System.out.println("在100W个元素中，判断9900个实际不存在的元素，误认为存在的："+wrong+"" +
+                "，命中率：" + percentFormat.format(bingo) + "，误判率：" + percentFormat.format(percent) );
+    }
+}
+```
+
+布隆过滤器把误判率默认设置为 0.03，也可以在创建的时候指定。
+
+```java
+public static <T> BloomFilter<T> create(Funnel<? super T> funnel, long expectedInsertions) {
+    return create(funnel, expectedInsertions, 0.03D);
+}
+```
+
+位图的容量是基于元素个数和误判率计算出来的。 
+
+```java
+long numBits = optimalNumOfBits(expectedInsertions, fpp); 
+```
+
+根据位数组的大小，我们进一步计算出了哈希函数的个数。
+
+```java
+int numHashFunctions = optimalNumOfHashFunctions(expectedInsertions, numBits); 
+```
+
+存储 100 万个元素只占用了 0.87M 的内存，生成了 5 个哈希函数。
+
+https://hur.st/bloomfilter/?n=1000000&p=0.03&m=&k=
+
+### 7.3.6 布隆过滤器在项目中的使用
+
+布隆过滤器的工作位置：
+
+![image-20201113122036794](Redis之分布式篇.assets/image-20201113122036794.png)
+
+因为要判断数据库的值是否存在，所以第一步是加载数据库所有的数据。在去 Redis 查询之前，先在布隆过滤器查询，如果 bf 说没有，那数据库肯定没有，也不用去查了。 如果 bf 说有，才走之前的流程。
+
+```java
+@RunWith(SpringJUnit4ClassRunner.class)
+@SpringBootTest
+@EnableAutoConfiguration
+public class BloomTestsConcurrency {
+    @Resource
+    private RedisTemplate redisTemplate;
+
+    @Autowired
+    private UserService userService;
+
+    private static final int THREAD_NUM = 1000; // 并发线程数量，Windows机器不要设置过大
+
+    static BloomFilter<String> bf;
+
+    static List<User> allUsers;
+
+    @PostConstruct
+    public void init() {
+        // 从数据库获取数据，加载到布隆过滤器
+        long start = System.currentTimeMillis();
+        allUsers = userService.list();
+        if (allUsers == null || allUsers.size() == 0) {
+            return;
+        }
+        // 创建布隆过滤器，默认误判率0.03，即3%
+        bf = BloomFilter.create(Funnels.stringFunnel(Charsets.UTF_8), allUsers.size());
+        // 误判率越低，数组长度越长，需要的哈希函数越多
+        // bf = BloomFilter.create(Funnels.stringFunnel(Charsets.UTF_8), allUsers.size(), 0.0001);
+        // 将数据存入布隆过滤器
+        for (User user : allUsers) {
+            bf.put(user.getAccount());
+        }
+        long end = System.currentTimeMillis();
+        System.out.println("查询并加载"+allUsers.size()+"条数据到布隆过滤器完毕，总耗时："+(end -start ) +"毫秒");
+    }
+
+    @Test
+    public void cacheBreakDownTest() {
+        long start = System.currentTimeMillis();
+        CyclicBarrier cyclicBarrier = new CyclicBarrier(THREAD_NUM);
+        ExecutorService executorService = Executors.newFixedThreadPool(THREAD_NUM);
+        for (int i = 0; i < THREAD_NUM; i++){
+            executorService.execute(new BloomTestsConcurrency().new MyThread(cyclicBarrier, redisTemplate, userService));
+        }
+
+        executorService.shutdown();
+        //判断是否所有的线程已经运行完
+        while (!executorService.isTerminated()) {
+
+        }
+
+        long end = System.currentTimeMillis();
+        System.out.println("并发数："+THREAD_NUM + "，新建线程以及过滤总耗时："+(end -start ) +"毫秒，演示结束");
+    }
+
+    public class MyThread implements Runnable {
+        private CyclicBarrier cyclicBarrier;
+        private RedisTemplate redisTemplate;
+        private UserService userService;
+
+        public MyThread(CyclicBarrier cyclicBarrier, RedisTemplate redisTemplate, UserService userService) {
+            this.cyclicBarrier = cyclicBarrier;
+            this.redisTemplate = redisTemplate;
+            this.userService = userService;
+        }
+
+        @Override
+        public void run() {
+            //所有子线程等待，当子线程全部创建完成再一起并发执行后面的代码
+            try {
+                cyclicBarrier.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } catch (BrokenBarrierException e) {
+                e.printStackTrace();
+            }
+
+            // 1.1 （测试：布隆过滤器判断不存在，拦截——如果没有布隆过滤器，将造成缓存穿透）
+            // 随机产生一个字符串，在布隆过滤器中不存在
+            String randomUser = UUID.randomUUID().toString();
+            // 1.2 （测试：布隆过滤器判断存在，从Redis缓存取值，如果Redis为空则查询数据库并写入Redis）
+            // 从List中获取一个存在的用户
+            // String randomUser = allUsers.get(new Random().nextInt(allUsers.size())).getAccount();
+            String key = "Key:" + randomUser;
+
+            Date date1 = new Date();
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+            // 如果布隆过滤器中不存在这个用户直接返回，将流量挡掉
+            if (!bf.mightContain(randomUser)) {
+                System.out.println(sdf.format(date1)+" 布隆过滤器中不存在，非法请求");
+                return;
+            }
+
+            // 查询缓存，如果缓存中存在直接返回缓存数据
+            ValueOperations<String, String> operation =
+                    (ValueOperations<String, String>) redisTemplate.opsForValue();
+            Object cacheUser = operation.get(key);
+            if (cacheUser != null) {
+                Date date2 = new Date();
+                System.out.println(sdf.format(date2)+" 命中redis缓存");
+                return;
+            }
+
+            // TODO 防止并发重复写缓存，加锁
+            synchronized (randomUser) {
+                // 如果缓存不存在查询数据库
+                List<User> user = userService.getUserByAccount(randomUser);
+                if (user == null || user.size() == 0) {
+                    // 很容易发生连接池不够用的情况 HikariPool-1 - Connection is not available, request timed out after
+                    System.out.println(" Redis缓存不存在，查询数据库也不存在，发生缓存穿透！！！");
+                    return;
+                }
+                // 将mysql数据库查询到的数据写入到redis中
+                Date date3 = new Date();
+                System.out.println(sdf.format(date3)+" 从数据库查询并写入Reids");
+                operation.set("Key:" + user.get(0).getAccount(), user.get(0).getAccount());
+            }
+        }
+
+    }
+}
+```
+
+### 7.3.7 布隆过滤器的其他应用场景
+
+布隆过滤器解决的问题是什么？如何在海量元素中快速判断一个元素是否存在。所以除了解决缓存穿透的问题之外，我们还有很多其他的用途。 
+
+比如爬数据的爬虫，爬过的 url 我们不需要重复爬，那么在几十亿的 url 里面，怎么 判断一个 url 是不是已经爬过了？
+
+还有我们的邮箱服务器，发送垃圾邮件的账号我们把它们叫做 spamer，在这么多的邮箱账号里面，怎么判断一个账号是不是 spamer 等等一些场景，我们都可以用到布隆过滤器。
+
+## 7.4 缓存击穿
 
 缓存击穿是指缓存中没有但数据库中有的数据（一般是缓存时间到期），这时由于并发用户特别多，同时读缓存没读到数据，又同时去数据库去取数据，引起数据库压力瞬间增大，造成过大压力。
 
@@ -1447,18 +1980,5 @@ Redisson 跟 Jedis 定位不同，它不是一个单纯的 Redis 客户端，而
 
 2，加互斥锁
 
-## 缓存雪崩
+------
 
-缓存雪崩可能是因为数据未加载到缓存中，或缓存宕机，或者缓存同一时间大面积的失效，从而导致所有请求都去查数据库，导致数据库CPU和内存负载过高，甚至宕机。
-
-解决思路：
-
-1，采用加锁计数，或者使用合理的队列数量来避免缓存失效时对数据库造成太大的压力。这种办法虽然能缓解数据库的压力，但是同时又降低了系统的吞吐量。
-
-2，分析用户行为，尽量让失效时间点均匀分布。避免缓存雪崩的出现。
-
-3，如果是因为某台缓存服务器宕机，可以考虑做主备，比如：redis主备，但是双缓存涉及到更新事务的问题，update可能读到脏数据，需要好好解决。
-
-## 缓存失效
-
-如果缓存集中在一段时间内失效，DB的压力凸显。这个没有完美解决办法，但可以分析用户行为，尽量让失效时间点均匀分布。 
