@@ -1,16 +1,25 @@
+# Spring 自动装配之依赖注入
+
 ## 依赖注入发生的时间
 
 当Spring IOC容器完成了Bean资源的定位，载入和解析注册之后，IOC容器中已经管理类Bean定义的相关数据，但是此时IOC容器还没有对所管理的Bean进行依赖注入，依赖注入发生在以下两种情况发生：
 
 - 用户第一次通过getBean方法向IOC容器要Bean时，IOC容器触发依赖注入 
-- 当用户在Bean定义资源中为<Bean>元素配置了lazy-init属性，即让容器在解析注册Bean定义时进行预实例化，触发依赖注入
+- 当用户在Bean定义资源中为`<Bean>`元素配置了lazy-init属性，即让容器在解析注册Bean定义时进行预实例化，触发依赖注入
 
->lazy-init是Spring中延迟加载bean的属性。默认<code>lazy-init="false"</code>，那么Spring启动时会立即进行实例化。<br> lazy-init=“true”，那么bean将不会在ApplicationContext启动时提前被实例化，而是在第一次向容器通过getBean索取bean时实例化的。<br> lazy-init尽在scope属性为singleton时，才会有效，如果scope的属性值为pototype，那么及时设置了lazy-init=“false”,容器启动时也不会被实例化，而是调用getBean方法实例化。
+>lazy-init是Spring中延迟加载bean的属性。默认<code>lazy-init="false"</code>，那么Spring启动时会立即进行实例化。
+>
+>lazy-init=“true”，那么bean将不会在ApplicationContext启动时提前被实例化，而是在第一次向容器通过getBean索取bean时实例化的。
+>
+>lazy-init尽在scope属性为singleton时，才会有效，如果scope的属性值为pototype，那么及时设置了lazy-init=“false”,容器启动时也不会被实例化，而是调用getBean方法实例化。
 
+BeanFactory接口定义了Spring IOC容器的基本功能规范，是Spring IOC容器所应遵守的最底层和最基本的编程规范。BeanFactory接口中定义了几个getBean方法，就是用户向IOC容器索取管理的Bean的方法，通过分析其子类的具体实现，理解Spring IOC容器在用户索取Bean时如何完成依赖注入。 
 
-BeanFactory接口定义了Spring IOC容器的基本功能规范，是Spring IOC容器所应遵守的最底层和最基本的编程规范。BeanFactory接口中定义了几个getBean方法，就是用户向IOC容器索取管理的Bean的方法，通过分析其子类的具体实现，理解Spring IOC容器在用户索取Bean时如何完成依赖注入。 ![img](https://img-blog.csdnimg.cn/20200331164456799.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) 在BeanFactory中看到getBean函数，它的具体实现在AbstracBeanFactory中。
+![img](Spring IOC 依赖注入.assets/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70.png)
 
-## AbstractBeanFactory通过getBean向IOC容器获取被管理的Bean
+在BeanFactory中看到getBean函数，它的具体实现在AbstracBeanFactory中。
+
+## 寻找获取 Bean 的入口
 
 AbstractBeanFactory的getBean相关方法源码如下：
 
@@ -229,9 +238,11 @@ protected <T> T doGetBean(
 }
 ```
 
-通过上面对IOC容器获取Bean方法的分析，可以看到在Spring中，如果Bean定义的单例模式Singleton，则容器在创建之前先从缓存中查找，以确保整个容器中只存在一个实例对象。如果Bean定义的是原型模式Prototype，则容器每次都会创建一个新的实例对象。除此之外，Bean定义还可以扩展为指定其生命周期范围。 上面源码只是定义了根据Bean定义的模式，采取的不同创建Bean实例对象的策略，具体的Bean实现对象的创建过程由实现了ObjectFactory接口的匿名内部类的createBean方法完成，ObjectFactory使用委派模式，具体的Bean实例创建过程交由其实现类AbstractAutowireCapableBeanFactory完成，继续分析AbstractAutowireCapableBeanFactory的createBean方法的源码，理解其创建Bean实例的具体实现。
+通过上面对IOC容器获取Bean方法的分析，可以看到在Spring中，如果Bean定义的单例模式Singleton，则容器在创建之前先从缓存中查找，以确保整个容器中只存在一个实例对象。如果Bean定义的是原型模式Prototype，则容器每次都会创建一个新的实例对象。除此之外，Bean定义还可以扩展为指定其生命周期范围。 
 
-## AbstractAutowireCapableBeanFactory创建Bean实例对象
+上面源码只是定义了根据Bean定义的模式，采取的不同创建Bean实例对象的策略，具体的Bean实现对象的创建过程由实现了ObjectFactory接口的匿名内部类的createBean方法完成，ObjectFactory使用委派模式，具体的Bean实例创建过程交由其实现类AbstractAutowireCapableBeanFactory完成，继续分析AbstractAutowireCapableBeanFactory的createBean方法的源码，理解其创建Bean实例的具体实现。
+
+## 开始实例化
 
 AbstractAutowireCapableBeanFactory类实现了ObjectFactory接口，创建容器指定的Bean实例对象，同时还对创建的Bean实例对象进行初始化处理。其创建Bean实例对象的方法源码：
 
@@ -393,12 +404,12 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
 
 通过对方法源码的分析，看到具体的依赖注入实现在以下两个方法中：
 
-- createBeanInstance：生成Bean所包含的Java对象实例 
-- populateBean：对Bean属性的依赖注入进行处理
+- createBeanInstance：生成 Bean 所包含的 Java 对象实例 
+- populateBean：对 Bean 属性的依赖注入进行处理
 
-## createBeanInstance方法创建Bean的java实例对象
+## 选择 Bean 实例化策略
 
-在createBeanInstance方法中，根据指定的初始化策略，使用静态工厂，工厂方法或容器的自动装配特性生成java实例对象，创建对象的源码如下：
+在 createBeanInstance 方法中，根据指定的初始化策略，使用静态工厂，工厂方法或容器的自动装配特性生成java实例对象，创建对象的源码如下：
 
 ```java
 //创建Bean的实例对象
@@ -486,7 +497,7 @@ protected BeanWrapper instantiateBean(final String beanName, final RootBeanDefin
 
 经过对上面的代码分析，可以看出对使用工厂方法和自动装配特性的Bean的实例化相当清楚，调用相应的工厂方法或参数匹配的构造方法即可完成实例化对象的工作，但是对于最常使用的默认无参构造方法就需要使用相应的初始化策略(JDK的反射机制或者CGLib)来初始化，在方法getInstantiationStrategy().instantiate中就具体实现类使用初始策略实例化对象。
 
-## SimpleInstantiationStrategy类使用默认的无参构造方法创建Bean实例化对象
+## 执行 Bean 实例化
 
 在使用默认的无参构造方法创建Bean的实例化对象时，方法getInstantiationStratrgy().instantiate调用了SimpleInstantiationStrategy类中的实例化Bean的方法：
 
@@ -495,6 +506,7 @@ protected BeanWrapper instantiateBean(final String beanName, final RootBeanDefin
 public Object instantiate(RootBeanDefinition beanDefinition, String beanName, BeanFactory owner) {
    // Don't override the class with CGLIB if no overrides.
    //如果Bean定义中没有方法覆盖，则就不需要CGLIB父类类的方法
+  // 如果有需要覆盖或者动态替换的方法则当然需要使用 cglib 进行动态代理，因为可以在创建代理的同时将动态方法织入类中，但是如果没有需要动态改变的方法，为了方便直接反射就可以了
    if (beanDefinition.getMethodOverrides().isEmpty()) {
       Constructor<?> constructorToUse;
       synchronized (beanDefinition.constructorArgumentLock) {
@@ -538,9 +550,7 @@ public Object instantiate(RootBeanDefinition beanDefinition, String beanName, Be
 }
 ```
 
-如果Bean由方法被覆盖了，则使用JDK的反射机制进行实例化，否则，使用CGLIB进行实例化。
-
-### 使用CGLIB来进行初始化
+<font color=red>如果Bean定义中没有方法覆盖，则就不需要CGLIB父类类的方法。</font>
 
 instantiateWithMethodInjection方法调用了SimpleInstantiationStrategy的子类CglibSubclassingInstantiationStrategy使用CGLIB来进行初始化：
 
@@ -565,14 +575,18 @@ public Object instantiate(Constructor ctor, Object[] args) {
 }
 ```
 
-CGLIB是一个常用的字节码生成器的类库，它提供了一系列API实现java字节码的生成和转换功能。JDK的动态代理只能针对接口，如果一个类没有实现任何接口，要对其进行动态代理只能使用CGLIB。
+CGLIB是一个常用的字节码生成器的类库，它提供了一系列API实现java字节码的生成和转换功能。
 
-## populateBean方法对Bean属性的依赖注入
+JDK的动态代理只能针对接口，如果一个类没有实现任何接口，要对其进行动态代理只能使用CGLIB。
+
+## 准备依赖注入
 
 Bean的依赖注入分为两个过程：
 
 - createBeanInstance：生成Bean所包含的Java对象实例 
-- populateBean：对Bean属性的依赖注入进行处理 createBeanInstance方法创建Bean的java实例对象 和 SimpleInstantiationStrategy类使用默认的无参构造方法创建Bean实例化对象分析了容器初始化生成Bean所包括的Java实例对象的过程，现在继续分析生成对象后，Spring IOC容器是如何将Bean的属性依赖关系注入Bean实例对象中并设置好的，属性依赖注入代码：
+- populateBean：对Bean属性的依赖注入进行处理
+
+上面我们已经分析了容器初始化生成 Bean 所包含的 Java 实例对象的过程，现在我们继续分析生成对象后，Spring IOC 容器是如何将 Bean 的属性依赖关系注入 Bean 实例对象中并设置好的，回到 AbstractAutowireCapableBeanFactory 的 populateBean()方法，对属性依赖注入的代码如下： 
 
 ```java
 //将Bean属性设置到生成的实例对象上
@@ -780,9 +794,11 @@ protected void applyPropertyValues(String beanName, BeanDefinition mbd, BeanWrap
 分析上述代码，我们可以看出，对属性的注入过程分以下两种情况：
 
 - 属性值类型不需要转换时，不需要解析属性值，直接准备进行依赖注入 
-- 属性值需要进行类型转换时，如对其他对象的引用等，首先需要解析属性值，然后对解析后的属性值进行依赖注入 对属性值的解析是在BeanDefinitionValueResolver类中的resolveValueIfNecessary方法中进行的，对属性值的依赖注入是通过bw.setPropertyValues方法实现的，在分析属性值的依赖注入之前，先分析一下对属性值的解析过程。
+- 属性值需要进行类型转换时，如对其他对象的引用等，首先需要解析属性值，然后对解析后的属性值进行依赖注入 
 
-## BeanDefinitionValueResolver解析属性值
+对属性值的解析是在BeanDefinitionValueResolver类中的resolveValueIfNecessary方法中进行的，对属性值的依赖注入是通过bw.setPropertyValues方法实现的，在分析属性值的依赖注入之前，先分析一下对属性值的解析过程。
+
+## 解析属性注入规则
 
 当容器在对属性进行依赖注入时，如果发现属性值需要进行类型转换，如属性值是容器中另一个Bean实例对象的引用，则容器首先需要根据属性值解析出来所引用的对象，然后才能将该引用对象注入到目标实例对象的属性上去，对属性进行解析的由resolveValueIfNecessary方法实现：
 
@@ -990,304 +1006,180 @@ private Map resolveManagedMap(Object argName, Map<?, ?> mm) {
 
 通过上述代码分析，可以明白Spring是如何将引用类型，内部类以及集合类型等属性进行解析的，属性值解析完成后就可以进行依赖注入了，依赖注入的过程就是Bean对象实例设置到它所依赖的Bean对象属性上去，在BeanDefinitionValueResolver解析属性值中已经说过，依赖注入是通过bw.setPropertyValues方法实现的，该方法也使用了委派模式，在BeanWrapper接口在至少定义了方法生命，依赖注入的具体实现交由其实现类BeanwrapperImpl来完成。
 
-## BeanWrapperImpl对Bean属性的依赖注入
+## 注入赋值
 
-BeanWrapperImpl类主要是对容器中完成初始化的Bean实例对象进行属性的依赖注入，即把Bean对象设置到它所依赖的另一个Bean的属性中去，依赖注入的相关源码：
+BeanWrapperImpl类主要是对容器中完成初始化的Bean实例对象进行属性的依赖注入，即把Bean对象设置到它所依赖的另一个Bean的属性中去。然而，BeanWrapperImpl 中的注入方法实际上由 AbstractNestablePropertyAccessor 来实现的，其相关源码如下： 
 
 ```java
 //实现属性依赖注入功能
-@SuppressWarnings("unchecked")
-private void setPropertyValue(PropertyTokenHolder tokens, PropertyValue pv) throws BeansException {
-   //PropertyTokenHolder主要保存属性的名称、路径，以及集合的size等信息
-   String propertyName = tokens.canonicalName;
-   String actualName = tokens.actualName;
-
-   //keys是用来保存集合类型属性的size
-   if (tokens.keys != null) {
-      // Apply indexes and map keys: fetch value for all keys but the last one.
-      //将属性信息拷贝
-      PropertyTokenHolder getterTokens = new PropertyTokenHolder();
-      getterTokens.canonicalName = tokens.canonicalName;
-      getterTokens.actualName = tokens.actualName;
-      getterTokens.keys = new String[tokens.keys.length - 1];
-      System.arraycopy(tokens.keys, 0, getterTokens.keys, 0, tokens.keys.length - 1);
-      Object propValue;
-      try {
-         //获取属性值，该方法内部使用JDK的内省(Introspector)机制
-            //调用属性的getter(readerMethod)方法，获取属性的值 
-         propValue = getPropertyValue(getterTokens);
-      }
-      catch (NotReadablePropertyException ex) {
-         throw new NotWritablePropertyException(getRootClass(), this.nestedPath + propertyName,
-               "Cannot access indexed value in property referenced " +
-               "in indexed property path '" + propertyName + "'", ex);
-      }
-      // Set value for last key.
-      //获取集合类型属性的长度
-      String key = tokens.keys[tokens.keys.length - 1];
-      if (propValue == null) {
-         // null map value case
-         if (this.autoGrowNestedPaths) {
-            // TODO: cleanup, this is pretty hacky
-            int lastKeyIndex = tokens.canonicalName.lastIndexOf('[');
-            getterTokens.canonicalName = tokens.canonicalName.substring(0, lastKeyIndex);
-            propValue = setDefaultValue(getterTokens);
-         }
-         else {
-            throw new NullValueInNestedPathException(getRootClass(), this.nestedPath + propertyName,
-                  "Cannot access indexed value in property referenced " +
-                  "in indexed property path '" + propertyName + "': returned null");
-         }
-      }
-      //注入array类型的属性值
-      if (propValue.getClass().isArray()) {
-         //获取属性的描述符
-         PropertyDescriptor pd = getCachedIntrospectionResults().getPropertyDescriptor(actualName);
-         //获取数组的类型
-         Class requiredType = propValue.getClass().getComponentType();
-         //获取数组的长度
-         int arrayIndex = Integer.parseInt(key);
-         Object oldValue = null;
-         try {
-            //获取数组以前初始化的值
-            if (isExtractOldValueForEditor() && arrayIndex < Array.getLength(propValue)) {
-               oldValue = Array.get(propValue, arrayIndex);
-            }
-            //将属性的值赋值给数组中的元素
-            Object convertedValue = convertIfNecessary(propertyName, oldValue, pv.getValue(),
-                  requiredType, TypeDescriptor.nested(property(pd), tokens.keys.length));
-            Array.set(propValue, arrayIndex, convertedValue);
-         }
-         catch (IndexOutOfBoundsException ex) {
-            throw new InvalidPropertyException(getRootClass(), this.nestedPath + propertyName,
-                  "Invalid array index in property path '" + propertyName + "'", ex);
-         }
-      }
-      //注入list类型的属性值
-      else if (propValue instanceof List) {
-         PropertyDescriptor pd = getCachedIntrospectionResults().getPropertyDescriptor(actualName);
-         //获取list集合的类型
-         Class requiredType = GenericCollectionTypeResolver.getCollectionReturnType(
-               pd.getReadMethod(), tokens.keys.length);
-         List list = (List) propValue;
-         
-         int index = Integer.parseInt(key);
-         Object oldValue = null;
-         if (isExtractOldValueForEditor() && index < list.size()) {
-            oldValue = list.get(index);
-         }
-         //获取list解析后的属性值
-         Object convertedValue = convertIfNecessary(propertyName, oldValue, pv.getValue(),
-               requiredType, TypeDescriptor.nested(property(pd), tokens.keys.length));
-         //获取list集合的size
-         int size = list.size();
-         //如果list的长度大于属性值的长度，则多余的元素赋值为null 
-         if (index >= size && index < this.autoGrowCollectionLimit) {
-            for (int i = size; i < index; i++) {
-               try {
-                  list.add(null);
-               }
-               catch (NullPointerException ex) {
-                  throw new InvalidPropertyException(getRootClass(), this.nestedPath + propertyName,
-                        "Cannot set element with index " + index + " in List of size " +
-                        size + ", accessed using property path '" + propertyName +
-                        "': List does not support filling up gaps with null elements");
-               }
-            }
-            list.add(convertedValue);
-         }
-         else {
-            try {
-               //为list属性赋值
-               list.set(index, convertedValue);
-            }
-            catch (IndexOutOfBoundsException ex) {
-               throw new InvalidPropertyException(getRootClass(), this.nestedPath + propertyName,
-                     "Invalid list index in property path '" + propertyName + "'", ex);
-            }
-         }
-      }
-      //注入map类型的属性值
-      else if (propValue instanceof Map) {
-         PropertyDescriptor pd = getCachedIntrospectionResults().getPropertyDescriptor(actualName);
-         //获取map集合key的类型
-         Class mapKeyType = GenericCollectionTypeResolver.getMapKeyReturnType(
-               pd.getReadMethod(), tokens.keys.length);
-         //获取map集合value的类型
-         Class mapValueType = GenericCollectionTypeResolver.getMapValueReturnType(
-               pd.getReadMethod(), tokens.keys.length);
-         Map map = (Map) propValue;
-         // IMPORTANT: Do not pass full property name in here - property editors
-         // must not kick in for map keys but rather only for map values.
-         TypeDescriptor typeDescriptor = (mapKeyType != null ?
-               TypeDescriptor.valueOf(mapKeyType) : TypeDescriptor.valueOf(Object.class));
-         //解析map类型属性key值
-         Object convertedMapKey = convertIfNecessary(null, null, key, mapKeyType, typeDescriptor);
-         Object oldValue = null;
-         if (isExtractOldValueForEditor()) {
-            oldValue = map.get(convertedMapKey);
-         }
-         // Pass full property name and old value in here, since we want full
-         // conversion ability for map values.
-         //解析map类型属性value值
-         Object convertedMapValue = convertIfNecessary(propertyName, oldValue, pv.getValue(),
-               mapValueType, TypeDescriptor.nested(property(pd), tokens.keys.length));
-         //将解析后的key和value值赋值给map集合属性
-         map.put(convertedMapKey, convertedMapValue);
-      }
-      //对非集合类型的属性注入
-      else {
-         throw new InvalidPropertyException(getRootClass(), this.nestedPath + propertyName,
-               "Property referenced in indexed property path '" + propertyName +
-               "' is neither an array nor a List nor a Map; returned value was [" + pv.getValue() + "]");
-      }
-   }
-
-   else {
-      PropertyDescriptor pd = pv.resolvedDescriptor;
-      if (pd == null || !pd.getWriteMethod().getDeclaringClass().isInstance(this.object)) {
-         pd = getCachedIntrospectionResults().getPropertyDescriptor(actualName);
-         //无法获取到属性名或者属性没有提供setter(写方法)方法
-         if (pd == null || pd.getWriteMethod() == null) {
-            //如果属性值是可选的，即不是必须的，则忽略该属性值
-            if (pv.isOptional()) {
-               logger.debug("Ignoring optional value for property '" + actualName +
-                     "' - property not found on bean class [" + getRootClass().getName() + "]");
-               return;
-            }
-            //如果属性值是必须的，则抛出无法给属性赋值，因为没提供setter方法异常
-            else {
-               PropertyMatches matches = PropertyMatches.forProperty(propertyName, getRootClass());
-               throw new NotWritablePropertyException(
-                     getRootClass(), this.nestedPath + propertyName,
-                     matches.buildErrorMessage(), matches.getPossibleMatches());
-            }
-         }
-         pv.getOriginalPropertyValue().resolvedDescriptor = pd;
-      }
-
-      Object oldValue = null;
-      try {
-         Object originalValue = pv.getValue();
-         Object valueToApply = originalValue;
-         if (!Boolean.FALSE.equals(pv.conversionNecessary)) {
-            if (pv.isConverted()) {
-               valueToApply = pv.getConvertedValue();
-            }
-            else {
-               if (isExtractOldValueForEditor() && pd.getReadMethod() != null) {
-                  //获取属性的getter方法(读方法)，JDK内省机制
-                  final Method readMethod = pd.getReadMethod();
-                  //如果属性的getter方法不是public访问控制权限的，即访问控制权限比较严格，  
-                        //则使用JDK的反射机制强行访问非public的方法(暴力读取属性值) 
-                  if (!Modifier.isPublic(readMethod.getDeclaringClass().getModifiers()) &&
-                        !readMethod.isAccessible()) {
-                     if (System.getSecurityManager()!= null) {
-                        //匿名内部类，根据权限修改属性的读取控制限制 
-                        AccessController.doPrivileged(new PrivilegedAction<Object>() {
-                           public Object run() {
-                              readMethod.setAccessible(true);
-                              return null;
-                           }
-                        });
-                     }
-                     else {
-                        readMethod.setAccessible(true);
-                     }
-                  }
-                  try {
-                      //属性没有提供getter方法时，调用潜在的读取属性值的方法，获取属性值 
-                     if (System.getSecurityManager() != null) {
-                        oldValue = AccessController.doPrivileged(new PrivilegedExceptionAction<Object>() {
-                           public Object run() throws Exception {
-                              return readMethod.invoke(object);
-                           }
-                        }, acc);
-                     }
-                     else {
-                        oldValue = readMethod.invoke(object);
-                     }
-                  }
-                  catch (Exception ex) {
-                     if (ex instanceof PrivilegedActionException) {
-                        ex = ((PrivilegedActionException) ex).getException();
-                     }
-                     if (logger.isDebugEnabled()) {
-                        logger.debug("Could not read previous value of property '" +
-                              this.nestedPath + propertyName + "'", ex);
-                     }
-                  }
-               }
-               //设置属性的注入值
-               valueToApply = convertForProperty(propertyName, oldValue, originalValue, pd);
-            }
-            pv.getOriginalPropertyValue().conversionNecessary = (valueToApply != originalValue);
-         }
-         //根据JDK的内省机制，获取属性的setter(写方法)方法
-         final Method writeMethod = (pd instanceof GenericTypeAwarePropertyDescriptor ?
-               ((GenericTypeAwarePropertyDescriptor) pd).getWriteMethodForActualAccess() :
-               pd.getWriteMethod());
-         //如果属性的setter方法是非public，即访问控制权限比较严格，则使用JDK的反射机制，  
-            //强行设置setter方法可访问(暴力为属性赋值)  
-         if (!Modifier.isPublic(writeMethod.getDeclaringClass().getModifiers()) && !writeMethod.isAccessible()) {
-            if (System.getSecurityManager()!= null) {
-               AccessController.doPrivileged(new PrivilegedAction<Object>() {
-                  public Object run() {
-                     writeMethod.setAccessible(true);
-                     return null;
-                  }
-               });
-            }
-            else {
-               writeMethod.setAccessible(true);
-            }
-         }
-         final Object value = valueToApply;
-          //如果使用了JDK的安全机制，则需要权限验证 
-         if (System.getSecurityManager() != null) {
-            try {
-               //将属性值设置到属性上去 
-               AccessController.doPrivileged(new PrivilegedExceptionAction<Object>() {
-                  public Object run() throws Exception {
-                     writeMethod.invoke(object, value);
-                     return null;
-                  }
-               }, acc);
-            }
-            catch (PrivilegedActionException ex) {
-               throw ex.getException();
-            }
-         }
-         else {
-            writeMethod.invoke(this.object, value);
-         }
-      }
-      catch (TypeMismatchException ex) {
-         throw ex;
-      }
-      catch (InvocationTargetException ex) {
-         PropertyChangeEvent propertyChangeEvent =
-               new PropertyChangeEvent(this.rootObject, this.nestedPath + propertyName, oldValue, pv.getValue());
-         if (ex.getTargetException() instanceof ClassCastException) {
-            throw new TypeMismatchException(propertyChangeEvent, pd.getPropertyType(), ex.getTargetException());
-         }
-         else {
-            throw new MethodInvocationException(propertyChangeEvent, ex.getTargetException());
-         }
-      }
-      catch (Exception ex) {
-         PropertyChangeEvent pce =
-               new PropertyChangeEvent(this.rootObject, this.nestedPath + propertyName, oldValue, pv.getValue());
-         throw new MethodInvocationException(pce, ex);
-      }
-   }
+protected void setPropertyValue(PropertyTokenHolder tokens, PropertyValue pv) throws BeansException {
+	if (tokens.keys != null) {
+		processKeyedProperty(tokens, pv);
+	}
+	else {
+		processLocalProperty(tokens, pv);
+	}
 }
+//实现属性依赖注入功能
+	@SuppressWarnings("unchecked")
+	private void processKeyedProperty(PropertyTokenHolder tokens, PropertyValue pv) {
+		//调用属性的getter方法，获取属性的值
+		Object propValue = getPropertyHoldingValue(tokens);
+		PropertyHandler ph = getLocalPropertyHandler(tokens.actualName);
+		if (ph == null) {
+			throw new InvalidPropertyException(
+					getRootClass(), this.nestedPath + tokens.actualName, "No property handler found");
+		}
+		Assert.state(tokens.keys != null, "No token keys");
+		String lastKey = tokens.keys[tokens.keys.length - 1];
+
+		//注入array类型的属性值
+		if (propValue.getClass().isArray()) {
+			Class<?> requiredType = propValue.getClass().getComponentType();
+			int arrayIndex = Integer.parseInt(lastKey);
+			Object oldValue = null;
+			try {
+				if (isExtractOldValueForEditor() && arrayIndex < Array.getLength(propValue)) {
+					oldValue = Array.get(propValue, arrayIndex);
+				}
+				Object convertedValue = convertIfNecessary(tokens.canonicalName, oldValue, pv.getValue(),
+						requiredType, ph.nested(tokens.keys.length));
+				//获取集合类型属性的长度
+				int length = Array.getLength(propValue);
+				if (arrayIndex >= length && arrayIndex < this.autoGrowCollectionLimit) {
+					Class<?> componentType = propValue.getClass().getComponentType();
+					Object newArray = Array.newInstance(componentType, arrayIndex + 1);
+					System.arraycopy(propValue, 0, newArray, 0, length);
+					setPropertyValue(tokens.actualName, newArray);
+					//调用属性的getter方法，获取属性的值
+					propValue = getPropertyValue(tokens.actualName);
+				}
+				//将属性的值赋值给数组中的元素
+				Array.set(propValue, arrayIndex, convertedValue);
+			}
+			catch (IndexOutOfBoundsException ex) {
+				throw new InvalidPropertyException(getRootClass(), this.nestedPath + tokens.canonicalName,
+						"Invalid array index in property path '" + tokens.canonicalName + "'", ex);
+			}
+		}
+
+		//注入list类型的属性值
+		else if (propValue instanceof List) {
+			//获取list集合的类型
+			Class<?> requiredType = ph.getCollectionType(tokens.keys.length);
+			List<Object> list = (List<Object>) propValue;
+			//获取list集合的size
+			int index = Integer.parseInt(lastKey);
+			Object oldValue = null;
+			if (isExtractOldValueForEditor() && index < list.size()) {
+				oldValue = list.get(index);
+			}
+			//获取list解析后的属性值
+			Object convertedValue = convertIfNecessary(tokens.canonicalName, oldValue, pv.getValue(),
+					requiredType, ph.nested(tokens.keys.length));
+			int size = list.size();
+			//如果list的长度大于属性值的长度，则多余的元素赋值为null
+			if (index >= size && index < this.autoGrowCollectionLimit) {
+				for (int i = size; i < index; i++) {
+					try {
+						list.add(null);
+					}
+					catch (NullPointerException ex) {
+						throw new InvalidPropertyException(getRootClass(), this.nestedPath + tokens.canonicalName,
+								"Cannot set element with index " + index + " in List of size " +
+								size + ", accessed using property path '" + tokens.canonicalName +
+								"': List does not support filling up gaps with null elements");
+					}
+				}
+				list.add(convertedValue);
+			}
+			else {
+				try {
+					//将值添加到list中
+					list.set(index, convertedValue);
+				}
+				catch (IndexOutOfBoundsException ex) {
+					throw new InvalidPropertyException(getRootClass(), this.nestedPath + tokens.canonicalName,
+							"Invalid list index in property path '" + tokens.canonicalName + "'", ex);
+				}
+			}
+		}
+
+		//注入map类型的属性值
+		else if (propValue instanceof Map) {
+			//获取map集合key的类型
+			Class<?> mapKeyType = ph.getMapKeyType(tokens.keys.length);
+			//获取map集合value的类型
+			Class<?> mapValueType = ph.getMapValueType(tokens.keys.length);
+			Map<Object, Object> map = (Map<Object, Object>) propValue;
+			// IMPORTANT: Do not pass full property name in here - property editors
+			// must not kick in for map keys but rather only for map values.
+			TypeDescriptor typeDescriptor = TypeDescriptor.valueOf(mapKeyType);
+			//解析map类型属性key值
+			Object convertedMapKey = convertIfNecessary(null, null, lastKey, mapKeyType, typeDescriptor);
+			Object oldValue = null;
+			if (isExtractOldValueForEditor()) {
+				oldValue = map.get(convertedMapKey);
+			}
+			// Pass full property name and old value in here, since we want full
+			// conversion ability for map values.
+			//解析map类型属性value值
+			Object convertedMapValue = convertIfNecessary(tokens.canonicalName, oldValue, pv.getValue(),
+					mapValueType, ph.nested(tokens.keys.length));
+			//将解析后的key和value值赋值给map集合属性
+			map.put(convertedMapKey, convertedMapValue);
+		}
+
+		else {
+			throw new InvalidPropertyException(getRootClass(), this.nestedPath + tokens.canonicalName,
+					"Property referenced in indexed property path '" + tokens.canonicalName +
+					"' is neither an array nor a List nor a Map; returned value was [" + propValue + "]");
+		}
+	}
+private Object getPropertyHoldingValue(PropertyTokenHolder tokens) {
+		// Apply indexes and map keys: fetch value for all keys but the last one.
+		Assert.state(tokens.keys != null, "No token keys");
+		PropertyTokenHolder getterTokens = new PropertyTokenHolder(tokens.actualName);
+		getterTokens.canonicalName = tokens.canonicalName;
+		getterTokens.keys = new String[tokens.keys.length - 1];
+		System.arraycopy(tokens.keys, 0, getterTokens.keys, 0, tokens.keys.length - 1);
+
+		Object propValue;
+		try {
+			//获取属性值
+			propValue = getPropertyValue(getterTokens);
+		}
+		catch (NotReadablePropertyException ex) {
+			throw new NotWritablePropertyException(getRootClass(), this.nestedPath + tokens.canonicalName,
+					"Cannot access indexed value in property referenced " +
+					"in indexed property path '" + tokens.canonicalName + "'", ex);
+		}
+
+		if (propValue == null) {
+			// null map value case
+			if (isAutoGrowNestedPaths()) {
+				int lastKeyIndex = tokens.canonicalName.lastIndexOf('[');
+				getterTokens.canonicalName = tokens.canonicalName.substring(0, lastKeyIndex);
+				propValue = setDefaultValue(getterTokens);
+			}
+			else {
+				throw new NullValueInNestedPathException(getRootClass(), this.nestedPath + tokens.canonicalName,
+						"Cannot access indexed value in property referenced " +
+						"in indexed property path '" + tokens.canonicalName + "': returned null");
+			}
+		}
+		return propValue;
+	}
 ```
 
 通过对上面依赖注入代码的分析，已经明白类SpringIOC容器是如何将属性的值注入到Bean实例对象中去的：
 
 - 对于集合类型的属性，将其属性值解析为目标类型的集合后直接赋值给属性 
-- 对于非集合类型的属性，大量使用了JDK的反射和内省机制，通过属性的getter方法获取指定属性注入以前的值，同时调用属性的setter方法为属性设置诸如后的值。 至此Spring IOC 容器对Bean定义资源文件的定位，载入、解析和依赖注入已经全部分析完毕，现在SpringIOC容器中管理了一系列靠依赖关系联系起来的Bean，程序不需要应用自己手动创建所需的对象，Spring IOC 容器会在我们使用的时候自动为我们创建，并且为我们注入好相关的依赖，这就是Spring核心功能的控制反转和依赖注入的相关功能。
+- 对于非集合类型的属性，大量使用了JDK的反射机制，通过属性的getter方法获取指定属性注入以前的值，同时调用属性的setter方法为属性设置诸如后的值。 
+
+![image-20201116215224152](Spring IOC 依赖注入.assets/image-20201116215224152.png)
+
+至此Spring IOC 容器对Bean定义资源文件的定位，载入、解析和依赖注入已经全部分析完毕，现在SpringIOC容器中管理了一系列靠依赖关系联系起来的Bean，程序不需要应用自己手动创建所需的对象，Spring IOC 容器会在我们使用的时候自动为我们创建，并且为我们注入好相关的依赖，这就是Spring核心功能的控制反转和依赖注入的相关功能。
 
 真正的IOC容器：
 
