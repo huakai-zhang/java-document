@@ -552,6 +552,9 @@ public Object instantiate(RootBeanDefinition beanDefinition, String beanName, Be
 
 <font color=red>如果Bean定义中没有方法覆盖，则就不需要CGLIB父类类的方法。</font>
 
+那么是什么条件才会触发这个方法覆盖`MethodOverrides`呢？
+其实是Spring配置文件中的 `lookup-method` 和 `replace-method`，这其实是两个方法级别的注入，和一般的属性(Property)注入是不一样的，它们注入的是方法(Method)。
+
 instantiateWithMethodInjection方法调用了SimpleInstantiationStrategy的子类CglibSubclassingInstantiationStrategy使用CGLIB来进行初始化：
 
 ```java
