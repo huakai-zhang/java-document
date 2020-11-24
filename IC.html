@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>IC</title>
+</head>
+<body>
+<p>【toDeviceNo】：<div><input id="deviceNo" name="deviceNo" type="text" value="298b28cab730ba36"/></div>
+<p>【sign】：<div><input id="sign" name="sign" type="text" value="6977b9bfdea9698e0fa5377ec2548151"/></div>
+<p>【ic卡】：<div><input id="ic" name="ic" type="text" value="IC00"/></div>
+<p>【机关卡点】：<div><input id="position" name="position" type="text"/></div>
+<p>【执行器种类】：<div>
+    <input type="radio" name="sendType" value="001"/>打印机
+    <input type="radio" name="sendType" value="002"/>开关量机关
+    <input type="radio" name="sendType" value="003"/>触摸屏
+    <input type="radio" name="sendType" value="004" checked="checked"/>读卡器
+    <input type="radio" name="sendType" value="005"/>灯光
+    <input type="radio" name="sendType" value="006"/>音响
+    <input type="radio" name="sendType" value="007"/>发卡器
+</div>
+<p>【场地ID】：<div><input id="nenueId" name="nenueId" type="text" value="00001"/></div>
+<p>【version】：<div><input id="version" name="version" type="text" value="1093427437"/></div>
+<p>操作:<div><input type="button" onclick="openSocket()" value="开启socket"/></div>
+<p>【操作】：<div><input type="button" onclick="sendMessage()" value="发送消息"/></div>
+</br>
+凌肖：D_13(004, 排练房) -> P1P2P3 -> 酒吧AR -> A_14(004, 冰淇淋店) -> B_11(004, 当铺) -> 上下签AR -> 图书馆AR -> D_10(004, 游戏厅) -> G_16(004, 设计工坊) -> 3-3AR -> A_9(004, 市政大厅) -> B_14(004, 密室开门) -> B_17(002, 密室关门) -> 结局AR -> R_CUP(007, 通关码出现30秒机关重置) -> B_15(004, 暗门开门) -> B_16(002, 暗门关门)
+<br>
+<br>
+周棋洛：F_25(004, 画室) -> C_17(004, 便利店) -> G_16(004, 设计工坊) -> G_17(004, 阳光房) -> P1P2P3 -> E_24(004, 奶茶店) -> D_10(004, 游戏厅) -> C_23(004, 邮局？？？) -> 占卜屋AR -> 市政厅AR -> 邮局AR -> 游戏厅二维码 -> D_14(004, 蜗居) -> C_24(004, 游戏世界开门) -> C_7(004, 游戏世界关门) -> 结局AR -> R_GAMECENTER(007, 通关码出现30秒机关重置) -> C_25(004, 完成任务刷卡出门)
+<br>
+<br>
+白起：D_10(004, 游戏厅) -> E_16(004, 安全屋) -> 安全屋解密AR -> P1P2P3 -> C_17(004, 便利店) -> 空中花园AR -> A_9(004, 市政大厅) -> 市政大厅二维码 -> 咖啡厅AR -> C_30(004, 监管所) -> C_26(002, 监管所关门) -> 结局二维码 -> R_REGULATORY(007, 监控室复位) -> C_19(004, 破解出门) -> C_33(002, 关门)
+<br>
+<br>
+许墨：P1P2P3 -> F_35(004, 儿童教室, 延时1min) -> E_17(004, 礼品店) -> 占卜屋AR -> A_9(004, 市政大厅) -> 市政大厅二维码 -> F_27(004, 图书馆) -> 便利店AR -> C_20(004, 花店) -> G_15(004, 小花房) -> F_30(004, 镜屋开门) -> F_16(002, 镜屋关门) -> 结局二维码 -> R_MIRROR(007, 机关复位) -> F_31(004, 出门)
+<br>
+<br>
+李泽言：B_9(004, 法餐厅) -> P1P2P3 -> F_27(004, 图书馆) -> C_20(004, 花店) -> E_17(004, 礼品店) -> 法餐厅AR -> 市政厅AR -> D_15(004, 酒吧) -> 酒吧AR -> 画室AR -> 占卜屋AR -> 2min后 -> E_19(004, 时钟屋开门) -> E_22(002, 时钟屋关门) -> 结局AR -> R_CLOCK(007, 机关复位) -> E_26(004, 刷卡出门)
+</body>
+<script>
+    var socket;
+    function openSocket() {
+        if(typeof(WebSocket) == "undefined") {
+            console.log("您的浏览器不支持WebSocket");
+        }else{
+            console.log("您的浏览器支持WebSocket");
+            //实现化WebSocket对象，指定要连接的服务器地址与端口  建立连接
+            var deviceNo = document.getElementById('deviceNo').value;
+            var socketUrl="ws://113.31.103.180:9532/api/common/icSocket/"+deviceNo;
+            console.log(socketUrl);
+            if(socket!=null){
+                socket.close();
+                socket=null;
+            }
+            socket = new WebSocket(socketUrl);
+            //打开事件
+            socket.onopen = function() {
+                console.log("websocket已打开");
+                //socket.send("这是来自客户端的消息" + location.href + new Date());
+            };
+            //获得消息事件
+            socket.onmessage = function(msg) {
+                var serverMsg = "收到服务端信息：" + msg.data;
+                console.log(serverMsg);
+                //发现消息进入    开始处理前端触发逻辑
+            };
+            //关闭事件
+            socket.onclose = function() {
+                console.log("websocket已关闭");
+            };
+            //发生了错误事件
+            socket.onerror = function() {
+                console.log("websocket发生了错误");
+            }
+        }
+    }
+    function sendMessage() {
+        if(typeof(WebSocket) == "undefined") {
+            console.log("您的浏览器不支持WebSocket");
+        }else {
+            var radio = document.getElementsByName("sendType");
+            var sendType = '004';
+            for (let i=0; i<radio.length; i++) {
+                if (radio[i].checked) {
+                    sendType = radio[i].value;
+                }
+            }
+
+            var sign = document.getElementById('sign').value;
+            var ic = document.getElementById('ic').value;
+            var position = document.getElementById('position').value;
+            var nenueId = document.getElementById('nenueId').value;
+            var version = document.getElementById('version').value;
+            var msg;
+            if (sendType === '004') {
+                msg = '{"appId":"diezhi","sign":"'+ sign +'","content": {"data":{"value":"'+ ic +'"},"device":{"position":"'+ position +'","type":"'+ sendType +'"},"nenue_id":"'+ nenueId +'","time":"'+ dateFormat("YYYYmmddHHMMSS", new Date()) +'","version":"'+ version +'"}}';
+            } else if (sendType === '002') {
+                msg = '{"appId": "diezhi", "sign": "'+ sign +'", "content": {"version": "'+ version +'", "time": "'+ dateFormat("YYYYmmddHHMMSS", new Date()) +'", "nenue_id": "' + nenueId + '", "device": {"type": "'+ sendType +'", "position": "'+ position +'"}, "data": {"relay": "ON", "value": null}}}';
+            } else if (sendType === '007') {
+                msg = '{"appId": "diezhi", "sign": "'+ sign +'", "content": {"version": "'+ version +'", "time": "'+ dateFormat("YYYYmmddHHMMSS", new Date()) +'", "nenue_id": "' + nenueId + '", "device": {"type": "'+ sendType +'", "position": "'+ position +'"}, "data": {"value": "RESET_SUCCESS"}}}';
+            }
+            console.log(msg);
+            socket.send(msg);
+        }
+    }
+
+    function dateFormat(fmt, date) {
+        let ret;
+        const opt = {
+            "Y+": date.getFullYear().toString(),        // 年
+            "m+": (date.getMonth() + 1).toString(),     // 月
+            "d+": date.getDate().toString(),            // 日
+            "H+": date.getHours().toString(),           // 时
+            "M+": date.getMinutes().toString(),         // 分
+            "S+": date.getSeconds().toString()          // 秒
+            // 有其他格式化字符需求可以继续添加，必须转化成字符串
+        };
+        for (let k in opt) {
+            ret = new RegExp("(" + k + ")").exec(fmt);
+            if (ret) {
+                fmt = fmt.replace(ret[1], (ret[1].length == 1) ? (opt[k]) : (opt[k].padStart(ret[1].length, "0")))
+            };
+        };
+        return fmt;
+    }
+</script>
+</html>
