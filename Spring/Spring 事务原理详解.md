@@ -1,4 +1,4 @@
-# Spring 事务配置
+# 1 Spring 事务配置
 
 spring支持编程式事务管理和声明式事务管理两种方式：
 
@@ -9,7 +9,7 @@ spring支持编程式事务管理和声明式事务管理两种方式：
 
 声明式事务管理也有两种常用的方式，一种是基于 tx 和 aop 名字空间的xml配置文件，另一种就是基于@Transactional注解。显然基于注解的方式更简单易用更清爽。
 
-## 编程式事务管理
+## 1.1 编程式事务管理
 
 ```xml
 <!-- 配置业务层类 -->
@@ -88,7 +88,7 @@ public class SpringDemol1 {
 }
 ```
 
-## 声明式事务
+## 1.2 声明式事务
 
 ### 基于.xml文件的声明式事务配置
 
@@ -133,9 +133,9 @@ public class SpringDemol1 {
 
 虽然 @Transactional 注解可以作用于接口、接口方法、类以及类方法上，但是 Spring 建议不要在接口或者接口方法上使用该注解，因为这只有在使用基于接口的代理时它才会生效。另外， @Transactional 注解应该只被应用到 public 方法上，这是由 Spring AOP 的本质决定的。如果你在 protected、private 或者默认可见性的方法上使用 @Transactional 注解，这将被忽略，也不会抛出任何异常。
 
-# 事务原理详解
+# 2 事务原理详解
 
-## 什么是事务（Transaction）
+## 2.1 什么是事务（Transaction）
 
 事务（Transaction）是访问并可能更新数据库中各种数据项的一个程序执行单元（unit）。 
 
@@ -170,7 +170,7 @@ public class SpringDemol1 {
 >
 > 4、如果执行成功，真正的干掉原始表中的记录。返回影响行数
 
-## 事务的基本原理
+## 2.2 事务的基本原理
 
 
 Spring事务的本质其实就是数据库对事务的支持，没有数据库的事务支持，spring是无法提供事务功能的。对于纯JDBC操作数据库，想要用到事务，可以按照以下步骤进行：
@@ -187,7 +187,7 @@ Spring事务的本质其实就是数据库对事务的支持，没有数据库�
 2. spring在启动的时候会去解析生成相关的bean，这时候会查看拥有注解的类和方法，并且为这些类和方法生成代理，并根据@Transactional的相关参数进行相关配置注入，这样就在代理中为我们把相关的事务处理掉了（开启正常提交事务，异常回滚事务） 
 3. 真正的数据库层的事务提交和回滚是通过binlog或者redo log实现的
 
-## 事务管理器
+## 2.3 事务管理器
 
 Spring为不同的持久层框架提供了不同PlatformTransactionManager接口实现：
 
@@ -199,7 +199,7 @@ Spring为不同的持久层框架提供了不同PlatformTransactionManager接口
 | org.springframework.orm.jdo.JdoTransactionManager            | 当持久化机制是Jdo时使用                                     |
 | org.springframework.transaction.jta.JtaTransactionManager    | 使用一个JTA实现来管理事务，在一个事务跨越多个资源时必须使用 |
 
-## Spring 事务的传播属性
+## 2.4 Spring 事务的传播属性
 
 所谓Spring事务的传播属性，就是定义在存在多个事务同时存在的时候，Spring应该如何处理这些事务的行为。这些属性在``TransactionDefinition``中定义，具体常量的解释见下表：
 
@@ -213,7 +213,7 @@ Spring为不同的持久层框架提供了不同PlatformTransactionManager接口
 | NEVER         | 必须在一个没有的事务中执行,否则抛出异常                      |
 | NESTED        | 如果一个活动的事务存在，则运行在一个潜逃的事务中如果没有活动事务，则按REQUIRED属性执行。它使用了一个单独的事务，这个事务拥有多个可以回滚的保存点。内部事务的回滚不会对外部事务造成影响。它只对Dat aSourceTransactionManager事务管理器起效。 |
 
-## Spring 中的隔离级别
+## 2.5 Spring 中的隔离级别
 
 | 常量名称         | 常量解释                                                     |
 | ---------------- | ------------------------------------------------------------ |
@@ -223,7 +223,7 @@ Spring为不同的持久层框架提供了不同PlatformTransactionManager接口
 | REPEARABLE_READ  | 这种事务隔离级可以防止脏读，不可重复读，但是可能出现幻读     |
 | SERIALIZABLE     | 这是话费最高代价但是最可靠的事务隔离级别。事务被处理为顺序执行 |
 
-## 事务的嵌套
+## 2.6 事务的嵌套
 
 通过上面的理论知识的铺垫，我们大致知道了数据库事务和spring事务的一些属性和特点，接下来我们通过分析一些嵌套事务的场景，来深入理解spring事务传播的机制。
 
@@ -269,11 +269,11 @@ void methodA() {
 
 另外三种事务传播属性基本用不到，在此不做分析。
 
-## Spring 事务 API 架构图
+## 2.7 Spring 事务 API 架构图
 
 ![img](Spring 事务原理详解.assets/20200401132248973.png)
 
-## Spring 事务源码分析
+# 3 Spring 事务源码分析
 
 先看一看Spring事务是如何配置的，找到程序入口，通常情况下都是使用 xml 来配置Spring的声明式事务，先来分析`<tx:advice>…</tx:advice>`，tx是TransactionNameSpace，对应的是Hanler是TxNamespaceHandler（约定大于配置，Spring的默认套路），这个类一个init方法：
 

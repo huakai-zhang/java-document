@@ -1533,7 +1533,7 @@ private final Map<String, BeanDefinition> beanDefinitionMap = new ConcurrentHash
 
 # 4 基于 Annotation 的 IOC 初始化
 
-## Annotation 的前世今生
+## 4.1 Annotation 的前世今生
 
 从 Spring2.0 以后的版本中，Spring 也引入了基于注解(Annotation)方式的配置，注解(Annotation) 是 JDK1.5 中引入的一个新特性，用于简化 Bean 的配置，可以取代 XML 配置文件。开发人员对注解 (Annotation)的态度也是萝卜青菜各有所爱，个人认为注解可以大大简化配置，提高开发速度，但也给后期维护增加了难度。目前来说 XML 方式发展的相对成熟，方便于统一管理。
 
@@ -1543,7 +1543,7 @@ private final Map<String, BeanDefinition> beanDefinitionMap = new ConcurrentHash
 
 2. 类内部的注解：如@Autowire、@Value、@Resource 以及 EJB 和 WebService 相关的注解等， 都是添加在类内部的字段或者方法上的类内部注解，SpringIOC 容器通过 Bean 后置注解处理器解析 Bean 内部的注解。下面将根据这两种处理策略，分别分析 Spring 处理注解相关的源码。
 
-## 定位 Bean 扫描路径
+## 4.2 定位 Bean 扫描路径
 
 在 Spring 中管理注解 Bean 定义的容器有两个 ： AnnotationConfigApplicationContext 和 AnnotationConfigWebApplicationContex。这两个类是专门处理 Spring 注解方式配置的容器，直接依赖于注解作为容器配置信息来源的 IOC 容器。AnnotationConfigWebApplicationContext 是 AnnotationConfigApplicationContext 的 Web 版本，两者的用法以及对注解的处理方式几乎没有差别。现在我们以 AnnotationConfigApplicationContext 为例看看它的源码：
 
@@ -1616,7 +1616,7 @@ public class AnnotationConfigApplicationContext extends GenericApplicationContex
 
 2. 通过扫描指定的包及其子包下的所有类在初始化注解容器时指定要自动扫描的路径，如果容器创建以后向给定路径动态添加了注解 Bean，则需要手动调用容器扫描的方法，然后手动刷新容器，使得容器对所注册的 Bean 进行处理。 接下来，将会对两种处理方式详细分析其实现过程。
 
-## 读取 Annotation 元数据
+## 4.3 读取 Annotation 元数据
 
 当创建注解处理容器时，如果传入的初始参数是具体的注解 Bean 定义类时，注解容器读取并注册。 
 
@@ -1818,7 +1818,7 @@ static BeanDefinitionHolder applyScopedProxyMode(ScopeMetadata metadata, BeanDef
 
 BeanDefinitionReaderUtils 主要是校验 BeanDefinition 信息，然后将 Bean 添加到容器中一个管理 BeanDefinition 的 HashMap 中。
 
-## 扫描指定包并解析为 BeanDefinition
+## 4.4 扫描指定包并解析为 BeanDefinition
 
 当创建注解处理容器时，如果传入的初始参数是注解 Bean 定义类所在的包时，注解容器将扫描给定的 包及其子包，将扫描到的注解 Bean 定义载入并注册。 
 
@@ -2034,7 +2034,7 @@ public class ClassPathScanningCandidateComponentProvider implements EnvironmentC
 }
 ```
 
-## 注册注解 BeanDefinition
+## 4.5 注册注解 BeanDefinition
 
 AnnotationConfigWebApplicationContext 是 AnnotationConfigApplicationContext 的 Web 版， 它们对于注解 Bean 的注册和扫描是基本相同的，但是 AnnotationConfigWebApplicationContext 对注解 Bean 定义的载入稍有不同，AnnotationConfigWebApplicationContext 注入注解 Bean 定义源码如下：
 
@@ -2108,7 +2108,7 @@ protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) {
 }
 ```
 
-# 总结
+# 5 总结
 
 现在通过上面的代码，总结一下IOC容器初始化的基本步骤： 
 
@@ -2120,5 +2120,5 @@ protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) {
 
 在使用SpringIOC容器的时候我们还需要区别两个概念: 
 
-``BeanFactory和FactoryBean``,其中BeanFactory指的是I0C容器的编程抽象，比如ApplicationContext，XmlBeanFactory 等，这些都是IOC容器的具体表现，需要使用什么样的容器由客户决定,但Spring为我们提供了丰富的选择。FactoryBean 只是一个可以在IOC而容器中被管理的一个bean,是对各种处理过程和资源使用的抽象,FactoryBean在需要时产生另一个对象，而不返回FactoryBean本身,我们可以把它看成是一个抽象工厂，对它的调用返回的是工厂生产的产品。所有的FactoryBean都实现特殊的org. spr ingframework. beans. factory. FactoryBean接口，当使用容器中FactoryBean的时候，该容器不会返回FactoryBean本身,而是返回其生成的对象。Spring 包括了大部分的通用资源和服务访问抽象的FactoryBean的实现，其中包括:对JNDI查询的处理，对代理对象的处 理，对事务性代理的处理，对RMI代理的处理等，这些我们都可以看成是具体的工厂,看成是Spring为我们建立好的工厂。也就是说Spring通过使用抽象工厂模式为我们准备了一系列工厂来生产一些特定的对象,免除我们手工重复的工作，我们要使用时只需要在IOC容器里配置好就能很方便的使用了
+``BeanFactory和FactoryBean``,其中BeanFactory指的是IoC容器的编程抽象，比如ApplicationContext，XmlBeanFactory 等，这些都是IOC容器的具体表现，需要使用什么样的容器由客户决定,但Spring为我们提供了丰富的选择。FactoryBean 只是一个可以在IOC而容器中被管理的一个bean,是对各种处理过程和资源使用的抽象,FactoryBean在需要时产生另一个对象，而不返回FactoryBean本身,我们可以把它看成是一个抽象工厂，对它的调用返回的是工厂生产的产品。所有的FactoryBean都实现特殊的org. spr ingframework. beans. factory. FactoryBean接口，当使用容器中FactoryBean的时候，该容器不会返回FactoryBean本身,而是返回其生成的对象。Spring 包括了大部分的通用资源和服务访问抽象的FactoryBean的实现，其中包括:对JNDI查询的处理，对代理对象的处 理，对事务性代理的处理，对RMI代理的处理等，这些我们都可以看成是具体的工厂,看成是Spring为我们建立好的工厂。也就是说Spring通过使用抽象工厂模式为我们准备了一系列工厂来生产一些特定的对象,免除我们手工重复的工作，我们要使用时只需要在IOC容器里配置好就能很方便的使用了
 

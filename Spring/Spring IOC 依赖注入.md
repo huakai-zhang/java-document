@@ -1,6 +1,6 @@
-# Spring 自动装配之依赖注入
+# 1 Spring 自动装配之依赖注入
 
-## 依赖注入发生的时间
+## 1.1 依赖注入发生的时间
 
 当Spring IOC容器完成了Bean资源的定位，载入和解析注册之后，IOC容器中已经管理类Bean定义的相关数据，但是此时IOC容器还没有对所管理的Bean进行依赖注入，依赖注入发生在以下两种情况发生：
 
@@ -19,7 +19,7 @@ BeanFactory接口定义了Spring IOC容器的基本功能规范，是Spring IOC�
 
 在BeanFactory中看到getBean函数，它的具体实现在AbstracBeanFactory中。
 
-## 寻找获取 Bean 的入口
+## 1.2 寻找获取 Bean 的入口
 
 AbstractBeanFactory的getBean相关方法源码如下：
 
@@ -242,7 +242,7 @@ protected <T> T doGetBean(
 
 上面源码只是定义了根据Bean定义的模式，采取的不同创建Bean实例对象的策略，具体的Bean实现对象的创建过程由实现了ObjectFactory接口的匿名内部类的createBean方法完成，ObjectFactory使用委派模式，具体的Bean实例创建过程交由其实现类AbstractAutowireCapableBeanFactory完成，继续分析AbstractAutowireCapableBeanFactory的createBean方法的源码，理解其创建Bean实例的具体实现。
 
-## 开始实例化
+## 1.3 开始实例化
 
 AbstractAutowireCapableBeanFactory类实现了ObjectFactory接口，创建容器指定的Bean实例对象，同时还对创建的Bean实例对象进行初始化处理。其创建Bean实例对象的方法源码：
 
@@ -407,7 +407,7 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
 - createBeanInstance：生成 Bean 所包含的 Java 对象实例 
 - populateBean：对 Bean 属性的依赖注入进行处理
 
-## 选择 Bean 实例化策略
+## 1.4 选择 Bean 实例化策略
 
 在 createBeanInstance 方法中，根据指定的初始化策略，使用静态工厂，工厂方法或容器的自动装配特性生成java实例对象，创建对象的源码如下：
 
@@ -497,7 +497,7 @@ protected BeanWrapper instantiateBean(final String beanName, final RootBeanDefin
 
 经过对上面的代码分析，可以看出对使用工厂方法和自动装配特性的Bean的实例化相当清楚，调用相应的工厂方法或参数匹配的构造方法即可完成实例化对象的工作，但是对于最常使用的默认无参构造方法就需要使用相应的初始化策略(JDK的反射机制或者CGLib)来初始化，在方法getInstantiationStrategy().instantiate中就具体实现类使用初始策略实例化对象。
 
-## 执行 Bean 实例化
+## 1.5 执行 Bean 实例化
 
 在使用默认的无参构造方法创建Bean的实例化对象时，方法getInstantiationStratrgy().instantiate调用了SimpleInstantiationStrategy类中的实例化Bean的方法：
 
@@ -582,7 +582,7 @@ CGLIB是一个常用的字节码生成器的类库，它提供了一系列API实
 
 JDK的动态代理只能针对接口，如果一个类没有实现任何接口，要对其进行动态代理只能使用CGLIB。
 
-## 准备依赖注入
+## 1.6 准备依赖注入
 
 Bean的依赖注入分为两个过程：
 
@@ -801,7 +801,7 @@ protected void applyPropertyValues(String beanName, BeanDefinition mbd, BeanWrap
 
 对属性值的解析是在BeanDefinitionValueResolver类中的resolveValueIfNecessary方法中进行的，对属性值的依赖注入是通过bw.setPropertyValues方法实现的，在分析属性值的依赖注入之前，先分析一下对属性值的解析过程。
 
-## 解析属性注入规则
+## 1.7 解析属性注入规则
 
 当容器在对属性进行依赖注入时，如果发现属性值需要进行类型转换，如属性值是容器中另一个Bean实例对象的引用，则容器首先需要根据属性值解析出来所引用的对象，然后才能将该引用对象注入到目标实例对象的属性上去，对属性进行解析的由resolveValueIfNecessary方法实现：
 
@@ -1009,7 +1009,7 @@ private Map resolveManagedMap(Object argName, Map<?, ?> mm) {
 
 通过上述代码分析，可以明白Spring是如何将引用类型，内部类以及集合类型等属性进行解析的，属性值解析完成后就可以进行依赖注入了，依赖注入的过程就是Bean对象实例设置到它所依赖的Bean对象属性上去，在BeanDefinitionValueResolver解析属性值中已经说过，依赖注入是通过bw.setPropertyValues方法实现的，该方法也使用了委派模式，在BeanWrapper接口在至少定义了方法生命，依赖注入的具体实现交由其实现类BeanwrapperImpl来完成。
 
-## 注入赋值
+## 1.8 注入赋值
 
 BeanWrapperImpl类主要是对容器中完成初始化的Bean实例对象进行属性的依赖注入，即把Bean对象设置到它所依赖的另一个Bean的属性中去。然而，BeanWrapperImpl 中的注入方法实际上由 AbstractNestablePropertyAccessor 来实现的，其相关源码如下： 
 

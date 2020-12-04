@@ -1,4 +1,4 @@
-## MVC本质
+## 1 MVC本质
 
 
 MVC的核心思想是业务数据抽取业务数据呈现相分离 MVC，Model-View-Controller
@@ -9,9 +9,9 @@ MVC的核心思想是业务数据抽取业务数据呈现相分离 MVC，Model-V
 
 >区别于，三层机构，Dao数据访问层，Service业务处理层，Web层（J2EE的内容，Request和Response）
 
-## Spring MVC 基本概念
+## 2 Spring MVC 基本概念
 
-### Spring MVC 请求处理流程
+### 2.1 Spring MVC 请求处理流程
 
 引用 Spring in Action 上的一张图来说明了 SpringMVC 的核心组件和请求处理流程：  ![img](Spring MVC 设计原理.assets/20200401103111107.png) 
 
@@ -23,7 +23,7 @@ MVC的核心思想是业务数据抽取业务数据呈现相分离 MVC，Model-V
 
 (4) (5) (6)视图解析器解析ModelAndView对象返回对应的视图给客户端
 
-### Spring MVC 工作机制
+### 2.2 Spring MVC 工作机制
 
 在容器初始化时会建立所有url和controller的对应关系，保存到Map<url, controller>中。Tomcat启动时会通知Spring初始化容器（加载bean的定义信息和初始化所有单例bean，然后springmvc会遍历容器中的bean），获取每一个controller中的方法访问的url，然后将url和controller保存到一个Map中； 这样就可以根据request快速定位到controller，因为最终处理request的是controller中的方法，Map中只保留了url和controller中的对应关系，所以要根据request的url进一步确认controller中的method。
 
@@ -34,7 +34,7 @@ springmvc提供了两种request参数与方法形参的绑定方法：
 1. `通过注解进行绑定@RequestParam` 使用注解进行绑定，我们只要在方法参数前面声明@RequestParam(“name”)，就可以将request中参数 name 的值绑定到方法的该参数上。RequestParam，自动调用request的getParament方法，而且能够自动转型，getParament获得是字符转（自动转为其他类型） 
 2. `通过参数名称进行绑定` 使用参数名称进行绑定的前提是必须要获取方法中参数的名称，Java反射只提供了获取方法的参数的类型，并没有提供获取参数名称的方法。springmvc解决这个问题的方法是用asm框架读取字节码文件，来获取方法的参数名称。asm框架是一个字节码操作框架，关于asm更多介绍可以参考它的官网。个人建议，使用注解来完成参数绑定，这样就可以省去asm框架的读取字节码的操作。
 
-## Spring MVC 源码分析
+## 3 Spring MVC 源码分析
 
 
 根据工作机制中三部分来分析springmvc的源代码：
@@ -43,7 +43,7 @@ springmvc提供了两种request参数与方法形参的绑定方法：
 - 根据请求url找到对应的controller,并从controller中找到处理请求的方法 
 - request参数绑定到方法的形参,执行方法处理请求,并返回结果视图
 
-### 初始化阶段
+### 3.1 初始化阶段
 
 根据 DispatcherServlet 的继承关系可知，``DispatcherServlet  -> FrameworkServlet -> HttpServletBean -> javax.servlet.http.HttpServlet``，其接口 HttpServlet 的 init() 方法最终由 HttpServletBean 实现。
 
@@ -232,7 +232,7 @@ protected String[] determineUrlsForHandler(String beanName) {
 
 到这里HandlerMapping组件就已经建立所有url和controller的对应关系。
 
-### 调用阶段
+### 3.2 调用阶段
 
 #### 根据访问url找到对应controller中处理请求的方法
 
@@ -567,7 +567,7 @@ protected View resolveViewName(String viewName, @Nullable Map<String, Object> mo
 
 ![1603261325042](Spring MVC 设计原理.assets/1603261325042.png)
 
-## Spring MVC 使用优化建议
+## 4 Spring MVC 使用优化建议
 
 上面我们已经对 SpringMVC 的工作原理和源码进行了分析，在这个过程发现了几个优化点: 
 

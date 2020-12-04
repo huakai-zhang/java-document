@@ -589,11 +589,22 @@ insert into tbl_emp
 
 `foreach` 需要遍历集合的时候
 
+```xml
+<delete id="deleteByList" parameterType="java.util.List">
+	delete from tbl_emp where emp_id in
+	<foreach collection="list" item="item" open="(" separator="," close=")">
+		#{item.empId,jdbcType=VARCHAR}
+	</foreach>
+</delete>
+```
+
+动态 SQL 主要是用来解决 SQL 语句生成的问题。
+
 ## 3.2 批量操作
 
-我们在生产的项目中会有一些批量操作的场景，比如导入文件批量处理数据的情况 （批量新增商户、批量修改商户信息），当数据量非常大，比如超过几万条的时候，在 Java 代码中循环发送 SQL 到数据库执行肯定是不现实的，因为这个意味着要跟数据库创 建几万次会话，即使我们使用了数据库连接池技术，对于数据库服务器来说也是不堪重 负的。 
+我们在生产的项目中会有一些批量操作的场景，比如导入文件批量处理数据的情况 （批量新增商户、批量修改商户信息），当数据量非常大，比如超过几万条的时候，在 Java 代码中循环发送 SQL 到数据库执行肯定是不现实的，因为这个意味着要跟数据库创 建几万次会话，即使我们使用了数据库连接池技术，对于数据库服务器来说也是不堪重负的。 
 
-在 MyBatis 里面是支持批量的操作的，包括批量的插入、更新、删除。我们可以直 接传入一个 List、Set、Map 或者数组，配合动态 SQL 的标签，MyBatis 会自动帮我们 生成语法正确的 SQL 语句。 
+在 MyBatis 里面是支持批量的操作的，包括批量的插入、更新、删除。我们可以直 接传入一个 List、Set、Map 或者数组，配合动态 SQL 的标签，MyBatis 会自动帮我们生成语法正确的 SQL 语句。 
 
 比如我们来看两个例子，批量插入和批量更新
 
@@ -627,21 +638,18 @@ Java 代码里面，直接传入一个 List 类型的参数。
 
 ```sql
 update tbl_emp set
-emp_name =
-case emp_id
-when ? then ?
-when ? then ?
-when ? then ? end ,
-gender =
-case emp_id
-when ? then ?
-when ? then ?
-when ? then ? end ,
-email =
-case emp_id
-when ? then ?
-when ? then ?
-when ? then ? end
+	emp_name = case emp_id
+		when ? then ?
+		when ? then ?
+		when ? then ? end ,
+	gender = case emp_id
+		when ? then ?
+		when ? then ?
+		when ? then ? end ,
+	email = case emp_id
+		when ? then ?
+		when ? then ?
+		when ? then ? end
 where emp_id in ( ? , ? , ? )
 ```
 
@@ -652,22 +660,22 @@ where emp_id in ( ? , ? , ? )
 ```xml
 <update id="updateBatch">
 update tbl_emp set
-emp_name =
-<foreach collection="list" item="emps" index="index" separator=" " open="case emp_id" close="end">
-when #{emps.empId} then #{emps.empName}
-</foreach>
-,gender =
-<foreach collection="list" item="emps" index="index" separator=" " open="case emp_id" close="end">
-when #{emps.empId} then #{emps.gender}
-</foreach>
-,email =
-<foreach collection="list" item="emps" index="index" separator=" " open="case emp_id" close="end">
-when #{emps.empId} then #{emps.email}
-</foreach>
+	emp_name =
+		<foreach collection="list" item="emps" index="index" separator=" " open="case emp_id" close="end">
+			when #{emps.empId} then #{emps.empName}
+		</foreach>
+	,gender =
+		<foreach collection="list" item="emps" index="index" separator=" " open="case emp_id" close="end">
+			when #{emps.empId} then #{emps.gender}
+		</foreach>
+	,email =
+	<foreach collection="list" item="emps" index="index" separator=" " open="case emp_id" close="end">
+		when #{emps.empId} then #{emps.email}
+	</foreach>
 where emp_id in
-<foreach collection="list" item="emps" index="index" separator="," open="("close=")">
-#{emps.empId}
-</foreach>
+	<foreach collection="list" item="emps" index="index" separator="," open="("close=")">
+		#{emps.empId}
+	</foreach>
 </update>
 ```
 
@@ -697,7 +705,9 @@ BatchExecutor 底层是对 JDBC ps.addBatch()的封装，原理是攒一批 SQL 
 
 ## 3.3 嵌套（关联）查询
 
-### 两种 result resultType vs resultMap
+### 两种 result 
+
+**resultType vs resultMap**
 
 MyBatis中在查询进行select映射的时候，返回类型可以用resultType，也可以用resultMap，resultType是直接表示返回类型的(对应着我们的model对象中的实体)，而resultMap则是对外部ResultMap的引用(提前定义了db和model之间的隐射key–&gt;value关系)，但是resultType跟resultMap不能同时存在。 在MyBatis进行查询映射时，其实查询出来的每一个属性都是放在一个对应的Map里面的，其中键是属性名，值则是其对应的值。
 
@@ -813,9 +823,13 @@ JDBC Connection [com.alibaba.druid.proxy.jdbc.ConnectionProxyImpl@3e7634b9] will
 <==      Total: 2
 ```
 
-## 3.4 Generator
+<font color=red>collection 和 association 的区别？？？</font>
 
-### 引入 plugin
+## 3.4 MGB
+
+MyBatis 提供了逆向工程，叫做 `MyBatis Generator`，简称 `MBG`。我们只 需要修改一个配置文件，使用相关的 jar 包命令或者 Java 代码就可以帮助我们生成实体 类、映射器和接口文件。
+
+引入 plugin：
 
 ```xml
 <build>
@@ -840,7 +854,7 @@ JDBC Connection [com.alibaba.druid.proxy.jdbc.ConnectionProxyImpl@3e7634b9] will
 </build>
 ```
 
-### generatorConfig.xml
+generatorConfig.xml：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -899,16 +913,17 @@ JDBC Connection [com.alibaba.druid.proxy.jdbc.ConnectionProxyImpl@3e7634b9] will
 </generatorConfiguration>
 ```
 
-### 执行 mybatis-generator:generate
-
+执行 mybatis-generator:generate：
 
 ![img](https://img-blog.csdnimg.cn/20200402203914122.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70#pic_center)
 
+<font color=red>Example？？？</font>
+
 ## 3.5 分页
 
-在写存储过程的年代，翻页也是一件很难调试的事情，我们要实现数据不多不少准 确地返回，需要大量的调试和修改。但是如果自己手写过分页，就能清楚分页的原理。 
+在写存储过程的年代，分页也是一件很难调试的事情，我们要实现数据不多不少准确地返回，需要大量的调试和修改。但是如果自己手写过分页，就能清楚分页的原理。 
 
-在我们查询数据库的操作中，有两种翻页方式，一种是`逻辑翻页（假分页）`，一种是`物理翻页（真分页）`。逻辑翻页的原理是把所有数据查出来，在内存中删选数据。 物理翻页是真正的翻页，比如 MySQL 使用 limit 语句，Oracle 使用 rownum 语句，SQL Server 使用 top 语句。
+在我们查询数据库的操作中，有两种分页方式，一种是`逻辑分页（假分页）`，一种是`物理分页（真分页）`。逻辑分页的原理是把所有数据查出来，在内存中删选数据。 物理分页是真正的分页，比如 MySQL 使用 limit 语句，Oracle 使用 rownum 语句，SQL Server 使用 top 语句。
 
 ### 逻辑分页
 
@@ -930,15 +945,15 @@ private void skipRows(ResultSet rs, RowBounds rowBounds) throws SQLException {
 
 ### 物理分页
 
-物理翻页是真正的翻页，它是通过数据库支持的语句来翻页。
+物理分页是真正的分页，它是通过数据库支持的语句来分页。
 
-第一种简单的办法就是传入参数（或者包装一个 page 对象），在 SQL 语句中翻页。
+第一种简单的办法就是传入参数（或者包装一个 page 对象），在 SQL 语句中分页（limit 0 10）。
 
-第一个问题是我们要在 Java 代码里面去计算起止序号；第二个问题是：每个需要翻页的 Statement 都要编写 limit 语句，会造成 Mapper 映射器里面很多代码冗余。 
+第一个问题是我们要在 Java 代码里面去计算起止序号；第二个问题是每个需要分页的 Statement 都要编写 limit 语句，会造成 Mapper 映射器里面很多代码冗余。 
 
-那我们就需要一种通用的方式，不需要去修改配置的任何一条 SQL 语句，只要在我 们需要翻页的地方封装一下翻页对象就可以了。 
+那我们就需要一种通用的方式，不需要去修改配置的任何一条 SQL 语句，只要在我们需要分页的地方封装一下分页对象就可以了。 
 
-我们最常用的做法就是使用翻页的插件，这个是基于 MyBatis 的拦截器实现的，比 如 PageHelper。
+我们最常用的做法就是使用页的插件，这个是基于 MyBatis 的拦截器实现的，比 如 PageHelper。
 
 #### 分页插件
 
@@ -975,7 +990,27 @@ public void test() {
 
 PageHelper 是通过 MyBatis 的拦截器实现的，插件的具体原理后面再分析。简单地来说，它会根据 PageHelper 的参数，改写我们的 SQL 语句。比如 MySQL 会生成 limit 语句，Oracle 会生成 rownum 语句，SQL Server 会生成 top 语句。
 
-## 3.6 Spring-MyBatis
+## 3.6 通用 Mapper
+
+
+
+## 3.7 MyBatis-Plus
+
+https://mybatis.plus/guide 
+
+MyBatis-Plus 是原生 MyBatis 的一个增强工具，可以在使用原生 MyBatis 的所有 功能的基础上，使用 plus 特有的功能。 
+
+MyBatis-Plus 的核心功能： 
+
+* `通用 CRUD` 定义好 Mapper 接口后，只需要继承 BaseMapper 接口即可获得通用的增删改查功能，无需编写任何接口方法与配置文件。 
+
+* `条件构造器` 通过 EntityWrapper（实体包装类），可以用于拼接 SQL 语 句，并且支持排序、分组查询等复杂的 SQL。 
+
+* `代码生成器` 支持一系列的策略配置与全局配置，比 MyBatis 的代码生成更好用。 
+
+另外 MyBatis-Plus 也有分页的功能。
+
+## 3.8 Spring-MyBatis
 
 ### 数据库连接池
 
@@ -1121,3 +1156,6 @@ public interface UserMapper {
     List<User> selectAllByAnnotation();
 }
 ```
+
+------
+

@@ -1,10 +1,10 @@
-# Spring AOP
+# 1 Spring AOP
 
-## Spring AOP 应用场景
+## 1.1 Spring AOP 应用场景
 
 AOP是OOP的延续，是Aspect Oriented Programming的缩写，意思是面向切面编程。可以通过预编译方式和运行期动态代理实现在不修改源代码的情况下给程序动态统一添加功能的一种技术。AOP实际是GoF设计模式的延续，设计模式孜孜不倦追求的是调用者和被调用者之间的解耦，AOP可以说也是这种目标的一种实现。 现在做的一些非业务，如：日志、事务、安全等都会写在业务代码中(也即是说，这些非业务类横切于业务类)，但这些代码往往是重复，复制——粘贴式的代码会给程序的维护带来不便，AOP就实现了把这些业务需求与系统需求分开来做。这种解决的方式也称代理机制。AOP的核心构造是切面，它将那些影响多个类的行为(有一定的规则，可以单独把一定规律的规则单独分离出来)封装到可重用的模块中。
 
-## AOP 中必须明白的几个概念
+## 1.2 AOP 中必须明白的几个概念
 
 ### 切面(Aspect)
 
@@ -42,11 +42,11 @@ AOP是OOP的延续，是Aspect Oriented Programming的缩写，意思是面向�
 
 `抛出异常后通知(After throwing advice)` 在方法抛出异常退出时执行的通知。ApplicationContext中在`<aop:aspect>`里面使用`<aop:after-throwing>`元素进行声明。例如，ServiceAspect 中的returnThrow方法。 注:可以将多个通知应用到一个目标对象上，即可以将多个切面织入到同一目标对象。
 
-# Spring AOP 的两种方式
+# 2 Spring AOP 的两种方式
 
 使用 Spring AOP 可以基于两种方式，一种是比较方便和强大的注解方式，另一种则是中规中矩的 xml 配置方式。
 
-## 注解
+## 2.1 注解
 
 使用注解配置SpringAOP总体分为两步，第一步是在xml文件中声明激活自动扫描组件功能，同时激活自动代理功能（来测试AOP的注解功能）：
 
@@ -148,7 +148,7 @@ public class MemberManagerServiceTest {
 
 可以看到，虽然并没有对MemberService类包括其调用方式做任何改变，但是 Spring 仍然拦截到了其中方法的调用。
 
-## XML配置方式
+## 2.2 XML配置方式
 
 ```xml
 <beans xmlns="http://www.springframework.org/schema/beans"
@@ -229,7 +229,7 @@ public class MemberManagerService {
 }
 ```
 
-## 切入点表达式的配置规则
+## 2.3 切入点表达式的配置规则
 
 应该说学习 Spring AOP 有两个难点，第一点在于理解 AOP 的理念和相关概念，第二点在于灵活掌握 和使用切入点表达式。概念的理解通常不在一朝一夕，慢慢浸泡的时间长了，自然就明白了，下面我们简单地介绍一下切入点表达式的配置规则吧。 
 
@@ -248,7 +248,7 @@ execution(modifiers-pattern? ret-type-pattern declaring-type-pattern? name-patte
 
 其中，除 ret-type-pattern 和 name-pattern 之外，其他都是可选的。上例中，execution(* com.spring.aop.service…*(…))表示 com.spring.aop.service 包下，返回值为任意类型；方法名任意；参数不作限制的所有方法。
 
-## 通知参数
+## 2.4 通知参数
 
 可以通过args来绑定参数，这样就可以在通知（Advice）中访问具体参数了。例如，`<aop:aspect>`配置如下：
 
@@ -263,17 +263,17 @@ execution(modifiers-pattern? ret-type-pattern declaring-type-pattern? name-patte
 
 上面的代码args(msg,…)是指将切入点方法上的第一个String类型参数添加到参数名为msg的通知的入参上，这样就可以直接使用该参数啦。
 
-## 访问当前的连接点
+## 2.5 访问当前的连接点
 
 在上面的Aspect切面Bean中已经看到了，每个通知方法第一个参数都是JoinPoint。其实，在Spring中，任何通知（Advice）方法都可以将第一个参数定义为org.aspectj.lang.JoinPoint类型用以接受当前连接点对象。JoinPoint接口提供了一系列有用的方法，比如getArgs()（返回方法参数）、getThis()（返回代理对象）、getTarget()（返回目标）、getSignature()（返回正在被通知的方法相关信息）和toString()（打印出正在被通知的方法的有用信息）。
 
-# Spring 源码分析
+# 3 Spring 源码分析
 
-## Spring 中主要的 AOP 组件
+## 3.1 Spring 中主要的 AOP 组件
 
 ![img](Spring AOP 设计原理.assets/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70.png)
 
-## 寻找入口
+## 3.2 寻找入口
 
 Spring 的 AOP 是通过接入 BeanPostProcessor 后置处理器开始的，它是 Spring IOC 容器经常使用到的一个特性，这个 Bean 后置处理器是一个监听器，可以监听容器触发的 Bean 声明周期事件。后置处理器向容器注册以后，容器中管理的 Bean 就具备了接收 IOC 容器事件回调的能力。 
 
@@ -413,7 +413,7 @@ public Object applyBeanPostProcessorsAfterInitialization(Object existingBean, St
 
 BeanPostProcessor 是一个接口，其初始化前的操作方法和初始化后的操作方法均委托其实现子类来实现，在 Spring 中，BeanPostProcessor 的实现子类非常的多，分别完成不同的操作，如：AOP 面向切面编程的注册通知适配器、Bean 对象的数据校验、Bean 继承属性、方法的合并等等，我们以最简单的 AOP 切面织入来简单了解其主要的功能。下面我们来分析其中一个创建 AOP 代理对象的子类 AbstractAutoProxyCreator 类。该类重写了 postProcessAfterInitialization()方法。
 
-## 选择代理策略
+## 3.3 选择代理策略
 
 进入 postProcessAfterInitialization()方法，我们发现调到了一个非常核心的方法 wrapIfNecessary()， 其源码如下： 
 
@@ -509,7 +509,7 @@ public class DefaultAopProxyFactory implements AopProxyFactory, Serializable {
 }
 ```
 
-## 调用代理方法
+## 3.4 调用代理方法
 
 分析调用逻辑之前先上类图，看看 Spring 中主要的 AOP 组件： 
 
@@ -797,7 +797,7 @@ Spring AOP 源码就分析到这儿，相信小伙伴们应该有了基本思路
 
 ![image-20201121175033578](Spring AOP 设计原理.assets/image-20201121175033578.png)
 
-## 触发通知
+## 3.5 触发通知
 
 在为 AopProxy 代理对象配置拦截器的实现中，有一个取得拦截器的配置过程，这个过程是由 DefaultAdvisorChainFactory 实现的，这个工厂类负责生成拦截器链，在它的 getInterceptorsAndDynamicInterceptionAdvice 方法中，有一个适配器和注册过程，通过配置 Spring 预先设计好的拦截器，Spring 加入了它对 AOP 实现的处理。
 
