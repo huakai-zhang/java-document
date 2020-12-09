@@ -26,7 +26,7 @@
 
 为了规避关系型数据库的一系列问题，我们就有了非关系型的数据库。
 
-`NoSQL（non-relational 或者 Not Only SQL）` 指的是非关系型的数据库，是对不同于传统的关系 型数据库的数据库管理系统的统称。NoSQL 用于超大规模数据的存储。（例如谷歌或 Facebook 每天为他们的用户收集万亿比特的数据）。这些类型的数据存储不需要固定的模式，无需多余操作就可以横向扩展。 
+`NoSQL（non-relational 或者 Not Only SQL）` 指的是非关系型的数据库，是对不同于传统的关系型数据库的数据库管理系统的统称。NoSQL 用于超大规模数据的存储。（例如谷歌或 Facebook 每天为他们的用户收集万亿比特的数据）。这些类型的数据存储不需要固定的模式，无需多余操作就可以横向扩展。 
 
 非关系型数据库的特点：
 
@@ -292,7 +292,7 @@ typedef struct dictEntry {
 
 key 是字符串，但是 Redis 没有直接使用 C 的字符数组，而是存储在自定义的 SDS 中。
 
-value 既不是直接作为字符串存储，也不是直接存储在 SDS 中，而是存储在 redisObject 中。实际上五种常用的数据类型的任何一种，都是通过 redisObject 来存储 的。
+value 既不是直接作为字符串存储，也不是直接存储在 SDS 中，而是存储在 redisObject 中。实际上五种常用的数据类型的任何一种，都是通过 redisObject 来存储的。
 
 **redisObject**
 
@@ -321,7 +321,7 @@ typedef struct redisObject {
 OK
 127.0.0.1:6379> set qs "My name is spring,i'm a java development enginner.I'm 25 years old."
 OK
-127.0.0.1:6379> set jack bighead
+127.0.0.1:6379> set jack "bighead"
 OK
 127.0.0.1:6379> object encoding number
 "int"
@@ -353,7 +353,7 @@ struct __attribute__ ((__packed__)) sdshdr8 {
 
 3. C 字符串长度的变更会对字符数组做内存重分配。 
 
-4. 通过从字符串开始到结尾碰到的第一个'\0'来标记字符串的结束，因此不能保 存图片、音频、视频、压缩文件等二进制(bytes)保存的内容，二进制不安全。 
+4. 通过从字符串开始到结尾碰到的第一个'\0'来标记字符串的结束，因此不能保存图片、音频、视频、压缩文件等二进制(bytes)保存的内容，二进制不安全。 
 
 SDS 的特点：
 
@@ -454,7 +454,7 @@ STRING 类型
 例如：分布式 Session
 
 **分布式锁**
-STRING 类型 setnx 方法，只有不存在时才能添加成功，返回 true。
+STRING 类型，setnx 方法，只有不存在时才能添加成功，返回 true。
 
 ```java
 public Boolean getLock(Object lockObject){
@@ -869,7 +869,7 @@ Redis 用 intset 或 hashtable 存储 set。如果元素都是整数类型，就
 
 问题：KV 怎么存储 set 的元素？key 就是元素的值，value 为 null。 
 
-如果整数类型 intset 元素个数超过 512 个，也会用 hashtable 存储。
+<font color=red>如果整数类型 intset 元素个数超过 512 个，也会用 hashtable 存储。</font>
 
 ```yml
 # 配置文件 redis.conf

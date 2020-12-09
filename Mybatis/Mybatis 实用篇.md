@@ -127,6 +127,16 @@ return jdbcTemplate.query(sql,new BaseRowMapper(Employee.class));
 
 ORM 的全拼是 ``Object Relational Mapping``，也就是对象与关系的映射，对象是程序里面的对象，关系是它与数据库里面的数据的关系。也就是说，ORM 框架帮助我们解决的问题是程序对象和关系型数据库的相互映射的问题。
 
+现在市面上 ORM 框架也非常之多， 有大家所熟知的 Hibernate、Spring JDBC、MyBatis、JPA 等。
+
+我在这里做一个简单的总结，如下： 
+
+`Hibernate 全自动(档)` 不需要写一句 SQL 
+
+`MyBatis 半自动(档) 手自一体` 支持简单的映射，复杂关系需要自己写 SQL 
+
+`Spring JDBC 纯手动(档)` 所有的 SQL 都要自己，它帮我们设计了一套标准流程
+
 ## 1.3 Mybatis
 
 > What is MyBatis? MyBatis is a first class persistence framework with support for custom SQL, stored procedures and advanced mappings. MyBatis eliminates almost all of the JDBC code and manual setting of parameters and retrieval of results. MyBatis can use simple XML or Annotations for configuration and map primitives, Map interfaces and Java POJOs (Plain Old Java Objects) to database records.
