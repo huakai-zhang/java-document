@@ -1020,11 +1020,33 @@ MyBatis-Plus 的核心功能：
 
 另外 MyBatis-Plus 也有分页的功能。
 
-## 3.8 Spring-MyBatis
+# 4 Spring-MyBatis
 
-### 数据库连接池
+大部分时候我们不会在项目中单独使用 MyBatis 的工程，而是集成到 Spring 里面使用，但是却没有看到这三个对象在代码里面的出现。我们直接注入了一个 Mapper 接口， 调用它的方法。 
 
-db.properties:
+所以有几个关键的问题，我们要弄清楚： 
+
+1、 SqlSessionFactory 是什么时候创建的？ 
+
+2、 SqlSession 去哪里了？为什么不用它来 getMapper？ 
+
+3、 为什么@Autowired 注入一个接口，在使用的时候却变成了代理对象？在 IOC 的容器里面我们注入的是什么？ 注入的时候发生了什么事情？
+
+## 4.1 关键配置
+
+除了 MyBatis 的依赖之外，我们还需要在 pom 文件中引入 MyBatis 和 Spring 整合 的 jar 包（注意版本！mybatis 的版本和 mybatis-spring 的版本有兼容关系）。
+
+```xml
+<!-- spring 4.2.0.RELEASE -->
+<!-- mybatis 3.4.0 -->
+<dependency>
+    <groupId>org.mybatis</groupId>
+    <artifactId>mybatis-spring</artifactId>
+    <version>1.3.0</version>
+</dependency>
+```
+
+数据库连接数据 db.properties:
 
 ```properties
 sysbase.mysql.jdbc.driverClassName=com.mysql.jdbc.Driver
@@ -1048,75 +1070,74 @@ dbPool.filters=stat,log4j,wall
 ```
 
 ```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<beans xmlns="http://www.springframework.org/schema/beans"
-       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd"
-       default-init-method="start" default-destroy-method="stop">
-    <bean id="propertyConfigurer" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
-        <property name="locations">
-            <list>
-                <!--配置jdbc-->
-                <value>classpath:db.properties</value>
-            </list>
-        </property>
-    </bean>
+<bean id="propertyConfigurer" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+    <property name="locations">
+        <list>
+            <!--配置jdbc-->
+            <value>classpath:db.properties</value>
+        </list>
+    </property>
+</bean>
 
-    <bean id="datasourcePool" abstract="true" class="com.alibaba.druid.pool.DruidDataSource" init-method="init" destroy-method="close">
-        <property name="initialSize" value="${dbPool.initialSize}" />
-        <property name="minIdle" value="${dbPool.minIdle}" />
-        <property name="maxActive" value="${dbPool.maxActive}" />
-        <property name="maxWait" value="${dbPool.maxWait}" />
-        <property name="timeBetweenEvictionRunsMillis" value="${dbPool.timeBetweenEvictionRunsMillis}" />
-        <property name="minEvictableIdleTimeMillis" value="${dbPool.minEvictableIdleTimeMillis}" />
-        <property name="validationQuery" value="${dbPool.validationQuery}" />
-        <property name="testWhileIdle" value="${dbPool.testWhileIdle}" />
-        <property name="testOnBorrow" value="${dbPool.testOnBorrow}" />
-        <property name="testOnReturn" value="${dbPool.testOnReturn}" />
-        <property name="poolPreparedStatements" value="${dbPool.poolPreparedStatements}" />
-        <property name="maxPoolPreparedStatementPerConnectionSize" value="${dbPool.maxPoolPreparedStatementPerConnectionSize}" />
-        <property name="filters" value="${dbPool.filters}" />
-    </bean>
+<bean id="datasourcePool" abstract="true" class="com.alibaba.druid.pool.DruidDataSource" init-method="init" destroy-method="close">
+    <property name="initialSize" value="${dbPool.initialSize}" />
+    <property name="minIdle" value="${dbPool.minIdle}" />
+    <property name="maxActive" value="${dbPool.maxActive}" />
+    <property name="maxWait" value="${dbPool.maxWait}" />
+    <property name="timeBetweenEvictionRunsMillis" value="${dbPool.timeBetweenEvictionRunsMillis}" />
+    <property name="minEvictableIdleTimeMillis" value="${dbPool.minEvictableIdleTimeMillis}" />
+    <property name="validationQuery" value="${dbPool.validationQuery}" />
+    <property name="testWhileIdle" value="${dbPool.testWhileIdle}" />
+    <property name="testOnBorrow" value="${dbPool.testOnBorrow}" />
+    <property name="testOnReturn" value="${dbPool.testOnReturn}" />
+    <property name="poolPreparedStatements" value="${dbPool.poolPreparedStatements}" />
+    <property name="maxPoolPreparedStatementPerConnectionSize" value="${dbPool.maxPoolPreparedStatementPerConnectionSize}" />
+    <property name="filters" value="${dbPool.filters}" />
+</bean>
 
-    <bean id="dataSource" parent="datasourcePool">
-        <property name="driverClassName" value="${sysbase.mysql.jdbc.driverClassName}" />
-        <property name="url" value="${sysbase.mysql.jdbc.url}" />
-        <property name="username" value="${sysbase.mysql.jdbc.username}" />
-        <property name="password" value="${sysbase.mysql.jdbc.password}" />
-    </bean>
-</beans>
+<bean id="dataSource" parent="datasourcePool">
+    <property name="driverClassName" value="${sysbase.mysql.jdbc.driverClassName}" />
+    <property name="url" value="${sysbase.mysql.jdbc.url}" />
+    <property name="username" value="${sysbase.mysql.jdbc.username}" />
+    <property name="password" value="${sysbase.mysql.jdbc.password}" />
+</bean>
 ```
 
-### mybatis.xml
+然后在 Spring 的 application-context.xml 里面配置 SqlSessionFactoryBean，它 是用来帮助我们创建会话的，其中还要指定全局配置文件和 mapper 映射器文件的路径。
 
 ```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<beans xmlns="http://www.springframework.org/schema/beans"
-       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-       xsi:schemaLocation="http://www.springframework.org/schema/beans
-						http://www.springframework.org/schema/beans/spring-beans.xsd">
-
-    <!--mybatis 创建session工厂-->
-    <bean id="sessionFactoryBean" class="org.mybatis.spring.SqlSessionFactoryBean">
-        <property name="dataSource" ref="dataSource"/>
-        <!--加载mybatis映射文件-->
-        <property name="configLocation" value="classpath:mybatis-config.xml"/>
-        <!-- 加载mapper映射文件 -->
-        <property name="mapperLocations" value="classpath:mapper/*.xml"/>
-        <!-- 加载别名 -->
-        <property name="typeAliasesPackage" value="com.mybatis.model"/>
-    </bean>
-
-    <bean id="sqlSessionTemplate" class="org.mybatis.spring.SqlSessionTemplate">
-        <constructor-arg ref="sessionFactoryBean" />
-    </bean>
-    <!-- 扫包 -->
-    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
-        <property name="basePackage" value="com.mybatis.dao"/>
-    </bean>
-
-</beans>
+<!--mybatis 创建session工厂-->
+<bean id="sessionFactoryBean" class="org.mybatis.spring.SqlSessionFactoryBean">
+    <property name="dataSource" ref="dataSource"/>
+    <!--加载mybatis映射文件-->
+    <property name="configLocation" value="classpath:mybatis-config.xml"/>
+    <!-- 加载mapper映射文件 -->
+    <property name="mapperLocations" value="classpath:mapper/*.xml"/>
+    <!-- 加载别名 -->
+    <property name="typeAliasesPackage" value="com.spring.model"/>
+</bean>
 ```
+
+然后在 applicationContext.xml 配置需要扫描 Mapper 接口的路径。 
+
+在 Mybatis 里面有几种方式，第一种是配置一个 MapperScannerConfigurer。
+
+```xml
+<!-- <bean id="sqlSessionTemplate" class="org.mybatis.spring.SqlSessionTemplate">
+        <constructor-arg ref="sessionFactoryBean" />
+    </bean> -->
+<bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+    <property name="basePackage" value="com.spring.mybatis.dao"/>
+</bean>
+```
+
+第二种是配置一个scan标签：
+
+```xml
+<mybatis-spring:scan base-package="com.spring.mybatis.dao"/>
+```
+
+还有一种就是直接用@MapperScan 注解，比如我们在 Spring Boot 的启动类上加 上一个注解。
 
 ### mybatis-config.xml
 
@@ -1136,9 +1157,7 @@ dbPool.filters=stat,log4j,wall
 </configuration>
 ```
 
-实体类com.mybatis.model.User和接口com.mybaits.dao.UserMapper(包含List<User> selectAll())。
-
-### XML
+实体类com.mybatis.model.User和接口com.mybaits.dao.UserMapper(包含List< User > selectAll())。
 
 UserMapper.xml
 
@@ -1158,7 +1177,7 @@ UserMapper.xml
 </mapper>
 ```
 
-### Annotation
+注解形式：
 
 ```java
 public interface UserMapper {
@@ -1166,6 +1185,395 @@ public interface UserMapper {
     List<User> selectAllByAnnotation();
 }
 ```
+
+## 4.2 创建会话工厂
+
+Spring 对 MyBatis 的对象进行了管理，但是并不会替换 MyBatis 的核心对象。也就意味着：MyBatis jar 包中的 SqlSessionFactory、SqlSession、MapperProxy 这些都会用到。而 mybatis-spring.jar 里面的类只是做了一些包装或者桥梁的工作。
+
+所以第一步，我们看一下在 Spring 里面，工厂类是怎么创建的。 
+
+我们在 Spring 的配置文件中配置了一个 SqlSessionFactoryBean，我们来看一下这个类。
+
+![image-20201209144606660](Mybatis 实用篇.assets/image-20201209144606660.png)
+
+它实现了 InitializingBean 接口，所以要实现 afterPropertiesSet()方法，这个方法会在 bean 的属性值设置完的时候被调用。另外它实现了 FactoryBean 接口，所以它初始化的时候，实际上是调用 getObject() 方法，它里面调用的也是 afterPropertiesSet()方法。
+
+```java
+public SqlSessionFactory getObject() throws Exception {
+  if (this.sqlSessionFactory == null) {
+    afterPropertiesSet();
+  }
+  return this.sqlSessionFactory;
+}
+
+public void afterPropertiesSet() throws Exception {
+  // 一些标签属性的检查，接下来调用了 buildSqlSessionFactory()方法
+  notNull(dataSource, "Property 'dataSource' is required");
+  notNull(sqlSessionFactoryBuilder, "Property 'sqlSessionFactoryBuilder' is required");
+  state((configuration == null && configLocation == null) || !(configuration != null && configLocation != null),
+            "Property 'configuration' and 'configLocation' can not specified with together");
+  this.sqlSessionFactory = buildSqlSessionFactory();
+}
+
+protected SqlSessionFactory buildSqlSessionFactory() throws IOException {
+  final Configuration targetConfiguration;
+  XMLConfigBuilder xmlConfigBuilder = null;
+  // 判断 Configuration 对象是否已经存在，也就是是否已经解析过。如果已经有对象，就覆盖一下属性
+  if (this.configuration != null) {
+    targetConfiguration = this.configuration;
+    if (targetConfiguration.getVariables() == null) {
+      targetConfiguration.setVariables(this.configurationProperties);
+    } else if (this.configurationProperties != null) {
+      targetConfiguration.getVariables().putAll(this.configurationProperties);
+    }
+  } else if (this.configLocation != null) {
+    // 如果 Configuration 不存在，但是配置了 configLocation 属性，就根据 mybatis-config.xml 的文件路径，构建一个 xmlConfigBuilder 对象
+    xmlConfigBuilder = new XMLConfigBuilder(this.configLocation.getInputStream(), null, this.configurationProperties);
+    targetConfiguration = xmlConfigBuilder.getConfiguration();
+  } else {
+    // 否则，Configuration 对象不存在，configLocation 路径也没有，只能使用默认属性去构建去给 configurationProperties 赋值
+    LOGGER.debug(() -> "Property 'configuration' or 'configLocation' not specified, using default MyBatis Configuration");
+    targetConfiguration = new Configuration();
+    Optional.ofNullable(this.configurationProperties).ifPresent(targetConfiguration::setVariables);
+  }
+  // 基于当前 factory 对象里面已有的属性，对 targetConfiguration 对象里面属性的赋值
+  // 这个方法是 Java8 里面的一个判空的方法。如果不为空的话，就会调用括号里面的对象的方法，做赋值的处理
+  Optional.ofNullable(this.objectFactory).ifPresent(targetConfiguration::setObjectFactory);
+  Optional.ofNullable(this.objectWrapperFactory).ifPresent(targetConfiguration::setObjectWrapperFactory);
+  Optional.ofNullable(this.vfs).ifPresent(targetConfiguration::setVfsImpl);
+  if (hasLength(this.typeAliasesPackage)) {
+    String[] typeAliasPackageArray = tokenizeToStringArray(this.typeAliasesPackage,
+        ConfigurableApplicationContext.CONFIG_LOCATION_DELIMITERS);
+    Stream.of(typeAliasPackageArray).forEach(packageToScan -> {
+      targetConfiguration.getTypeAliasRegistry().registerAliases(packageToScan,
+          typeAliasesSuperType == null ? Object.class : typeAliasesSuperType);
+      LOGGER.debug(() -> "Scanned package: '" + packageToScan + "' for aliases");
+    });
+  }
+  if (!isEmpty(this.typeAliases)) {
+    Stream.of(this.typeAliases).forEach(typeAlias -> {
+      targetConfiguration.getTypeAliasRegistry().registerAlias(typeAlias);
+      LOGGER.debug(() -> "Registered type alias: '" + typeAlias + "'");
+    });
+  }
+  if (!isEmpty(this.plugins)) {
+    Stream.of(this.plugins).forEach(plugin -> {
+      targetConfiguration.addInterceptor(plugin);
+      LOGGER.debug(() -> "Registered plugin: '" + plugin + "'");
+    });
+  }
+  if (hasLength(this.typeHandlersPackage)) {
+    String[] typeHandlersPackageArray = tokenizeToStringArray(this.typeHandlersPackage,
+        ConfigurableApplicationContext.CONFIG_LOCATION_DELIMITERS);
+    Stream.of(typeHandlersPackageArray).forEach(packageToScan -> {
+      targetConfiguration.getTypeHandlerRegistry().register(packageToScan);
+      LOGGER.debug(() -> "Scanned package: '" + packageToScan + "' for type handlers");
+    });
+  }
+  if (!isEmpty(this.typeHandlers)) {
+    Stream.of(this.typeHandlers).forEach(typeHandler -> {
+      targetConfiguration.getTypeHandlerRegistry().register(typeHandler);
+      LOGGER.debug(() -> "Registered type handler: '" + typeHandler + "'");
+    });
+  }
+  if (this.databaseIdProvider != null) {//fix #64 set databaseId before parse mapper xmls
+    try {
+      targetConfiguration.setDatabaseId(this.databaseIdProvider.getDatabaseId(this.dataSource));
+    } catch (SQLException e) {
+      throw new NestedIOException("Failed getting a databaseId", e);
+    }
+  }
+  Optional.ofNullable(this.cache).ifPresent(targetConfiguration::addCache);
+  // 如果 xmlConfigBuilder 不为空，也就是上面的第二种情况，调用了xmlConfigBuilder.parse()去解析配置文件，最终会返回解析好的 Configuration 对象
+  if (xmlConfigBuilder != null) {
+    try {
+      xmlConfigBuilder.parse();
+      LOGGER.debug(() -> "Parsed configuration file: '" + this.configLocation + "'");
+    } catch (Exception ex) {
+      throw new NestedIOException("Failed to parse config resource: " + this.configLocation, ex);
+    } finally {
+      ErrorContext.instance().reset();
+    }
+  }
+  //如果没有明确指定事务工厂，默认使用SpringManagedTransactionFactory,它创建的 SpringManagedTransaction 也有getConnection()和 close()方法
+  // sessionFactoryBean ===> <property name="transactionFactory" value=""/>
+  targetConfiguration.setEnvironment(new Environment(this.environment,
+      this.transactionFactory == null ? new SpringManagedTransactionFactory() : this.transactionFactory,
+      this.dataSource));
+  if (!isEmpty(this.mapperLocations)) {
+    for (Resource mapperLocation : this.mapperLocations) {
+      if (mapperLocation == null) {
+        continue;
+      }
+      try {
+        XMLMapperBuilder xmlMapperBuilder = new XMLMapperBuilder(mapperLocation.getInputStream(),
+            targetConfiguration, mapperLocation.toString(), targetConfiguration.getSqlFragments());
+        // 把接口和对应的 MapperProxyFactory 注册到 MapperRegistry 中
+        xmlMapperBuilder.parse();
+      } catch (Exception e) {
+        throw new NestedIOException("Failed to parse mapping resource: '" + mapperLocation + "'", e);
+      } finally {
+        ErrorContext.instance().reset();
+      }
+      LOGGER.debug(() -> "Parsed mapper file: '" + mapperLocation + "'");
+    }
+  } else {
+    LOGGER.debug(() -> "Property 'mapperLocations' was not specified or no matching resources found");
+  }
+  // 最后调用 sqlSessionFactoryBuilder.build() 返回了一个DefaultSqlSessionFactory
+  return this.sqlSessionFactoryBuilder.build(targetConfiguration);
+}
+```
+
+## 4.3 创建 SqlSession
+
+**可以直接使用 DefaultSqlSession 吗？**
+
+我们现在已经有一个 DefaultSqlSessionFactory，按照编程式的开发过程，我们接下来就会创建一个 SqlSession 的实现类，但是在 Spring 里面，我们不是直接使用 DefaultSqlSession 的，而是对它进行了一个封装，这个 SqlSession 的实现类就是 SqlSessionTemplate。这个跟 Spring 封装其他的组件是一样的，比如 JdbcTemplate， RedisTemplate 等等，也是 Spring 跟 MyBatis 整合的最关键的一个类。
+
+为什么不用 DefaultSqlSession？它是线程不安全的，而 SqlSessionTemplate 是线程安全的。
+
+在编程式的开发中，SqlSession 我们会在每次请求的时候创建一个，但是 Spring 里面只有一个 SqlSessionTemplate（默认是单例的），多个线程同时调用的时候怎么保证线程安全？ 
+
+思考：为什么 SqlSessionTemplate 是线程安全的？ 
+
+思考：在编程式的开发中，有什么方法保证 SqlSession 的线程安全？
+
+SqlSessionTemplate 里面有 DefaultSqlSession 的所有的方法：selectOne()、 selectList()、insert()、update()、delete()，不过它都是通过一个代理对象实现的。这个代理对象在构造方法里面通过一个代理类创建：
+
+```java
+this.sqlSessionProxy = (SqlSession) newProxyInstance(
+        SqlSessionFactory.class.getClassLoader(),
+        new Class[] { SqlSession.class },
+        new SqlSessionInterceptor());
+```
+
+所有的方法都会先走到内部代理类 SqlSessionInterceptor 的 invoke()方法：
+
+```java
+private class SqlSessionInterceptor implements InvocationHandler {
+  @Override
+  public Object invoke(Object proxy, Method method, Object[] args) 
+    SqlSession sqlSession = getSqlSession(
+        SqlSessionTemplate.this.sqlSessionFactory,
+        SqlSessionTemplate.this.executorType,
+        SqlSessionTemplate.this.exceptionTranslator);
+    try {
+      Object result = method.invoke(sqlSession, args);
+```
+
+首先会使用工厂类、执行器类型、异常解析器创建一个 sqlSession，然后再调用 sqlSession 的实现类，实际上就是在这里调用了 DefaultSqlSession 的方法。
+
+**怎么拿到一个 SqlSessionTemplate？**
+
+MyBatis 提供了一个 SqlSessionDaoSupport，里面持有一个 SqlSessionTemplate 对象，并且提供了一个 getSqlSession()方法，让我们获得一个 SqlSessionTemplate。
+
+```java
+public abstract class SqlSessionDaoSupport extends DaoSupport {
+  private SqlSessionTemplate sqlSessionTemplate;
+  ...
+  public SqlSession getSqlSession() {
+    return this.sqlSessionTemplate;
+  }
+  ...
+}
+```
+
+也就是说我们让 DAO 层的实现类继承 SqlSessionDaoSupport，就可以获得 SqlSessionTemplate，然后在里面封装 SqlSessionTemplate 的方法。 
+
+当 然 ，为了减少重复的代码，我们通常不会让我们的实现类直接去继承 SqlSessionDaoSupport，而是先创建一个 BaseDao 继承 SqlSessionDaoSupport。在 BaseDao 里面封装对数据库的操作，包括 selectOne()、selectList()、insert()、delete() 这些方法，子类就可以直接调用。
+
+```java
+public class BaseDao extends SqlSessionDaoSupport {
+
+    @Autowired
+    private SqlSessionFactory sqlSessionFactory;
+
+    @Override
+    @Autowired
+    public void setSqlSessionFactory(SqlSessionFactory sqlSessionFactory) {
+        super.setSqlSessionFactory(sqlSessionFactory);
+    }
+
+    public Object selectOne(String statement, Object parameter) {
+        return getSqlSession().selectOne(statement, parameter);
+    }
+
+}
+```
+
+然后让我们的实现类继承 BaseDao 并且实现我们的 DAO 层接口，这里就是我们的 Mapper 接口。实现类需要加上@Repository 的注解。
+
+在实现类的方法里面，我们可以直接调用父类（BaseDao）封装的 selectOne()方法， 那么它最终会调用 sqlSessionTemplate 的 selectOne()方法。
+
+```java
+@Repository
+public class UserTemplateDaoImpl extends BaseDao implements UserMapper {
+
+    @Override
+    public User selectById(Integer Id) {
+        User emp = (User)
+                this.selectOne("com.spring.mybatis.dao.UserMapper.selectById", Id);
+        return emp;
+    }
+
+}
+```
+
+然后在需要使用的地方，比如 Service 层，注入我们的实现类，调用实现类的方法就 行了。我们这里直接在单元测试类里面注入：
+
+```java
+@Autowired
+private UserTemplateDaoImpl userTemplateDao;
+
+@Test
+public void selectById() throws Exception {
+    User user = userTemplateDao.selectById(1);
+    System.out.println(user);
+}
+```
+
+最终会调用到 DefaultSqlSession 的方法。
+
+**有没有更好的拿到 SqlSessionTemplate 的方法？**
+
+我们可以通过什么方式，不创建任何的实现类，就可以把 Mapper 注入到别的地方使用，并且可以拿到 SqlSessionTemplate 操作数据库呢？ 
+
+这个也确实是我们在 Spring 中的用法。那我们就必要弄清楚，我们只是注入了一个接口，在对象实例化的时候，是怎么拿到 SqlSessionTemplate 的？当我们调用方法的时候，还是不是用的 MapperProxy？
+
+## 4.4 接口的扫描注册
+
+在 Service 层可以使用 @Autowired 自动注入的 Mapper 接口，需要保存在 BeanFactory（比如 XmlWebApplicationContext）中。也就是说接口肯定是在 Spring 启动的时候被扫描了，注册过的。
+
+1、 什么时候扫描的
+
+2、 注册的时候，注册的是什么？这个决定了我们拿到的是什么实际对象
+
+回顾一下，我们在 applicationContext.xml 里面配置了一个 MapperScannerConfigurer。 
+
+MapperScannerConfigurer 实现了 BeanDefinitionRegistryPostProcessor 接口， BeanDefinitionRegistryPostProcessor 是 BeanFactoryPostProcessor 的子类，可以通过编码的方式修改、新增或者删除某些 Bean 的定义。
+
+![image-20201209162903396](Mybatis 实用篇.assets/image-20201209162903396.png)
+
+我们只需要重写 postProcessBeanDefinitionRegistry()方法，在这里面操作 Bean 就可以了。 
+
+在这个方法里面： scanner.scan() 方法是 ClassPathBeanDefinitionScanner 中的，而它的子类 ClassPathMapperScanner 覆盖了 doScan() 方法 ， 在 doScan() 中调用了 processBeanDefinitions：
+
+```java
+public Set<BeanDefinitionHolder> doScan(String... basePackages) {
+  Set<BeanDefinitionHolder> beanDefinitions = super.doScan(basePackages);
+  if (beanDefinitions.isEmpty()) {
+    LOGGER.warn(() -> "No MyBatis mapper was found in '" + Arrays.toString(basePackages) + "' package. Please check your configuration.");
+  } else {
+    processBeanDefinitions(beanDefinitions);
+  }
+  return beanDefinitions;
+}
+```
+
+它先调用父类的 doScan() 扫描所有的接口。 
+
+processBeanDefinitions 方法里面，在注册 beanDefinitions 的时候，BeanClass 被改为 MapperFactoryBean（注意灰色的注释）。
+
+```java
+private void processBeanDefinitions(Set<BeanDefinitionHolder> beanDefinitions) {
+  GenericBeanDefinition definition;
+  for (BeanDefinitionHolder holder : beanDefinitions) {
+    definition = (GenericBeanDefinition) holder.getBeanDefinition();
+    String beanClassName = definition.getBeanClassName();
+    LOGGER.debug(() -> "Creating MapperFactoryBean with name '" + holder.getBeanName()
+        + "' and '" + beanClassName + "' mapperInterface");
+    // the mapper interface is the original class of the bean
+    // but, the actual class of the bean is MapperFactoryBean
+    definition.getConstructorArgumentValues().addGenericArgumentValue(beanClassName); // issue #59
+    definition.setBeanClass(this.mapperFactoryBean.getClass());
+    ...
+  }
+  ...
+}
+```
+
+问题： 为什么要把 BeanClass 修改成 MapperFactoryBean，这个类有什么作用？
+
+MapperFactoryBean 继承了 SqlSessionDaoSupport ，可以拿到 SqlSessionTemplate。
+
+## 4.5 接口注入使用
+
+我们使用 Mapper 的时候，只需要在加了 Service 注解的类里面使用 @Autowired 注入 Mapper 接口就好了。
+
+Spring 在启动的时候需要去实例化 EmployeeService。 
+
+EmployeeService 依赖了 EmployeeMapper 接口（是 EmployeeService 的一个属性）。 
+
+Spring 会根据 Mapper 的名字从 BeanFactory 中获取它的 BeanDefination，再从 BeanDefination 中获取 BeanClass ， EmployeeMapper 对应的 BeanClass 是 MapperFactoryBean（上一步已经分析过）。 
+
+接下来就是创建 MapperFactoryBean，因为实现了 FactoryBean 接口，同样是调用 getObject()方法。
+
+```java
+// MapperFactoryBean.java
+public T getObject() throws Exception {
+	return getSqlSession().getMapper(this.mapperInterface);
+}
+```
+
+因为 MapperFactoryBean 继承了 SqlSessionDaoSupport ， 所以这个 getSqlSession() 就是调用父类的方法，返回 SqlSessionTemplate。
+
+```java
+public SqlSession getSqlSession() {
+  return this.sqlSessionTemplate;
+}
+```
+
+第二步，SqlSessionTemplate 的 getMapper()方法，里面又有两个方法：
+
+```java
+public <T> T getMapper(Class<T> type) {
+  return getConfiguration().getMapper(type, this);
+}
+```
+
+1. SqlSessionTemplate 的 getConfiguration()方法： 
+
+```java
+// SqlSessionTemplate.java 
+public Configuration getConfiguration() { 
+    return this.sqlSessionFactory.getConfiguration(); 
+} 
+```
+
+进入方法，通过 DefaultSqlSessionFactory，返回全部配置 Configuration： 
+
+```java
+// DefaultSqlSessionFactory.java 
+public Configuration getConfiguration() { 
+    return configuration; 
+} 
+```
+
+2. Configuration 的 getMapper()方法： 
+
+```java
+// Configuration.java 
+public  T getMapper(Class type, SqlSession sqlSession) { 
+    return mapperRegistry.getMapper(type, sqlSession); 
+}
+```
+
+这一步我们很熟悉 ，跟编程式使用里面的 getMapper 一样 ，通过工厂类 MapperProxyFactory 获得一个 MapperProxy 代理对象。 
+
+也就是说，我们注入到 Service 层的接口，实际上还是一个 MapperProxy 代理对象。 所以最后调用 Mapper 接口的方法，也是执行 MapperProxy 的 invoke()方法，后面的流程就跟编程式的工程里面一模一样了。
+
+总结： 
+
+| 对象                            | 生命周期                                                     |
+| ------------------------------- | ------------------------------------------------------------ |
+| SqlSessionTemplate              | Spring 中 SqlSession 的替代品，是线程安全的，通过代理的方式调用 DefaultSqlSession 的方法 |
+| SqlSessionInterceptor（内部类） | 代理对象，用来代理 DefaultSqlSession，在 SqlSessionTemplate 中使用 |
+| SqlSessionDaoSupport            | 用于获取 SqlSessionTemplate，只要继承它即可                  |
+| MapperFactoryBean               | 注册到 IOC 容器中替换接口类，继承了 SqlSessionDaoSupport 用来获取 SqlSessionTemplate<br>因为注入接口的时候，就会调用它的 getObject()方法 |
+| SqlSessionHolder                | 控制 SqlSession 和事务                                       |
+
+思考：@MapperScan 注解是怎么解析的？
 
 ------
 
