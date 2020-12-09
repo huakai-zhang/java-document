@@ -59,6 +59,8 @@ user.setId(bid);
 
 也正是因为这样，我们在实际工作中是比较少直接使用 JDBC 的。那么我们在 Java 程序里面有哪些更加简单的操作数据库的方式呢？
 
+<font color=red>Statement和PreparedStatement的区别？</font>
+
 ## 1.2 Spring JDBC
 
 Spring 对原生的 JDBC 进行了封装，并且给我们提供了一个模板方法 JdbcTemplate，来简化我们对数据库的操作。
