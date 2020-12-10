@@ -187,6 +187,14 @@ MyBatis 是一款优秀的持久层框架，它支持自定义 SQL、存储过�
 
 先引入 mybatis jar 包。 
 
+```xml
+<dependency>
+	<groupId>org.mybatis</groupId>
+	<artifactId>mybatis</artifactId>
+	<version>3.4.0</version>
+</dependency>
+```
+
 首先我们要创建一个全局配置文件，这里面是对 MyBatis 的核心行为的控制，比如 mybatis-config.xml。
 
 ```xml
@@ -194,22 +202,33 @@ MyBatis 是一款优秀的持久层框架，它支持自定义 SQL、存储过�
 <!DOCTYPE configuration PUBLIC "-//mybatis.org//DTD SQL Map Config 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-config.dtd">
 <configuration>
-<environments default="development">
-     <environment id="development">
-         <transactionManager type="JDBC"/>
-         <dataSource type="POOLED">
-             <property name="username" value="root"/>
-             <property name="password" value="root"/>
-             <property name="url" value="jdbc:mysql://localhost:3306/spring"/>
-             <property name="driver" value="com.mysql.jdbc.Driver"/>
-         </dataSource>
-     </environment>
- </environments>
+    <settings>
+        <!-- 全局映射器启用缓存 -->
+        <setting name="cacheEnabled" value="true" />
+        <setting name="useGeneratedKeys" value="true" />
+        <setting name="defaultExecutorType" value="REUSE" />
+        <setting name="callSettersOnNulls" value="true"/>
+    </settings>
+    
+	<environments default="development">
+     	<environment id="development">
+         	<transactionManager type="JDBC"/>
+         	<dataSource type="POOLED">
+             	<property name="username" value="root"/>
+             	<property name="password" value="root"/>
+             	<property name="url" value="jdbc:mysql://localhost:3306/spring"/>
+             	<property name="driver" value="com.mysql.jdbc.Driver"/>
+         	</dataSource>
+    	 </environment>
+ 	</environments>
 
- <mappers>
-     <mapper resource="mapper/UserMapper.xml"/>
- </mappers>
+ 	<mappers>
+     	<mapper resource="mapper/UserMapper.xml"/>
+ 	</mappers>
 </configuration>
+<!-- 
+这里注意，mybatis-config.xml的配置项，需要保持顺序： properties,settings,typeAliases,typeHandlers,objectFactory,objectWrapperFactory,plugins,environments,databaseIdProvider,mappers
+-->
 ```
 
 第二个就是我们的映射器文件，Mapper.xml，通常来说一张表对应一个，我们会在 这个里面配置我们增删改查的 SQL 语句，以及参数和返回的结果集的映射关系。 
@@ -228,6 +247,8 @@ try {
     UserMapper userMapper = sqlSession.getMapper(UserMapper.class);
     User user = userMapper.selectById(1);
     System.out.println(user);
+    // 增删改
+    // sqlSession.commit();
 } finally {
     sqlSession.close();
 }
@@ -1004,7 +1025,92 @@ PageHelper 是通过 MyBatis 的拦截器实现的，插件的具体原理后面
 
 ## 3.6 通用 Mapper
 
+问题：当我们的表字段发生变化的时候，我们需要修改实体类和 Mapper 文件定义 的字段和方法。如果是增量维护，那么一个个文件去修改。如果是全量替换，我们还要去对比用 MBG 生成的文件。字段变动一次就要修改一次，维护起来非常麻烦。 解决这个问题，我们有两种思路。 第一个，因为 MyBatis 的 Mapper 是 支持继承的（ 见 ：https://github.com/mybatis/mybatis-3/issues/35 ）。所以我们可以把我们的 Mapper.xml 和 Mapper 接口都分成两个文件。一个是 MBG 生成的，这部分是固定不变的。然后创建 DAO 类继承生成的接口，变化的部分就在 DAO 里面维护。 
 
+mybatis-standalone 工程：
+
+```java
+public interface BlogMapperExt extends BlogMapper {
+	public Blog selectBlogByName(String name);
+}
+```
+
+```xml
+<mapper namespace="com.gupaoedu.mapper.BlogMapperExt">
+	<!-- 只能继承 statement，不能继承 sql、resultMap 等标签 -->
+	<resultMap id="BaseResultMap" type="com.gupaoedu.domain.Blog">
+		<id column="bid" property="bid" jdbcType="INTEGER"/>
+		<result column="name" property="name" jdbcType="VARCHAR"/>
+		<result column="author_id" property="authorId" jdbcType="INTEGER"/>
+	</resultMap>
+	<!-- 在 parent xml 和 child xml 的 statement id 相同的情况下，会使用 child xml 的 statementid -->
+	<select id="selectBlogByName" resultMap="BaseResultMap" statementType="PREPARED">
+		select * from blog where name = #{name}
+	</select>
+</mapper>
+```
+
+所以以后只要修改 Ext 的文件就可以了。这么做有一个缺点，就是文件会增多。 
+
+思考：既然针对每张表生成的基本方法都是一样的，也就是公共的方法部分代码都 是一样的，我们能不能把这部分合并成一个文件，让它支持泛型呢？ 
+
+当然可以！ 编写一个支持泛型的通用接口，比如叫 GPBaseMapper，把实体类作为参数传 入。这个接口里面定义了大量的增删改查的基础方法，这些方法都是支持泛型的。 
+
+自定义 的 Mapper 接口继承该通用接口 ， 例 如 BlogMapper extends GPBaseMapper，自动获得对实体类的操作方法。遇到没有的方法，我们依然 可以在我们自己的 Mapper 里面编写。 
+
+我们能想到的解决方案，早就有人做了这个事了，这个东西就叫做`通用 Mapper`。
+
+ https://github.com/abel533/Mapper/wiki 
+
+用途：主要解决单表的增删改查问题，并不适用于多表关联查询的场景。 
+
+除了配置文件变动的问题之外，通用 Mapper 还可以解决： 
+
+1、 每个 Mapper 接口中大量的重复方法的定义； 
+
+2、 屏蔽数据库的差异；
+
+3、 提供批量操作的方法； 
+
+4、 实现分页。 
+
+通用 Mapper 和 PageHelper 作者是同一个人。
+
+使用方式：在 Spring 中使用时，引入 jar 包，替换 applicationContext.xml 中的 sqlSessionFactory 和 configure。
+
+```xml
+<!-- 通用 Mapper 支持 MyBatis 3.2.4+ -->
+<dependency>
+    <groupId>tk.mybatis</groupId>
+    <artifactId>mapper</artifactId>
+    <version>最新版本</version>
+</dependency>
+```
+
+```xml
+<bean class="tk.mybatis.spring.mapper.MapperScannerConfigurer">
+    <property name="basePackage" value="扫描包名"/>
+</bean>
+```
+
+Mapper 接口上要继承 Mapper< ? >：
+
+```java
+public interface TKUserMapper extends Mapper<User> {
+}
+
+@ContextConfiguration(locations = {"classpath*:application-context.xml"})
+@RunWith(SpringJUnit4ClassRunner.class)
+public class TKUserMapperTest {
+    @Autowired
+    private TKUserMapper userMapper;
+
+    @Test
+    public void select() {
+        System.out.println(userMapper.selectAll());
+    }
+}
+```
 
 ## 3.7 MyBatis-Plus
 
