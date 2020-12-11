@@ -754,6 +754,8 @@ public void parse() {
 
 最后，返回了一个 DefaultSqlSessionFactory，里面持有了 Configuration 的实例。
 
+![image-20201211115424000](Mybatis 源码分析.assets/image-20201211115424000.png)
+
 ## 4.2 会话创建过程
 
 这是第二步，我们跟数据库的每一次连接，都需要创建一个会话，我们用 openSession()方法来创建。 
@@ -832,6 +834,8 @@ executor = (Executor) interceptorChain.pluginAll(executor);
 最终返回 DefaultSqlSession，属性包括 Configuration、Executor 对象。 
 
 总结：创建会话的过程，我们获得了一个 DefaultSqlSession，里面包含了一个 Executor，它是 SQL 的执行者。
+
+![image-20201211121033483](Mybatis 源码分析.assets/image-20201211121033483.png)
 
 ## 4.3 获得 Mapper 对象
 
@@ -916,6 +920,8 @@ MapperProxy 中有 sqlSession、mapperInterface、methodCache。
 ![image-20201210163922350](Mybatis 源码分析.assets/image-20201210163922350.png)
 
 先记下这个问题：在代理类中为什么要持有一个 SqlSession？
+
+![image-20201211133408454](Mybatis 源码分析.assets/image-20201211133408454.png)
 
 ## 4.4 执行 SQL
 
@@ -1309,6 +1315,21 @@ ResultSetHandler 只有一个实现类：DefaultResultSetHandler。也就是执�
 首先我们会先拿到第一个结果集，如果没有配置一个查询返回多个结果集的情况， 一般只有一个结果集。如果下面的这个 while 循环我们也不用，就是执行一次。 
 
 然后会调用 handleResultSet()方法。
+
+![image-20201211124234235](Mybatis 源码分析.assets/image-20201211124234235.png)
+
+## 4.5 MyBatis 核心对象
+
+| 对象             | 相关对象                                                     | 作用                                                         |
+| ---------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| Configuration    | MapperRegistry<br>TypeAliasRegistry<br>TypeHandlerRegistry   | 包含了 MyBatis 的所有的配置信息                              |
+| SqlSession       | SqlSessionFactory<br>DefaultSqlSession                       | 对操作数据库的增删改查的 API 进行了封装，提供给应用层使用    |
+| Executor         | BaseExecutor<br/>SimpleExecutor<br/>BatchExecutor<br/>ReuseExecutor | MyBatis 执行器，是 MyBatis 调度的核心，负责 SQL 语句的生成和查询缓存的维护 |
+| StatementHandler | BaseStatementHandler<br/>SimpleStatementHandler<br/>PreparedStatementHandler<br/>CallableStatementHandler | 封装了 JDBC Statement 操作，负责对 JDBC statement 的操作，如设置参数、将 Statement 结果集转换成 List 集合 |
+| ParameterHandler | DefaultParameterHandler                                      | 把用户传递的参数转换成 JDBC Statement 所需要的参数           |
+| ResultSetHandler | DefaultResultSetHandler                                      | 把 JDBC 返回的 ResultSet 结果集对象转换成 List 类型的集合    |
+| MapperProxy      | MapperProxyFactory                                           | 代理对象，用于代理 Mapper 接口方法                           |
+| MappedStatement  | SqlSource<br/>BoundSql                                       | MappedStatement 维护了一条节点的封装，包括了 SQL 信息、入参信息、出参信息 |
 
 ![img](Mybatis 源码分析.assets/20200403095811197.png)
 
