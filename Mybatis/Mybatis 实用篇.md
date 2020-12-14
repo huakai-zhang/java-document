@@ -431,10 +431,9 @@ ObjectFactory 有一个默认的实现类 DefaultObjectFactory，创建对象的
 
 MyBatis 允许在映射语句执行过程中的这四个对象(我们把这四个对象称作 MyBatis 的四大对象)某一点进行拦截调用。默认情况下，MyBatis 允许使用插件来拦截的方法调用包括：
 
-- Executor (update, query, flushStatements, commit, rollback, getTransaction, close, isClosed) 
-- ParameterHandler (getParameterObject, setParameters) 
-- ResultSetHandler (handleResultSets, handleOutputParameters) 
-- StatementHandler (prepare, parameterize, batch, update, query)
+在 MyBatis 官网有答案，我们来看一下： http://www.mybatis.org/mybatis-3/zh/configuration.html#plugins
+
+![image-20201214104021325](Mybatis 实用篇.assets/image-20201214104021325.png)
 
 ```java
 // 实现org.apache.ibatis.plugin.Interceptor
