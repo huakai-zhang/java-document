@@ -1,5 +1,38 @@
 ![image-20201030135147366](ThreadLocal.assets/image-20201030135147366.png)
 
+```java
+// ThreadLocal.java
+public T get() {
+    Thread t = Thread.currentThread();
+    ThreadLocalMap map = getMap(t);
+    if (map != null) {
+        ThreadLocalMap.Entry e = map.getEntry(this);
+        if (e != null) {
+            @SuppressWarnings("unchecked")
+            T result = (T)e.value;
+            return result;
+        }
+    }
+    return setInitialValue();
+}
+
+public void set(T value) {
+    Thread t = Thread.currentThread();
+    ThreadLocalMap map = getMap(t);
+    if (map != null)
+        map.set(this, value);
+    else
+        createMap(t, value);
+}
+
+ThreadLocalMap getMap(Thread t) {
+    return t.threadLocals;
+}
+
+// Thread.java
+ThreadLocal.ThreadLocalMap threadLocals = null;
+```
+
 #### 内存泄露是不是弱引用的锅？
 
 从表面上看内存泄漏的根源在于使用了弱引用，但是另一个问题也同样值得思考：为什么ThreadLocalMap使用弱引用而不是强引用？
