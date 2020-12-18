@@ -113,6 +113,12 @@
 	ps -ef | grep mysql
 		root       2928      1  0 13:51 ?        00:00:00 /bin/sh /usr/bin/mysqld_safe --datadir=/var/lib/mysql --pid-file=/var/lib/mysql/localhost.localdomain.pid
 	mysql      3014   2928  0 13:51 ?        00:00:00 /usr/sbin/mysqld --basedir=/usr --datadir=/var/lib/mysql --plugin-dir=/usr/lib64/mysql/plugin --user=mysql --log-error=localhost.localdomain.err --pid-file=/var/lib/mysql/localhost.localdomain.pid
+	
+# 导出数据sql
+	mysqldump -u root -p '数据库名' >abc.sql
+
+# 导入数据sql
+	mysql -u root -p '数据库名' <abc.sql
 ```
 
 ### 2.3 修改字符集和数据存储路径
@@ -129,17 +135,17 @@ show variables like '%char%';
 ```markdown
 # Linux 自定义配置文件 5.5版本 /usr/share/mysql/my-huge.cnf 之后版本 /usr/share/mysql/my-default.cnf
 # 复制 配置文件到 /etc/my.cnf
-	cp /usr/share//mysql/my-huge.cnf /etc/my.cnf
+	cp /usr/share/mysql/my-huge.cnf /etc/my.cnf
 # 重启mysql
-	service mysql stop
-	service mysql start
+	service mysqld stop
+	service mysqld start
 
 [client]
 default-character-set=utf8
 
 [mysqld]
 character_set_server=utf8
-character_set_client=utf8
+#character_set_client=utf8
 collation-server=utf8_general_ci
 # (注意linux下mysql安装完默认：表名区分大小写，列名不区分大小写；0:区分大小写，1:不区分大小写)
 lower_case_table_names=1

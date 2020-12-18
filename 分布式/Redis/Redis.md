@@ -105,13 +105,13 @@ Redis 的特性：
 
 ```markdown
 # 安装gcc套装
-	yum install cpp
+	yum install gcc
+	# yum install cpp
 	yum install binutils
 	yum install glibc
-	yum install glibc-kernheaders
-	yum install glibc-common
-	yum install glibc-devel
-    yum install gcc
+	# yum install glibc-kernheaders
+	# yum install glibc-common
+	# yum install glibc-devel
     yum install make
 # 升级gcc
 	yum -y install centos-release-scl
@@ -128,9 +128,12 @@ Redis 的特性：
 
 ### 1.2.2 启停 redis
 
-```java
+```shell
+# 启动
 ./redis-server ../redis.conf
-./redis-cli shutdown
+# 关闭 
+./redis-cli
+shutdown
 ```
 
 以后台进程的方式启动，修改redis.conf daemonize =yes
