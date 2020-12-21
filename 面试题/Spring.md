@@ -1,4 +1,4 @@
-#### Q1 出Springboot项目启动的几种方式吗？
+#### Q1 Springboot项目启动的几种方式吗？
 
 1. main
 

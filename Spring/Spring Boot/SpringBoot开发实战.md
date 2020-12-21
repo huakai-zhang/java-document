@@ -1,28 +1,34 @@
+# 1 SpringBoot 入门
 
+## 1.1 第一个Spring Boot应用
 
-# 1 第一个Spring Boot应用
+### 1.1.1 创建项目
 
+IDEA—&gt;File—&gt;New—&gt;Project—&gt;Spring Initializr 
 
-IDEA—&gt;File—&gt;New—&gt;Project—&gt;Spring Initializr  ![img](https://img-blog.csdn.net/20180613164614425?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
+![image-20201221113514175](SpringBoot开发实战.assets/image-20201221113514175.png)
+
+![image-20201221113705666](SpringBoot开发实战.assets/image-20201221113705666.png)
 
 ```java
 @SpringBootApplication
-public class GirlApplication {
+public class DemoApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(GirlApplication.class, args);
+        SpringApplication.run(DemoApplication.class, args);
     }
 }
 ```
 
+Run ‘DemoApplication‘，访问8080端口
 
-Run ‘GirlApplication ‘，访问8080端口  ![img](https://img-blog.csdn.net/20180613165138936?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
+![img](SpringBoot开发实战.assets/20180613165138936)
 
 ```java
 @RestController
 public class HelloController {
 
-    @RequestMapping(value = "/hello", method = RequestMethod.GET)
+    @GetMapping(value = "/hello")
     public String say() {
         return "Hello Spring Boot!";
     }
@@ -33,28 +39,30 @@ public class HelloController {
 
 #### 其他启动方式
 
-1.命令行进入项目目录下，运行mvn spring-boot:run  2.mvn install把程序编译，进入target目录下，多出一个.jar文件，java -jar girl-0.0.1-SNAPSHOT.jar
+1. 命令行进入项目目录下，运行`mvn spring-boot:run`
+2. mvn install 把程序编译，进入target目录下，多出一个.jar文件`java -jar girl-0.0.1-SNAPSHOT.jar`
 
-## 项目属性配置
+## 1.2 项目属性配置
 
 application.properties：
 
-```java
+```properties
 server.port=8080
-server.context-path=/girl
+server.servlet.context-path=/demo
 ```
 
 application.yml：
 
-```java
+```yml
 server:
   port: 8080
-  context-path: /girl
+  servlet: 
+    context-path: /demo
 ```
 
 .yml文件格式：后面必须有一个空格，这两种配置保留一个即可。
 
-#### 配置变量
+### 1.2.1 配置变量
 
 ```java
 cupSize: B
@@ -70,7 +78,7 @@ public class HelloController {
     @Value("${cupSize}")
     private String cupSize;
 
-    @RequestMapping(value = "/hello", method = RequestMethod.GET)
+    @GetMapping(value = "/hello")
     public String say() {
         return cupSize + " " + age;
     }
@@ -79,23 +87,24 @@ public class HelloController {
 
 打印 B 18
 
-#### 配置中使用配置
+### 1.2.2 配置中使用配置
 
 ```java
+// application.properties
 content: "cupSize: ${cupSize}, age: ${age}"
 
- @Value("${content}")
-    private String content;
+@Value("${content}")
+private String content;
 
-    @RequestMapping(value = "/hello", method = RequestMethod.GET)
-    public String say() {
-        return content;
-    }
+@GetMapping(value = "/hello")
+public String say() {
+   return content;
+}
 ```
 
 打印 cupSize: B, age: 18
 
-#### 多配置变量
+### 1.2.3 多配置变量
 
 ```java
 girl:
@@ -138,18 +147,18 @@ public class HelloController {
     @Autowired
     private GirlProperties girlProperties;
 
-    @RequestMapping(value = "/hello", method = RequestMethod.GET)
+    @GetMapping(value = "/hello")
     public String say() {
         return girlProperties.getCupSize();
     }
 }
 ```
 
-## 开发环境和生产环境
+## 1.3 开发环境和生产环境
 
 application.yml只保留:
 
-```java
+```yml
 spring:
   profiles:
     active: dev
@@ -157,7 +166,7 @@ spring:
 
 application-dev.yml:
 
-```java
+```yml
 server:
   port: 8080
   context-path: /girl
@@ -168,7 +177,7 @@ girl:
 
 application-prod.yml:
 
-```java
+```yml
 server:
   port: 8081
   context-path: /girl
@@ -177,85 +186,61 @@ girl:
   age: 18
 ```
 
-可以使用其他方法启动：  java -jar girl-0.0.1-SNAPSHOT.jar –spring.profiles.active=prod
+可以使用其他方法启动：`java -jar girl-0.0.1-SNAPSHOT.jar –spring.profiles.active=prod`
 
-## Controller的使用
+## 1.4 Controller的使用
 
-```java
-@Controller
-public class HelloController {
-
-    @Autowired
-    private GirlProperties girlProperties;
-
-    @RequestMapping(value = "/hello", method = RequestMethod.GET)
-    public String say() {
-        return girlProperties.getCupSize();
-    }
-}
-```
-
-访问路径会出现异常，没有模版B。
-
-```java
+```xml
 <!-- spring官方模版 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-thymeleaf</artifactId>
-        </dependency>
+<dependency>
+	<groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-thymeleaf</artifactId>
+</dependency>
 ```
 
 新建resources/templates/index.html
 
 ```java
+// 此处使用 @Controller
+// @RestController = @Controller + @ResponseBody
 @Controller
 public class HelloController {
-
-    @Autowired
-    private GirlProperties girlProperties;
-
-    @RequestMapping(value = "/hello", method = RequestMethod.GET)
-    public String say() {
+    @GetMapping("/index")
+    public String hello() {
         return "index";
     }
 }
 ```
 
-模版生效。类似于java web的jsp，不过使用的引擎是thymeleaf。
+模版生效。类似于java web的jsp，不过使用的引擎是thymeleaf。其他（freemarker）。
+
+### 1.4.1 多路径访问
 
 ```java
 @Controller
-@ResponseBody
-等同于
-@RestController
-```
-
-#### 多路径访问
-
-```java
-@RequestMapping(value = {"/hello", "/hi"}, method = RequestMethod.GET)
-    public String say() {
-        return girlProperties.getCupSize();
+public class HelloController {
+    //  @GetMapping = @RequestMapping(method = RequestMethod.GET)
+    @GetMapping({"/index", "/hello"})
+    public String hello() {
+        return "index";
     }
+}
 ```
 
 修改方法为RequestMethod.POST，使用postman访问
 
 如果不写method参数，任何请求方式都可以访问。
 
-#### 处理URL的参数
+### 1.4.2 处理URL的参数
 
-@PathVariable 获取url中的数据  @RequestParam 获取请求参数的值  @GetMapping 组合注解
+@PathVariable 获取url中的数据
+
+@RequestParam 获取请求参数的值
 
 ```java
 @RestController
-@RequestMapping("/hello")
 public class HelloController {
-
-    @Autowired
-    private GirlProperties girlProperties;
-
-    @RequestMapping(value = "/say/{id}", method = RequestMethod.GET)
+    @GetMapping(value = "/hello/{id}")
     public String say(@PathVariable("id") Integer id) {
         return "id: " + id;
     }
@@ -264,13 +249,8 @@ public class HelloController {
 
 ```java
 @RestController
-@RequestMapping("/hello")
 public class HelloController {
-
-    @Autowired
-    private GirlProperties girlProperties;
-
-    @RequestMapping(value = "/say", method = RequestMethod.GET)
+    @GetMapping(value = "/hello")
     public String say(@RequestParam("id") Integer myId) {
         return "id: " + myId;
     }
@@ -279,57 +259,46 @@ public class HelloController {
 
 ```java
 @RestController
-@RequestMapping("/hello")
 public class HelloController {
-
-    @RequestMapping(value = "/say", method = RequestMethod.GET)
+    @GetMapping(value = "/hello")
     public String say(@RequestParam(value = "id", required = false, defaultValue = "0") Integer myId) {
         return "id: " + myId;
     }
 }
 ```
 
-```java
-@RestController
-@RequestMapping("/hello")
-public class HelloController {
+## 1.5 数据库操作
 
-    @GetMapping(value = "/say")
-    public String say(@RequestParam(value = "id", required = false, defaultValue = "0") Integer myId) {
-        return "id: " + myId;
-    }
-}
-```
+`JPA(Java Persistence API)`定义了一系列对象持久化的标准，目前实现这一规范的产品有Hibenate、TopLikn等。  Spring-Data-Jpa，就是Spring对Hibenate的整合。
 
-## 数据库操作
-
-JPA(Java Persistence API)定义了一系列对象持久化的标准，目前实现这一规范的产品有Hibenate、TopLikn等。  Spring-Data-Jpa，就是Spring对Hibenate的整合。
-
-```java
+```xml
 <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
-        </dependency>
+	<groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-jpa</artifactId>
+</dependency>
 
-        <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
-        </dependency>
+<dependency>
+    <groupId>mysql</groupId>
+    <artifactId>mysql-connector-java</artifactId>
+</dependency>
 ```
 
 application.yml:
 
-```java
+```yml
 spring:
   profiles:
     active: dev
   datasource:
-    driver-class-name: com.mysql.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3306/dbgirl
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/spring?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: root
     password: root
   jpa:
     hibernate:
+      # create-drop在应用停下来时就会把表全部删掉
+      # none什么都不做
+      # validate会验证类里面的数据是否和表中一致，如果不一致会报错
       # create在运行时自动创建表，每次都会建一个空的表，之前有这个表会先删掉
       # ddl-auto: create
       # 之前有这个表不会删掉，会保留着
@@ -382,14 +351,9 @@ public class Girl {
 }
 ```
 
+![img](SpringBoot开发实战.assets/20180614094712362)
 
-![img](https://img-blog.csdn.net/20180614094712362?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
-
-#### ddl-auto
-
-create-drop在应用停下来时就会把表全部删掉  none什么都不做  validate会验证类里面的数据是否和表中一致，如果不一致会报错
-
-#### RestFul API
+### 1.5.1 RestFul API
 
 ```java
 public interface GirlRepository extends JpaRepository<Girl, Integer> {
@@ -464,10 +428,11 @@ public class GirlController {
 }
 ```
 
+PUT要使用x-www-form-urlencoded
 
-PUT要使用x-www-form-urlencoded  ![img](https://img-blog.csdn.net/20180614101023696?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
+![img](SpringBoot开发实战.assets/20180614101023696)
 
-## 事务管理
+## 1.6 事务管理
 
 ```java
 @Service
@@ -501,64 +466,69 @@ public class GirlController {
 }
 ```
 
-修改数据库的cupSize字段的长度为1  此时会报错：com.mysql.jdbc.MysqlDataTruncation: Data truncation: Data too long for column ‘cup_size’ at row 1  但是A可以插入成功，B插入失败。
+修改数据库的cupSize字段的长度为1  此时会报错：
 
-为方法添加import org.springframework.transaction.annotation.Transactional;注解，就会产生事务。
+```markdown
+com.mysql.jdbc.MysqlDataTruncation: Data truncation: Data too long for column ‘cup_size’ at row 1  
+```
 
+但是A可以插入成功，B插入失败。
 
+为方法添加`import org.springframework.transaction.annotation.Transactional;`注解，就会产生事务。
 
-
-
-
-
-
-
-## 表单验证
+## 1.7 表单验证
 
 修改Girl类：
 
 ```java
 @NotBlank(message = "这个字段必传")
-    private String cupSize;
+private String cupSize;
 
-    @Min(value = 18, message = "未成年少女禁止入内")
-    private Integer age;
+@Min(value = 18, message = "未成年少女禁止入内")
+private Integer age;
 
-    @NotNull(message = "金额必传")
-    private Double money;
+@NotNull(message = "金额必传")
+private Double money;
 ```
 
 修改PUT方法：
 
 ```java
 @PostMapping(value = "/girls")
-    public Girl girlAdd(@Valid Girl girl, BindingResult bindingResult) {
-        if (bindingResult.hasErrors()) {
-            System.out.println(bindingResult.getFieldError().getDefaultMessage());
-            return null;
-        }
-        girl.setCupSize(girl.getCupSize());
-        girl.setAge(girl.getAge());
-
-        return girlRepository.save(girl);
+public Girl girlAdd(@Valid Girl girl, BindingResult bindingResult) {
+	if (bindingResult.hasErrors()) {   					                         	System.out.println(
+        	bindingResult.getFieldError().getDefaultMessage());
+         return null;
     }
+    girl.setCupSize(girl.getCupSize());
+    girl.setAge(girl.getAge());
+
+    return girlRepository.save(girl);
+}
 ```
 
-## AOP统一处理请求日志
+# 2 SpringBoot 进阶
+
+## 2.1 AOP统一处理请求日志
+
+AOP是一种编程范式，与语言无关，是一种程序设计思想。
+
+面向切面（AOP）Aspect Oriented Programming，利用横切技术，将面向对象构建的庞大的类的体系进行水平的切割，并且会将那些影响到了多个类的公共行为封装成一个可重用模块，这个模块称为切面。（将通用逻辑从业务逻辑中分离出来）  
+
+面向对象（OOP）Object Oriented Programming，将需求功能垂直划分为不同的并且相对独立的，会封装成良好的类并且让它们有属于自己的行为  
+
+面向过程（POP）Procedure Oriented Programming
+
+![img](SpringBoot开发实战.assets/20180614105023375)
 
 
-AOP是一种编程范式，与语言无关，是一种程序设计思想  面向切面（AOP）Aspect Oriented Programming，利用横切技术，将面向对象构建的庞大的类的体系进行水平的切割，并且会将那些影响到了多个类的公共行为封装成一个可重用模块，这个模块称为切面。（将通用逻辑从业务逻辑中分离出来）  面向对象（OOP）Object Oriented Programming，将需求功能垂直划分为不同的并且相对独立的，会封装成良好的类并且让它们有属于自己的行为  面向过程（POP）Procedure Oriented Programming  ![img](https://img-blog.csdn.net/20180614105023375?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
+![img](SpringBoot开发实战.assets/20180614105809629)
 
-
-![img](https://img-blog.csdn.net/20180614105809629?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
-
-#### 添加依赖
-
-```java
+```xml
 <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-aop</artifactId>
-        </dependency>
+	<groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-aop</artifactId>
+</dependency>
 ```
 
 ```java
@@ -665,7 +635,7 @@ public class HttpAspect {
 }
 ```
 
-## 统一异常处理
+## 2.2 统一异常处理
 
 ```java
 /**
@@ -730,15 +700,15 @@ public class ResultUtil {
 }
 
 @PostMapping(value = "/girls")
-    public Result girlAdd(@Valid Girl girl, BindingResult bindingResult) {
-        if (bindingResult.hasErrors()) {
-            return ResultUtil.error(1, bindingResult.getFieldError().getDefaultMessage());
-        }
-        girl.setCupSize(girl.getCupSize());
-        girl.setAge(girl.getAge());
-
-        return ResultUtil.success(girlRepository.save(girl));
+public Result girlAdd(@Valid Girl girl, BindingResult bindingResult) {
+	if (bindingResult.hasErrors()) {
+		return ResultUtil.error(1, bindingResult.getFieldError().getDefaultMessage());
     }
+    girl.setCupSize(girl.getCupSize());
+    girl.setAge(girl.getAge());
+
+    return ResultUtil.success(girlRepository.save(girl));
+}
 ```
 
 GirlService：
@@ -767,7 +737,6 @@ Controller：
 ```java
 @ControllerAdvice
 public class ExceptionHandle {
-
     @ExceptionHandler(value = Exception.class)
     @ResponseBody
     public Result handle(Exception e) {
@@ -776,7 +745,7 @@ public class ExceptionHandle {
 }
 ```
 
-#### 定义带有错误码的异常
+### 2.2.1 定义带有错误码的异常
 
 自定义异常：
 
@@ -820,7 +789,7 @@ public class ExceptionHandle {
 }
 ```
 
-#### 统一管理错误码和提示
+### 2.2.2 统一管理错误码和提示
 
 修改GirlException:
 
@@ -875,14 +844,14 @@ public enum  ResultEnum {
 }
 ```
 
-## 单元测试
+## 2.3 单元测试
 
 GirlService:
 
 ```java
 public Girl findOne(Integer id) {
-        return girlRepository.findOne(id);
-    }
+	return girlRepository.findOne(id);
+}
 ```
 
 测试类：
@@ -907,12 +876,12 @@ Actual   :9
 */
 ```
 
-#### 使用IDEA自带功能
+### 2.3.1 使用IDEA自带功能
 
 
-![img](https://img-blog.csdn.net/20180614150246594?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
+![img](SpringBoot开发实战.assets/20180614150246594)
 
-#### Controller测试
+### 2.3.2 Controller测试
 
 ```java
 @RunWith(SpringRunner.class)
@@ -932,58 +901,15 @@ public class GirlControllerTest {
 }
 ```
 
-在项目打包时会自动执行单元测试。  跳过单元测试：mvn clean package -Dmaven.test.ship=true
+在项目打包时会自动执行单元测试。  跳过单元测试：
 
+`mvn clean package -Dmaven.test.ship=true`
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## @DynamicUpdate注解
+## 2.4 @DynamicUpdate注解
 
 ```java
 @Entity
 public class ProductCategory {
-
-    /** 类目id. */
-    @Id
-    @GeneratedValue
-    private Integer categoryId;
-
-    /** 类目名字. */
-    private String categoryName;
-
-    /** 类目编号. */
-    private Integer categoryType;
-}
-
-@Test
-    public void saveTest() {
-        ProductCategory productCategory = new ProductCategory();
-        productCategory.setCategoryId(2);
-        productCategory.setCategoryName("男生最爱");
-        productCategory.setCategoryType(3);
-        repository.save(productCategory);
-    }
-```
-
-update_time会进行更新。
-
-```java
-@Entity
-public class ProductCategory {
-
     /** 类目id. */
     @Id
     @GeneratedValue
@@ -997,73 +923,93 @@ public class ProductCategory {
 
     private Date createTime;
 
+    // 数据库设置，根据当前时间戳更新
     private Date updateTime;
 }
 @Test
-    public void saveTest() {
-        ProductCategory productCategory = repository.findOne(1);
-        productCategory.setCategoryType(1);
-        repository.save(productCategory);
-    }
+public void saveTest() {
+    ProductCategory productCategory = repository.findOne(1);
+    productCategory.setCategoryType(1);
+    repository.save(productCategory);
+}
 ```
 
-update_time不会更新。
+执行 sql 为：
 
-在ProductCategory添加@DynamicUpdate，再次进行修改，update_time就会进行修改（需要修改为其他categoryType的值）。  @DynamicUpdate表示update对象的时候,生成动态的update语句,如果这个字段的值是null就不会被加入到update语句中。
+```sql
+/** update_time 没有更新 **/
+/** update_time虽设置了根据当前时间戳更新，但是 sql 中包含update_time的更新，不会触发自动更新时间 **/
+update product_category set category_name=?, category_type=?, create_time=?, update_time=? where category_id=?
+```
 
-## 快捷getter and setter
+在 ProductCategory 添加 @DynamicUpdate，再次进行修改，update_time 就会进行修改（需要修改为其他 categoryType 的值）。  
+
+```sql
+/** update_time 更新 **/
+update product_category set category_type=? where category_id=?
+```
+
+@DynamicUpdate 表示比较更新要使用的实体类中的字段值与从数据库中查询出来的字段值，判断其是否有修改。看这个例子，数据库中 id=1 的记录所有字段只有 categoryType 被修改，其他字段都没改变，所以只是 categoryType 字段被更新为了新的值。
+
+## 2.5 快捷 getter and setter
 
 添加依赖
 
-```java
+```xml
 <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-        </dependency>
+	<groupId>org.projectlombok</groupId>
+    <artifactId>lombok</artifactId>
+</dependency>
 ```
 
-以及插件lombok plugins
+还需 idea 插件 lombok：
 
-在ProductCategory添加@Date注解，就不许在生成getter和setter方法，toString()等方法。  如果只需要getter方法，只需添加@Getter，setter同理。
+![image-20201221142605840](SpringBoot开发实战.assets/image-20201221142605840.png)
 
-## javax.transaction.Transactional
+在 ProductCategory 添加@Date注解，就不许在生成getter和setter方法，toString()等方法。  如果只需要getter方法，只需添加@Getter，setter同理。
+
+## 2.6  javax.transaction.Transactional
 
 测试成功后，测试数据不影响数据库数据。与service中的事务不同，这里的Transactional在测试完成后，无论是否发生异常，都会将所有数据库操作回滚。
 
 ```java
 @Test
-    @Transactional
-    public void saveTest() {
-        ProductCategory productCategory = new ProductCategory("男生最爱", 4);
-        ProductCategory result = repository.save(productCategory);
-        // 断言方法
-        Assert.assertNotNull(result);
-        //Assert.assertNotEquals(null, result);
-    }
+@Transactional
+public void saveTest() {
+	ProductCategory productCategory = new ProductCategory("男生最爱", 4);
+    ProductCategory result = repository.save(productCategory);
+    // 断言方法
+    Assert.assertNotNull(result);
+    //Assert.assertNotEquals(null, result);
+}
 ```
 
-## @JsonProperty
+## 2.7 @JsonProperty
 
 ```java
 @JsonProperty("id")
 private String productId;
 ```
 
-productId为了让我们看清楚字段的含义，id为借口要求的返回值。
+productId为了让我们看清楚字段的含义，id为接口要求的返回值。
 
-## BeanUtils
+## 2.8 BeanUtils
 
-Spring提供的一个工具类：  BeanUtils.copyProperties(productInfo, productInofVO);  把productInfo对象的属性值copy到productInofVO中去。
+Spring提供的一个工具类：  
 
-## 分页
+```java
+BeanUtils.copyProperties(productInfo, productInofVO);  
+```
+
+把productInfo对象的属性值copy到productInofVO中去。
+
+## 2.9 分页
 
 org.springframework.data.domain.Page
 
 ```java
 public interface OrderMasterRepository extends JpaRepository<OrderMaster, String> {
-
     Page<OrderMaster> findByBuyerOpenid(String buyerOpenid, Pageable pageable);
-
 }
 ```
 
@@ -1090,11 +1036,11 @@ public class OrderMasterRepositoryTest {
 }
 ```
 
-## @Transient
+## 2.10 @Transient
 
 javax.persistence.Transient  在与数据库对照的实体类中，某个字段添加这个注解，会忽略掉这个字段。
 
-## 日期转换之JsonSerialize
+## 2.11 日期转换之JsonSerialize
 
 ```java
 public class Date2LongSerializer extends JsonSerializer<Date> {
@@ -1120,7 +1066,7 @@ public class OrderDTO {
 
 在返回结果OrderDTO时，会处理器时间。
 
-## 实体类的参数查询到的为null的不显示
+## 2.12 实体类参数查询到为null的不显示
 
 单个实体类配置，类头添加注解@JsonInclude(JsonInclude.Include.NON_NULL)
 
@@ -1132,42 +1078,11 @@ spring:
     default-property-inclusion: non_null
 ```
 
-#### 忽略方法
+忽略方法：
 
 @JsonIgnore
 
-## RestTemplate
-
-## freemarker
-
-依赖：
-
-```java
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-freemarker</artifactId>
-</dependency>
-```
-
-```java
-@Controller
-@RequestMapping("/seller/order")
-public class SellerOrderController {
-
-
-    @GetMapping("/list")
-    public ModelAndView list() {
-        return new ModelAndView("order/list");
-    }
-
-}
-```
-
-建立文件夹以及文件：resources/templates/order/list.ftl
-
-## http://www.ibootstrap.cn/
-
-## 异常捕获
+## 2.13 异常捕获
 
 ```java
 @ControllerAdvice
@@ -1187,43 +1102,47 @@ public class SellexceptionHandler {
 }
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## 日志框架
+# 3 日志框架
 
 一套能实现日志输出的工具包，能够描述系统运行状态的所有时间都可以算作日志（用户下线、接口超时、数据库崩溃、hello world）。
 
-#### 日志框架的能力
+## 3.1 日志框架的能力
 
-定制输出目标  定制输出格式  携带上下文信息  运行时选择性输出  灵活的配置  优异的性能
+定制输出目标
 
-#### 常见的日志框架
+定制输出格式
 
-日志门面：  JCL：apache自带的common logging  SLF4j  jboss-logging  日志实现：  Log4j  Log4j2  Logback  JUL：JDK自带的log
+携带上下文信息
+
+运行时选择性输出
+
+灵活的配置
+
+优异的性能
+
+## 3.2 常见的日志框架
+
+日志门面(日志实现的抽象层)：
+
+JCL：apache自带的common logging
+
+SLF4j
+
+jboss-logging
+
+日志实现：
+
+Log4j
+
+Log4j2
+
+Logback
+
+UL：JDK自带的log
 
 选择SLF4j和Logback同一个作者。
 
-#### 测试日志
+## 3.3 测试日志
 
 ```java
 @RunWith(SpringRunner.class)
@@ -1254,14 +1173,14 @@ public enum Level {
     INFO(20, "INFO"),
     DEBUG(10, "DEBUG"),
     TRACE(0, "TRACE");
- }
+}
 ```
 
-#### @Slf4j的使用
+## 3.4 @Slf4j的使用
 
 添加依赖：
 
-```java
+```xml
 <dependency>
     <groupId>org.projectlombok</groupId>
     <artifactId>lombok</artifactId>
@@ -1284,24 +1203,27 @@ public class LoggerTest {
 }
 ```
 
+如果还不能解析log：  
 
-如果还不能解析log：  1.需要安装插件：  ![img](https://img-blog.csdn.net/20180620122138271?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
+1.需要安装插件：  
+
+![img](SpringBoot开发实战.assets/20180620122138271)
 
 2.可能是idea的版本过低
 
-#### 打印变量
+## 3.5 打印变量
 
 ```java
 String name = "zcy";
-    String password = "123456";
-    log.info("name: {}, password: {}", name, password);
+String password = "123456";
+log.info("name: {}, password: {}", name, password);
 ```
 
-#### Logback的配置
+## 3.6 Logback的配置
 
 第一种方式：application.yml：
 
-```java
+```yml
 # 配置日志格式
 logging:
   pattern:
@@ -1318,7 +1240,7 @@ logging:
 
 第二种方式：logback-spring.xml
 
-```java
+```xml
 <?xml version="1.0" encoding="UTF-8"?>
 
 <configuration>
@@ -1373,4 +1295,6 @@ logging:
 
 </configuration>
 ```
+
+------
 
