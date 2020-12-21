@@ -207,6 +207,15 @@ top：实时显示系统资源使用情况。
 
 free：查看系统内存。
 
+- total 总内存
+- used 已用内存
+- free 空闲内存
+- shared 被共享使用的物理内存
+- buff/cache 已使用的缓存
+- avaiable 可用内存
+- available = free + buffer + cache(注：只是大概的计算方法)
+- total = used + free + buff/cache
+
 date：显示与设置系统时间。
 
 cal：查看日历等时间信息。
