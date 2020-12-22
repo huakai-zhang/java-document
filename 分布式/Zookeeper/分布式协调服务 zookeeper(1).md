@@ -1,15 +1,3 @@
-## 分布式环境特点
-
-分布性 并发性：程序运行过程中，并发性操作是很常见的。比如同一分布式系统中的多个节点，同时访问一个共享资源。数据库、分布式存储 无序性：进程之间的消息通信，会出现顺序不一致问题
-
-## 分布式环境下面临的问题
-
-网络通信：网络本身的不可靠性，因此会涉及到一些网络通信问题 网络分区：当网络发生异常导致分布式系统中部分节点之间的网络延时不断增大，最终导致组成分布式架构的所有节点，只有部分节点能够正常通信 三态：在分布式架构里面，除了成功、失败、超时 分布式事务：ACID(原子性、一致性、隔离性、持久性)
-
-## 中心化和去中心化
-
-冷备或者热备 分布式架构里面，很多的架构思想采用的是：当集群发生故障的时候，集群中的人群会自动“选举”出一个新的领导。 最典型的是： zookeeper / etcd
-
 ## 经典的CAP/BASE理论
 
 ### CAP
@@ -23,10 +11,6 @@ C（一致性 Consistency）：所有节点上的数据时刻保持一致 A（�
 
 zookeeper是一个开源的分布式协调服务，是由雅虎创建的，基于google chubby。
 
-## zookeeper是什么
-
-分布式数据一致性的解决方案
-
 ## zookeeper能做什么
 
 数据的发布/订阅（配置中心:disconf） 负载均衡（dubbo利用了zookeeper机制实现负载均衡） 命名服务 master选举(kafka、hadoop、hbase) 分布式队列 分布式锁
@@ -34,43 +18,6 @@ zookeeper是一个开源的分布式协调服务，是由雅虎创建的，基�
 ## zookeeper的特性
 
 顺序一致性：从同一个客户端发起的事务请求，最终会严格按照顺序被应用到zookeeper中 原子性：所有的事务请求的处理结果在整个集群中的所有机器上的应用情况是一致的，也就是说，要么整个集群中的所有机器都成功应用了某一事务、要么全都不应用 可靠性：一旦服务器成功应用了某一个事务数据，并且对客户端做了响应，那么这个数据在整个集群中一定是同步并且保留下来的 实时性：一旦一个事务被成功应用，客户端就能够立即从服务器端读取到事务变更后的最新数据状态；（zookeeper仅仅保证在一定时间内，近实时）
-
-
-## 单机环境安装
-
-1. 下载zookeeper的安装包 http://apache.fayea.com/zookeeper/stable/zookeeper-3.4.10.tar.gz 
-<li>解压zookeeper tar -zxvf zookeeper-3.4.10.tar.gz</li> 
-<li>cd 到 ZK_HOME/conf , copy一份zoo.cfg cp zoo_sample.cfg zoo.cfg</li> 
-<li>sh zkServer.sh xxx {start|start-foreground|stop|restart|status|upgrade|print-cmd}</li> 
-5. sh zkCli.sh -server ip:port
-
-## 集群环境
-
-zookeeper集群，包含三种角色:
-
-- Leader：接受所有Follower的提案请求并统一协调发起提案的投票，负责与所有的Follower进行内部数据交换（同步） 
-- Follower：直接为客户端服务并参与提案的投票，同时与Leader进行数据交换（同步） 
-- Observer：直接为客户端服务但不参与提案的投票，同时与Leader进行数据交换（同步），observer 是一种特殊的zookeeper节点。可以帮助解决zookeeper的扩展性（如果大量客户端访问我们zookeeper集群，需要增加zookeeper集群机器数量。从而增加zookeeper集群的性能。 导致zookeeper写性能下降， zookeeper的数据变更需要半数以上服务器投票通过。造成网络消耗增加投票成本） 1.observer不参与投票。 只接收投票结果。 2.不属于zookeeper的关键部位。
-
-#### 创建Observer服务器
-
-在zoo.cfg里面增加： peerType=observer
-
-
-
-server.1=192.168.11.129:2181:3181:observer server.2=192.168.11.131:2181:3181 server.3=192.168.11.135:2181:3181 ![img](https://img-blog.csdnimg.cn/20200411150228977.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) ![img](https://img-blog.csdnimg.cn/2020041116070855.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
-
-### 修改配置文件
-
-server.id=host:port:port id的取值范围：1~255，用id来标识该机器在集群中的机器序号 2888表示follower节点与leader节点交换信息的端口号 3181表示leader选举的端口，如果leader节点挂掉了, 需要一个端口来重新选举
-
-server.1=192.168.11.129:2888:3181 server.2=192.168.11.131:2888:3181 server.3=192.168.11.135:2888:3181
-
-### 创建myid
-
-在每一个服务器的zookeeper配置文件zoo.cfg中配置的dataDir目录下创建一个myid的文件，文件就一行数据，数据内容是每台机器对应的server ID的数字
-
-### 启动zookeeper
 
 ## zoo.cfg 配置文件分析
 
