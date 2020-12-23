@@ -1,8 +1,8 @@
-1 什么是 springboot 
+# 1 什么是 springboot 
 
 SpringBoot 框架是为了能够帮助使用 Spring 框架的开发者快速高效的构建一个基于 Spirng 框架以及 Spring 生态体系的应用解决方案。它是对`约定优于配置`这个理念下的一个最佳实践。因此它是一个服务于框架的框架，服务的范围是简化配置文件。
 
-2 约定优于配置的体现
+# 2 约定优于配置的体现
 
 约定优于配置的体现主要是
 
@@ -20,7 +20,7 @@ SpringBoot 框架是为了能够帮助使用 Spring 框架的开发者快速高�
 
 5. EnableAutoConfiguration 默认对于依赖的 starter 进行自动装载
 
-3 从 SpringBootApplication 注解入手 
+# 3 从 SpringBootApplication 注解入手 
 
 为了揭开 springboot 的奥秘，我们直接从 Annotation 入手，看看@SpringBootApplication 里面，做了什么？ 
 
@@ -48,7 +48,7 @@ SpringBootApplication 本质上是由 3 个注解组成，分别是：
 
 我们可以直接用这三个注解也可以启动 springboot 应用， 只是每次配置三个注解比较繁琐，所以直接用一个复合注解更方便些。 然后仔细观察者三个注解，除了 EnableAutoConfiguration 可能稍微陌生一点，其他两个注解使用得都很多。
 
-3.1 Configuration
+## 3.1 Configuration
 
 Configuration 这个注解大家应该有用过，它是 JavaConfig 形式的基于 Spring IOC 容器的配置类使用的一种注解。因为 SpringBoot 本质上就是一个 spring 应用，所以通过这个注解来加载 IOC 容器的配置是很正常的。所以在启动类里面标注了@Configuration，意味着它其实也是一个 IoC 容器的配置类。
 
@@ -56,7 +56,7 @@ Configuration 这个注解大家应该有用过，它是 JavaConfig 形式的基
 
 直到 Java5 中，引入了 Annotations 这个特性，Spring 框架也紧随大流并且推出了基于 Java 代码和 Annotation 元信息的依赖关系绑定描述的方式。也就是 JavaConfig。 从 spring3 开始，spring 就支持了两种 bean 的配置方式， 一种是基于 xml 文件方式、另一种就是 JavaConfig 任何一个标注了@Configuration 的 Java 类定义都是一个 JavaConfig 配置类。而在这个配置类中，任何标注了 @Bean 的方法，它的返回值都会作为 Bean 定义注册到 Spring 的 IOC 容器，方法名默认成为这个 bean 的 id。
 
-3.2 ComponentScan 
+## 3.2 ComponentScan 
 
 ComponentScan 这个注解是大家接触得最多的了，相当于 xml 配置文件中的。 它的主要作用就是扫描指定路径下的标识了需要装配的类，自动装配到 spring 的 Ioc 容器中。 
 
@@ -91,11 +91,11 @@ public class DemoClass {
 }
 ```
 
-3.3 EnableAutoConfiguration
+## 3.3 EnableAutoConfiguration
 
 我们把 EnableAutoConfiguration 放在最后讲的目的并不是说它是一个新的东西，只是他对于 springboot 来说意义重大。
 
-3.3.1 Enable 并不是新鲜玩意
+### 3.3.1 Enable 并不是新鲜玩意
 
 仍然是在 spring3.1 版本中，提供了一系列的@Enable 开头的注解，Enable 主机应该是在 JavaConfig 框架上更进一 步的完善，是的用户在使用 spring 相关的框架是，避免配置大量的代码从而降低使用的难度。
 
@@ -112,7 +112,7 @@ public @interface EnableAutoConfiguration {
 }
 ```
 
-3.3.2 Import 注解
+### 3.3.2 Import 注解
 
 import 注解是什么意思呢？ 联想到 xml 形式下有一个形式的注解，就明白它的作用了。 import 就是把多个分来的容器配置合并在一个配置中。在 JavaConfig 中所表达的意义是一样的。
 
@@ -148,7 +148,7 @@ public class OtherDemo {
 }
 ```
 
-4 深入分析 EnableAutoConfiguration
+# 4 深入分析 EnableAutoConfiguration
 
 EnableAutoConfiguration 的主要作用其实就是帮助 springboot 应用把所有符合条件的@Configuration 配置都加载到当前 SpringBoot 创建并使用的 IoC 容器中。 再回到 EnableAutoConfiguration 这个注解中，我们发现它的 import 是这样：
 
@@ -156,7 +156,7 @@ EnableAutoConfiguration 的主要作用其实就是帮助 springboot 应用把�
 @Import(AutoConfigurationImportSelector.class) 
 ```
 
-4.1 AutoConfigurationImportSelector
+## 4.1 AutoConfigurationImportSelector
 
 Enable 注解不仅仅可以像前面演示的案例一样很简单的实现多个 Configuration 的整合，还可以实现一些复杂的场景，比如可以根据上下文来激活不同类型的 bean， @Import 注解可以配置三种不同的 class：
 
@@ -215,7 +215,7 @@ public class ThirdDemoMain {
 }
 ```
 
-4.2 @EnableAutoConfiguration 注解的实现原理
+## 4.2 @EnableAutoConfiguration 注解的实现原理
 
 了解了 ImportSelector 和 ImportBeanDefinitionRegistrar 后，对于 EnableAutoConfiguration 的理解就容易一些了。
 
@@ -271,7 +271,7 @@ protected Class<?> getSpringFactoriesLoaderFactoryClass() {
 
 那么可以猜想到这里的实现原理也一定是一样的，定位到 AutoConfigurationImportSelector 这个类中的 selectImports 方法本质上来说，其实 EnableAutoConfiguration 会帮助 springboot 应用把所有符合@Configuration 配置都加载到当前 SpringBoot 创建的 IoC 容器，而这里面借助了 Spring 框架提供的一个工具类 SpringFactoriesLoader 的支持。以及用到了 Spring 提供的条件注解 @Conditional，选择性的针对需要加载的 bean 进行条件过滤。
 
-4.3 SpringFactoriesLoader
+## 4.3 SpringFactoriesLoader
 
 在这里简单分析一下 SpringFactoriesLoader 这个工具类的使用。它其实和 java 中的 SPI 机制的原理是一样的，不过它比 SPI 更好的点在于不会一次性加载所有的类，而是根据 key 进行加载。 首先， SpringFactoriesLoader 的作用是从 `classpath/META-INF/spring.factories` 文件中，根据 key 来加载对应的类到 spring IoC 容器中。
 
@@ -313,7 +313,7 @@ private static Map<String, List<String>> loadSpringFactories(@Nullable ClassLoad
 }
 ```
 
-4.4 深入理解条件过滤 
+## 4.4 深入理解条件过滤 
 
 在分析 AutoConfigurationImportSelector 的源码时，会先扫描 `spring-autoconfiguration-metadata.properties` 文件，最后在扫描 spring.factories 对应的类时，会结合前面的元数据进行过滤，为什么要过滤呢？ 
 
@@ -350,7 +350,7 @@ static AutoConfigurationMetadata loadMetadata(ClassLoader classLoader, String pa
 }
 ```
 
-4.4.1 Conditional 中的其他注解
+### 4.4.1 Conditional 中的其他注解
 
 Conditions 描述 
 
@@ -368,9 +368,9 @@ Conditions 描述
 
 @ConditionalOnWebApplication 当前 spring context 是否是 web 应用程序
 
-4.5 示例
+## 4.5 示例
 
-4.5.1 starter 项目
+### 4.5.1 starter 项目
 
 ```xml
 <dependency>
@@ -409,7 +409,7 @@ resources/META-INF/spring-autoconfigure-metadata.properties：
 com.spring.core.SpringConfig.ConditionalOnClass=com.spring.fourthDemo.TestClass
 ```
 
-4.5.1 当前项目
+### 4.5.2 当前项目
 
 引入 starter 项目 maven 路径。
 
@@ -435,7 +435,7 @@ Exception in thread "main" org.springframework.beans.factory.NoSuchBeanDefinitio
 
 当前项目添加 com.spring.fourthDemo.TestClass 类，项目即可正常启动运行。
 
-5 Starter
+# 5 Starter
 
 `Starter` 是 Spring Boot 中的一个非常重要的概念，Starter 相当于模块，它能将模块所需的依赖整合起来并对模块内的 Bean 根据环境（ 条件）进行自动配置。使用者只需要依赖相应功能的 Starter，无需做过多的配置和依赖，Spring Boot 就能自动扫描并加载相应的模块。 
 
@@ -443,7 +443,7 @@ Exception in thread "main" org.springframework.beans.factory.NoSuchBeanDefinitio
 
 SpringBoot 存在很多`开箱即用`的 Starter 依赖，使得我们在开发业务代码时能够非常方便的、不需要过多关注框架的配置，而只需要关注业务即可。
 
-5.1 spring-boot-starter-logging
+## 5.1 spring-boot-starter-logging
 
 在实际应用中，日志是最重要的一个组件： 
 
@@ -451,13 +451,13 @@ SpringBoot 存在很多`开箱即用`的 Starter 依赖，使得我们在开发�
 2. 也可以对访问的记录进行跟踪
 3. 当然，在很多大型的互联网应用中，基于日志的收集以及分析可以了解用户的用户画像，比如兴趣爱好、点击 行为。
 
-5.1.1 常见的日志框架
+### 5.1.1 常见的日志框架
 
 可能是太过于常见了，所以使得大家很少关注，只是要用到的时候复制粘贴一份就行，甚至连日志配置文件中的配 置语法都不清楚。另外一方面，Java 中提供的日志组件太 多了，一会儿 log4j，一会儿 logback，一会儿又是 log4j2。
 
 不清楚其中的关联 Java 中常用的日志框架： Log4j、Log4j2、Commons Logging、Slf4j、Logback、Jul(Java Util Logging) 
 
-5.1.2 简单介绍日志的发展历史
+### 5.1.2 简单介绍日志的发展历史
 
 最早的日志组件是 Apache 基金会提供的 Log4j，log4j 能够通过配置文件轻松的实现日志系统的管理和多样化配置，所以很快被广泛运用。也是我们接触得比较早和比较多的日志组件。它几乎成了 Java 社区的日志标准。
 
@@ -483,9 +483,9 @@ SpringBoot 存在很多`开箱即用`的 Starter 依赖，使得我们在开发�
 
  而在我们现在的应用中，绝大部分都是使用 slf4j 作为门面， 然后搭配 logback 或者 log4j2 日志系统。
 
-5.2 starter 项目示例
+## 5.2 starter 项目示例
 
-5.2.1 starter 项目
+### 5.2.1 starter 项目
 
 ```xml
 <dependencies>
@@ -606,7 +606,7 @@ org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
   com.spring.starter.autoconfiguration.HelloAutoConfiguration
 ```
 
-5.2.2 项目加载 starter
+### 5.2.2 项目加载 starter
 
 ```xml
 <dependency>
@@ -646,7 +646,7 @@ HelloProperties:JsonFormatProcessor:{"sex":"美女","age":18}
 Obj format result:JsonFormatProcessor:{"account":"Xiaoxiao","id":1}
 ```
 
-6 SpringBoot 另一大神器 Actuator
+# 6 SpringBoot 另一大神器 Actuator
 
 微服务应用开发完成以后，最终目的是为了发布到生产环境上给用户试用，开发结束并不意味着研发的生命周期结 束，更多的时候他只是一个开始，因为服务在本地测试完成以后，并不一定能够非常完善的考虑到各种场景。所以 需要通过运维来保障服务的稳定。 
 
@@ -654,7 +654,7 @@ Obj format result:JsonFormatProcessor:{"account":"Xiaoxiao","id":1}
 
 所以在 SpringBoot 框架中提供了 spring-boot-starter-actuator 自动配置模块来支持对于 SpringBoot 应用的监控。
 
-6.1 Actuator
+## 6.1 Actuator
 
 Spring Boot Actuator 的关键特性是在应用程序里提供众多 Web 端点，通过它们了解应用程序运行时的内部状况。 有了 Actuator，你可以知道 Bean 在 Spring 应用程序上下 文里是如何组装在一起的，掌握应用程序可以获取的环境属性信息 在 spring-boot 项目中，添加 actuator 的一个 starter。
 
@@ -665,7 +665,7 @@ Spring Boot Actuator 的关键特性是在应用程序里提供众多 Web 端点
 </dependency>
 ```
 
-6.2 Actuator 提供的 endpoint
+## 6.2 Actuator 提供的 endpoint
 
 启动服务之后，可以通过下面这个地址看到 actuator 提供的所有 Endpoint 地址。
 
@@ -721,7 +721,7 @@ management.endpoint.shutdown.enabled=true
 
 获取全部的环境信息
 
-6.3 关于 health 的原理
+## 6.3 关于 health 的原理
 
 应用健康状态的检查应该是监控系统中最基本的需求，所以我们基于 health 来分析一下它是如何实现的。 
 
@@ -741,11 +741,11 @@ RedisHealthIndicator…
 
 ![image-20201221181313410](SpringBoot核心原理.assets/image-20201221181313410.png)
 
-6.4 Actuator 对于 JMX 支持
+## 6.4 Actuator 对于 JMX 支持
 
 除了 REST 方式发布的 Endpoint，Actuator 还把它的端点以 JMX MBean 的方式发布出来，可以通过 JMX 来查看和管理。
 
-6.4.1 操作步骤
+### 6.4.1 操作步骤
 
 在 cmd 中输入 jconsole，连接到 spring-boot 的应用：
 
@@ -755,7 +755,7 @@ RedisHealthIndicator…
 
 ![image-20201221182006856](SpringBoot核心原理.assets/image-20201221182006856.png)
 
-6.5 什么是 JMX
+## 6.5 什么是 JMX
 
 JMX 全称是 Java Management Extensions。 Java 管理扩展。它提供了对 Java 应用程序和 JVM 的监控和管理功能。 通过 JMX，我们可以监控：
 
