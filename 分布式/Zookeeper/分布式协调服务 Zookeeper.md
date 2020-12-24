@@ -402,13 +402,20 @@ Curator 内部实现的几种`重试策略`：
 Zookeeper 作为一个分布式协调框架，内部存储了一些分布式系统运行时的状态的数据，比如 master 选举、比如分布式锁。对这些数据的操作会直接影响到分布式系统的运行状态。 因此，为了保证 zookeeper 中的数据的安全性，避免误操作而导致系统出现重大事故。Zookeeper 提供了一套 `ACL (Access Control List 访问控制列表) `权限控制机制来保证数据的安全。
 
 ```markdown
-# 读取ACL权限
-	getAcl <path>
-# 设置ACL权限
-	setAcl <path> <acl>
+# 设置访问控制：
+# 方式一
 # 添加认证用户
 	addauth <scheme> <auth>
-	addauth digest u1:us
+	addauth digest admin:admin
+# 设置ACL权限
+	setAcl <path> <acl>(auth:用户名:密码明文:权限)
+	setAcl /auth auth:digest:admin:admin:cdrwa
+# 读取ACL权限
+	getAcl <path>
+
+# 方式二：
+	setAcl /auth digest:用户名:密码密文:权限
+# 注：这里的加密规则是SHA1加密，然后base64编码
 ```
 
 ```java
@@ -467,7 +474,7 @@ Id ANYONE_ID_UNSAFE = new Id("world", "anyone");
 
 ### 5.2.3 权限
 
-指通过权限检查后可以被允许的操作，create /delete /read/write/admin
+指通过权限检查后可以被允许的操作，create /delete /read/write/admin(cdrwa)
 
 `Create` 允许对子节点 Create 操作 
 
