@@ -551,5 +551,1070 @@ private static void addListenerWithChild(CuratorFramework curatorFramework) thro
 }
 ```
 
+# 6 Watcher 原理分析
+
+## 6.1 Watcher 的基本流程
+
+Zookeeper 的 Watcher 机制，总的来说可以分为三个过程：客户端注册 Watcher、服务器处理 Watcher 和客户端回调 Watcher。
+
+客户端注册 watcher 有3种方式，getData、exists、getChildren；以如下代码为例来分析整个触发机制的原理。
+
+## 6.2 基于 zkclietn 客户端发起一个数据操作
+
+```xml
+<dependency>
+    <groupId>com.101tec</groupId>
+    <artifactId>zkclient</artifactId>
+    <version>0.10</version>
+</dependency>
+```
+
+```java
+ZooKeeper zooKeeper = new ZooKeeper("127.0.0.1:2181", 4000, new Watcher() {
+    @Override
+    public void process(WatchedEvent watchedEvent) {
+        System.out.println("event.type:" + watchedEvent.getType());
+    }
+});
+// 创建节点
+zooKeeper.create("/watch", "0".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+// 注册监听
+zooKeeper.exists("/watch", true);
+Thread.sleep(1000);
+// 修改节点的值触发监听
+zooKeeper.setData("/watch", "1".getBytes(), -1);
+System.in.read();
+```
+
+## 6.3Watcher 的基本流程
+
+**ZooKeeper API 的初始化过程**
+
+在创建一个 ZooKeeper 客户端对象实例时，我们通过 new Watcher() 向构造方法中传入一个默认的 Watcher，这个 Watcher 将作为整个 ZooKeeper 会话期间的默认 Watcher，会一直被保存在客户端 ZKWatchManager 的 defaultWatcher 中，代码如下：
+
+```java
+public ZooKeeper(String connectString, int sessionTimeout, Watcher watcher, boolean canBeReadOnly)
+    throws IOException{
+  	// 在这里将 watcher 设置到 ZKWatchManager
+    watchManager.defaultWatcher = watcher;
+    ConnectStringParser connectStringParser = new ConnectStringParser(
+            connectString);
+    HostProvider hostProvider = new StaticHostProvider(
+            connectStringParser.getServerAddresses());
+    // 初始化了 ClientCnxn，并且调用 cnxn.start()方法
+    cnxn = new ClientCnxn(connectStringParser.getChrootPath(),
+            hostProvider, sessionTimeout, this, watchManager,
+            getClientCnxnSocket(), canBeReadOnly);
+    cnxn.start();
+}
+```
+
+`ClientCnxn` 是 Zookeeper 客户端和 Zookeeper 服务器端进行通信和事件通知处理的主要类，它内部包含两个类，
+
+1. SendThread：负责客户端和服务器端的数据通信, 也包括事件信息的传输
+
+2. EventThread: 主要在客户端回调注册的 Watchers 进行通知处理
+
+**ClientCnxn 初始化**
+
+```java
+public ClientCnxn(String chrootPath, HostProvider hostProvider, int sessionTimeout, ZooKeeper zooKeeper,
+        ClientWatchManager watcher, ClientCnxnSocket clientCnxnSocket,
+        long sessionId, byte[] sessionPasswd, boolean canBeReadOnly) {
+    this.zooKeeper = zooKeeper;
+    this.watcher = watcher;
+    this.sessionId = sessionId;
+    this.sessionPasswd = sessionPasswd;
+    this.sessionTimeout = sessionTimeout;
+    this.hostProvider = hostProvider;
+    this.chrootPath = chrootPath;
+    connectTimeout = sessionTimeout / hostProvider.size();
+    readTimeout = sessionTimeout * 2 / 3;
+    readOnly = canBeReadOnly;
+  	// 初始化 sendThread
+    sendThread = new SendThread(clientCnxnSocket);
+    // 初始化 eventThread
+  	eventThread = new EventThread();
+}
+public void start() {
+    sendThread.start();
+    eventThread.start();
+}
+```
+
+## 6.4 服务端接收请求处理流程
+
+服务端有一个 `NIOServerCnxn` 类，用来处理客户端发送过来的请求。
+**ZookeeperServer-zks.processPacket(this, bb)**
+
+```java
+public void processPacket(ServerCnxn cnxn, ByteBuffer incomingBuffer) throws IOException {
+        // We have the request, now process and setup for next
+        InputStream bais = new ByteBufferInputStream(incomingBuffer);
+        BinaryInputArchive bia = BinaryInputArchive.getArchive(bais);
+        RequestHeader h = new RequestHeader();
+  			//反序列化客户端 header 头信息
+        h.deserialize(bia, "header");
+
+        cnxn.incrOutstandingAndCheckThrottle(h);
+
+        incomingBuffer = incomingBuffer.slice();
+  			// 判断当前操作类型，如果是 auth 操作，则执行下面的代码
+        if (h.getType() == OpCode.auth) {
+            ...
+        } 
+  			// 如果不是授权操作，再判断是否为 sasl 操作
+  			else if (h.getType() == OpCode.sasl) {
+            processSasl(incomingBuffer, cnxn, h);
+        } 
+  			// 最终进入这个代码块进行处理
+				// 封装请求对象
+  			else {
+            if (!authHelper.enforceAuthentication(cnxn, h.getXid())) {
+                // Authentication enforcement is failed
+                // Already sent response to user about failure and closed the session, lets return
+                return;
+            } else {
+                Request si = new Request(cnxn, cnxn.getSessionId(), h.getXid(), h.getType(), incomingBuffer, cnxn.getAuthInfo());
+                int length = incomingBuffer.limit();
+                if (isLargeRequest(length)) {
+                    // checkRequestSize will throw IOException if request is rejected
+                    checkRequestSizeWhenMessageReceived(length);
+                    si.setLargeRequestSize(length);
+                }
+                si.setOwner(ServerCnxn.me);
+                // 提交请求
+                submitRequest(si);
+            }
+        }
+    }
+```
+
+**submitRequest**
+
+负责在服务端提交当前请求。
+
+```java
+public void submitRequest(Request si) {
+    enqueueRequest(si);
+}
+public void enqueueRequest(Request si) {
+    if (requestThrottler == null) {
+        synchronized (this) {
+            try {
+                while (state == State.INITIAL) {
+                    wait(1000);
+                }
+            } catch (InterruptedException e) {
+                LOG.warn("Unexpected interruption", e);
+            }
+            if (requestThrottler == null) {
+                throw new RuntimeException("Not started");
+            }
+        }
+    }
+    requestThrottler.submitRequest(si);
+}
+public void submitRequest(Request request) {
+    if (stopping) {
+        LOG.debug("Shutdown in progress. Request cannot be processed");
+        dropRequest(request);
+    } else {
+        request.requestThrottleQueueTime = Time.currentElapsedTime();
+        submittedRequests.add(request);
+    }
+}
+```
+
+RequestThrottler 是一个线程，会执行 run() 方法，run() 方法中调用 submitRequestNow()：
+
+```java
+public void submitRequestNow(Request si) {
+  	// processor 处理器，request 过来以后会经历一系列处理器的处理过程
+    if (firstProcessor == null) {
+        synchronized (this) {
+            try {
+                while (state == State.INITIAL) {
+                    wait(1000);
+                }
+            } catch (InterruptedException e) {
+                LOG.warn("Unexpected interruption", e);
+            }
+            if (firstProcessor == null || state != State.RUNNING) {
+                throw new RuntimeException("Not started");
+            }
+        }
+    }
+    try {
+        touch(si.cnxn);
+        boolean validpacket = Request.isValid(si.type);
+        if (validpacket) {
+            setLocalSessionFlag(si);
+          	// 调用 firstProcessor发起请求，而这个 firstProcess 是一个接口，有多个实现类，具体的调用链是怎么样的？往下看吧
+            firstProcessor.processRequest(si);
+            if (si.cnxn != null) {
+                incInProcess();
+            }
+        } else {
+            LOG.warn("Received packet at server of unknown type {}", si.type);
+            // Update request accounting/throttling limits
+            requestFinished(si);
+            new UnimplementedRequestProcessor().processRequest(si);
+        }
+    } catch (MissingSessionException e) {
+        LOG.debug("Dropping request.", e);
+        // Update request accounting/throttling limits
+        requestFinished(si);
+    } catch (RequestProcessorException e) {
+        LOG.error("Unable to process request", e);
+        // Update request accounting/throttling limits
+        requestFinished(si);
+    }
+}
+```
+
+**firstProcessor 的请求链组成**
+
+1. firstProcessor 的初始化是在 ZookeeperServer 的 setupRequestProcessor 中完成的，代码如下
+
+```java
+protected void setupRequestProcessors() {
+    RequestProcessor finalProcessor = new FinalRequestProcessor(this);
+    RequestProcessor syncProcessor = new SyncRequestProcessor(this, finalProcessor);
+    ((SyncRequestProcessor) syncProcessor).start();
+    firstProcessor = new PrepRequestProcessor(this, syncProcessor);
+  	// 需要注意的是，PrepRequestProcessor 中传递的是一个 syncProcessor
+    ((PrepRequestProcessor) firstProcessor).start();
+}
+```
+
+从上面我们可以看到 firstProcessor 的实例是一个 PrepRequestProcessor，而这个构造方法中又传递了一个 Processor 构成了一个调用链。
+
+RequestProcessor syncProcessor = new SyncRequestProcessor(this, finalProcessor);
+
+而 syncProcessor 的构造方法传递的又是一个 Processor，对应的是 FinalRequestProcessor。
+
+所以整个调用链是 PrepRequestProcessor -> SyncRequestProcessor ->FinalRequestProcessor。
+
+**PredRequestProcessor.processRequest(si);**
+
+通过上面了解到调用链关系以后，我们继续再看 firstProcessor.processRequest(si)；会调用到 PrepRequestProcessor：
+
+```java
+public void processRequest(Request request) {
+	submittedRequests.add(request);
+}
+```
+
+唉，很奇怪，processRequest 只是把 request 添加到 submittedRequests 中，根据前面的经验，很自然的想到这里又是一个异步操作。而 subittedRequests 又是一个阻塞队列。
+
+```java
+LinkedBlockingQueue submittedRequests = new LinkedBlockingQueue();
+```
+
+而 PrepRequestProcessor 这个类又继承了线程类，因此我们直接找到当前类中的 run 方法如下：
+
+```java
+public void run() {
+    try {
+        while (true) {
+            ServerMetrics.getMetrics().PREP_PROCESSOR_QUEUE_SIZE.add(submittedRequests.size());
+          	//ok，从队列中拿到请求进行处理
+            Request request = submittedRequests.take();
+            ServerMetrics.getMetrics().PREP_PROCESSOR_QUEUE_TIME
+                .add(Time.currentElapsedTime() - request.prepQueueStartTime);
+            long traceMask = ZooTrace.CLIENT_REQUEST_TRACE_MASK;
+            if (request.type == OpCode.ping) {
+                traceMask = ZooTrace.CLIENT_PING_TRACE_MASK;
+            }
+            if (LOG.isTraceEnabled()) {
+                ZooTrace.logRequest(LOG, traceMask, 'P', request, "");
+            }
+            if (Request.requestOfDeath == request) {
+                break;
+            }
+            request.prepStartTime = Time.currentElapsedTime();
+            //调用 pRequest 进行预处理
+            pRequest(request);
+        }
+    } catch (Exception e) {
+        handleException(this.getName(), e);
+    }
+    LOG.info("PrepRequestProcessor exited loop!");
+}
+```
+
+**pRequest**
+
+预处理这块的代码太长，就不好贴了。前面的 N 行代码都是根据当前的 OP 类型进行判断和做相应的处理，在这个方法中的最后一行中，我们会看到如下代码：
+
+```java
+nextProcessor.processRequest(request);
+```
+
+这个方法的代码也是一样，基于异步化的操作，把请求添加到 queuedRequets 中，那么我们继续在当前类找到 run 方法。
+
+```java
+public void run() {
+    try {
+        resetSnapshotStats();
+        lastFlushTime = Time.currentElapsedTime();
+        while (true) {
+            ServerMetrics.getMetrics().SYNC_PROCESSOR_QUEUE_SIZE.add(queuedRequests.size());
+            long pollTime = Math.min(zks.getMaxWriteQueuePollTime(), getRemainingDelay());
+            Request si = queuedRequests.poll(pollTime, TimeUnit.MILLISECONDS);
+            // 从阻塞队列中获取请求
+          	if (si == null) {
+                /* We timed out looking for more writes to batch, go ahead and flush immediately */
+                flush();
+                si = queuedRequests.take();
+            }
+            if (si == REQUEST_OF_DEATH) {
+                break;
+            }
+            long startProcessTime = Time.currentElapsedTime();
+            ServerMetrics.getMetrics().SYNC_PROCESSOR_QUEUE_TIME.add(startProcessTime - si.syncQueueStartTime);
+            // track the number of records written to the log
+          	//下面这块代码，粗略看来是触发快照操作，启动一个处理快照的线程
+            if (!si.isThrottled() && zks.getZKDatabase().append(si)) {
+                if (shouldSnapshot()) {
+                    resetSnapshotStats();
+                    // roll the log
+                    zks.getZKDatabase().rollLog();
+                    // take a snapshot
+                    if (!snapThreadMutex.tryAcquire()) {
+                        LOG.warn("Too busy to snap, skipping");
+                    } else {
+                        new ZooKeeperThread("Snapshot Thread") {
+                            public void run() {
+                                try {
+                                    zks.takeSnapshot();
+                                } catch (Exception e) {
+                                    LOG.warn("Unexpected exception", e);
+                                } finally {
+                                    snapThreadMutex.release();
+                                }
+                            }
+                        }.start();
+                    }
+                }
+            } else if (toFlush.isEmpty()) {
+                if (nextProcessor != null) {
+                    nextProcessor.processRequest(si);
+                    if (nextProcessor instanceof Flushable) {
+                        ((Flushable) nextProcessor).flush();
+                    }
+                }
+                continue;
+            }
+            toFlush.add(si);
+            if (shouldFlush()) {
+                flush();
+            }
+            ServerMetrics.getMetrics().SYNC_PROCESS_TIME.add(Time.currentElapsedTime() - startProcessTime);
+        }
+    } catch (Throwable t) {
+        handleException(this.getName(), t);
+    }
+    LOG.info("SyncRequestProcessor exited!");
+}
+```
+
+**FinalRequestProcessor. processRequest**
+
+这个方法就是我们在课堂上分析到的方法了，FinalRequestProcessor.processRequest 方法并根据 Request 对象中的操作更新内存中 Session 信息或者 znode 数据。
+
+这块代码有小 300 多行，就不全部贴出来了，我们直接定位到关键代码，根据客户端的 OP 类型找到如下的代码：
+
+```java
+case OpCode.exists: {
+    lastOp = "EXIS";
+    ExistsRequest existsRequest = new ExistsRequest();
+  	//反序列化 (将 ByteBuffer 反序列化成为 ExitsRequest.这个就是我们在客户端发起请求的时候传递过来的 Request 对象
+    ByteBufferInputStream.byteBuffer2Record(request.request, existsRequest);
+    path = existsRequest.getPath();
+    if (path.indexOf('\0') != -1) {
+        throw new KeeperException.BadArgumentsException();
+    }
+  	// 终于找到一个很关键的代码，判断请求的 getWatch 是否存在，如果存在，则传递 cnxn（servercnxn）
+		// 对于 exists 请求，需要监听 data 变化事件，添加 watcher
+    Stat stat = zks.getZKDatabase().statNode(path, existsRequest.getWatch() ? cnxn : null);
+    rsp = new ExistsResponse(stat);
+    requestPathMetricsCollector.registerRequest(request.type, path);
+  	//在服务端内存数据库中根据路径得到结果进行组装，设置为 ExistsResponse
+    break;
+}
+```
+
+## 6.5 客户端接收服务端处理完成的响应
+
+**ClientCnxnSocketNIO.doIO**
+
+服务端处理完成以后，会通过 NIOServerCnxn.sendResponse 发送返回的响应信息，客户端会在 ClientCnxnSocketNIO.doIO 接收服务端的返回，注意一下 SendThread.readResponse,接收服务端的信息进行读取：
+
+```java
+void doIO(List<Packet> pendingQueue, LinkedList<Packet> outgoingQueue, ClientCnxn cnxn)
+  throws InterruptedException, IOException {
+    SocketChannel sock = (SocketChannel) sockKey.channel();
+    if (sock == null) {
+        throw new IOException("Socket is null!");
+    }
+    if (sockKey.isReadable()) {
+        int rc = sock.read(incomingBuffer);
+        if (rc < 0) {
+            throw new EndOfStreamException(
+                    "Unable to read additional data from server sessionid 0x"
+                            + Long.toHexString(sessionId)
+                            + ", likely server has closed socket");
+        }
+        if (!incomingBuffer.hasRemaining()) {
+            incomingBuffer.flip();
+            if (incomingBuffer == lenBuffer) {
+                recvCount++;
+                readLength();
+            } else if (!initialized) {
+                readConnectResult();
+                enableRead();
+                if (findSendablePacket(outgoingQueue,
+                        cnxn.sendThread.clientTunneledAuthenticationInProgress()) != null) {
+                    // Since SASL authentication has completed (if client is configured to do so),
+                    // outgoing packets waiting in the outgoingQueue can now be sent.
+                    enableWrite();
+                }
+                lenBuffer.clear();
+                incomingBuffer = lenBuffer;
+                updateLastHeard();
+                initialized = true;
+            } else {
+                sendThread.readResponse(incomingBuffer);
+                lenBuffer.clear();
+                incomingBuffer = lenBuffer;
+                updateLastHeard();
+            }
+        }
+    }
+  	...
+}
+```
+
+**SendThread. readResponse**
+
+这个方法里面主要的流程如下：
+
+首先读取 header，如果其 xid == -2，表明是一个 ping 的 response，return
+
+如果 xid 是 -4 ，表明是一个 AuthPacket 的 response return
+
+如果 xid 是 -1，表明是一个 notification,此时要继续读取并构造一个 enent，通过 EventThread.queueEvent 发送，return
+
+其它情况下：
+
+从 pendingQueue 拿出一个 Packet，校验后更新 packet 信息
+
+```java
+void readResponse(ByteBuffer incomingBuffer) throws IOException {
+    ByteBufferInputStream bbis = new ByteBufferInputStream(
+            incomingBuffer);
+    BinaryInputArchive bbia = BinaryInputArchive.getArchive(bbis);
+    ReplyHeader replyHdr = new ReplyHeader();
+    // 反序列化 header
+    replyHdr.deserialize(bbia, "header");
+    if (replyHdr.getXid() == -2) {
+        // -2 is the xid for pings
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Got ping response for sessionid: 0x"
+                    + Long.toHexString(sessionId)
+                    + " after "
+                    + ((System.nanoTime() - lastPingSentNs) / 1000000)
+                    + "ms");
+        }
+        return;
+    }
+    if (replyHdr.getXid() == -4) {
+        // -4 is the xid for AuthPacket               
+        if(replyHdr.getErr() == KeeperException.Code.AUTHFAILED.intValue()) {
+            state = States.AUTH_FAILED;                    
+            eventThread.queueEvent( new WatchedEvent(Watcher.Event.EventType.None, 
+                    Watcher.Event.KeeperState.AuthFailed, null) );            		            		
+        }
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Got auth sessionid:0x"
+                    + Long.toHexString(sessionId));
+        }
+        return;
+    }
+    // 表示当前的消息类型为一个 notification(意味着是服务端的一个响应事件)
+    if (replyHdr.getXid() == -1) {
+        // -1 means notification
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Got notification sessionid:0x"
+                + Long.toHexString(sessionId));
+        }
+        WatcherEvent event = new WatcherEvent();
+        event.deserialize(bbia, "response");
+        // convert from a server path to a client path
+        if (chrootPath != null) {
+            String serverPath = event.getPath();
+            if(serverPath.compareTo(chrootPath)==0)
+                event.setPath("/");
+            else if (serverPath.length() > chrootPath.length())
+                event.setPath(serverPath.substring(chrootPath.length()));
+            else {
+            	LOG.warn("Got server path " + event.getPath()
+            			+ " which is too short for chroot path "
+            			+ chrootPath);
+            }
+        }
+        WatchedEvent we = new WatchedEvent(event);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Got " + we + " for sessionid 0x"
+                    + Long.toHexString(sessionId));
+        }
+        eventThread.queueEvent( we );
+        return;
+    }
+    // If SASL authentication is currently in progress, construct and
+    // send a response packet immediately, rather than queuing a
+    // response as with other packets.
+    if (clientTunneledAuthenticationInProgress()) {
+        GetSASLRequest request = new GetSASLRequest();
+        request.deserialize(bbia,"token");
+        zooKeeperSaslClient.respondToServer(request.getToken(),
+          ClientCnxn.this);
+        return;
+    }
+    Packet packet;
+    synchronized (pendingQueue) {
+        if (pendingQueue.size() == 0) {
+            throw new IOException("Nothing in the queue, but got "
+                    + replyHdr.getXid());
+        }
+         //因为当前这个数据包已经收到了响应，所以将它从 pendingQueued 中移除
+        packet = pendingQueue.remove();
+    }
+    // 校验数据包信息，校验成功后讲数据包信息进行更新（替换为服务端的信息）
+    try {
+        if (packet.requestHeader.getXid() != replyHdr.getXid()) {
+            packet.replyHeader.setErr(
+                    KeeperException.Code.CONNECTIONLOSS.intValue());
+            throw new IOException("Xid out of order. Got Xid "
+                    + replyHdr.getXid() + " with err " +
+                    + replyHdr.getErr() +
+                    " expected Xid "
+                    + packet.requestHeader.getXid()
+                    + " for a packet with details: "
+                    + packet );
+        }
+        packet.replyHeader.setXid(replyHdr.getXid());
+        packet.replyHeader.setErr(replyHdr.getErr());
+        packet.replyHeader.setZxid(replyHdr.getZxid());
+        if (replyHdr.getZxid() > 0) {
+            lastZxid = replyHdr.getZxid();
+        }
+        if (packet.response != null && replyHdr.getErr() == 0) {
+            //获得服务端的响应，反序列化以后设置到 packet.response 属性中。所以我们可以在 exists 方法的最后一行通过 packet.response 拿到改请求的返回结果
+            packet.response.deserialize(bbia, "response");
+        }
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Reading reply sessionid:0x"
+                    + Long.toHexString(sessionId) + ", packet:: " + packet);
+        }
+    } finally {
+         // 最后调用 finishPacket 方法完成处理
+        finishPacket(packet);
+    }
+}
+```
+
+**finishPacket** **方法**
+
+主要功能是把从 Packet 中取出对应的 Watcher 并注册到 ZKWatchManager 中去：
+
+```java
+private void finishPacket(Packet p) {
+    if (p.watchRegistration != null) {
+      	//将事件注册到 zkwatchemanager 中
+        //watchRegistration，熟悉吗？在组装请求的时候，我们初始化了这个对象把 watchRegistration 子类里面的 Watcher 实例放到 ZKWatchManager 的 existsWatches 中存储起来。
+        p.watchRegistration.register(p.replyHeader.getErr());
+    }
+    // cb 就是 AsnycCallback，如果为 null，表明是同步调用的接口，不需要异步回掉，因此，直接 notifyAll 即可。
+    if (p.cb == null) {
+        synchronized (p) {
+            p.finished = true;
+            p.notifyAll();
+        }
+    } else {
+        p.finished = true;
+        eventThread.queuePacket(p);
+    }
+}
+```
+
+**watchRegistration**
+
+```java
+public void register(int rc) {
+    if (shouldAddWatch(rc)) {
+        //通过子类的实现取得 ZKWatchManager 中的 existsWatches
+        Map<String, Set<Watcher>> watches = getWatches(rc);
+        synchronized(watches) {
+            Set<Watcher> watchers = watches.get(clientPath);
+            if (watchers == null) {
+                watchers = new HashSet<Watcher>();
+                watches.put(clientPath, watchers);
+            }
+            //将 Watcher 对象放到 ZKWatchManager 中的 existsWatches 里面
+            watchers.add(watcher);
+        }
+    }
+}
+```
+
+下面这段代码是客户端存储 watcher 的几个 map 集合，分别对应三种注册监听事件：
+
+```java
+private final Map<String, Set<Watcher>> dataWatches =
+    new HashMap<String, Set<Watcher>>();
+private final Map<String, Set<Watcher>> existWatches =
+    new HashMap<String, Set<Watcher>>();
+private final Map<String, Set<Watcher>> childWatches =
+    new HashMap<String, Set<Watcher>>();
+```
+
+总的来说，当使用 ZooKeeper 构造方法或者使用 getData、exists 和 getChildren 三个接口来向 ZooKeeper 服务器注册 Watcher 的时候，首先将此消息传递给服务端，传递成功后，服务端会通知客户端，然后客户端将该路径和 Watcher 对应关系存储起来备用。
+
+**EventThread.queuePacket()**
+
+finishPacket 方法最终会调用 eventThread.queuePacket， 讲当前的数据包添加到等待事件通知的队列中。
+
+```java
+public void queuePacket(Packet packet) {
+   if (wasKilled) {
+      synchronized (waitingEvents) {
+         if (isRunning) waitingEvents.add(packet);
+         else processEvent(packet);
+      }
+   } else {
+      waitingEvents.add(packet);
+   }
+}
+```
+
+## 6.6 事件触发
+
+前面这么长的说明，只是为了清洗的说明事件的注册流程，最终的触发，还得需要通过事务型操作来完成在我们最开始的案例中，通过如下代码去完成了事件的触发。
+
+```java
+zookeeper.setData(“/wathce”, “1”.getByte(),-1) ; // 修改节点的值触发监听
+```
+
+前面的客户端和服务端对接的流程就不再重复讲解了，交互流程是一样的，唯一的差别在于事件触发了。
+
+### 6.6.1 服务端的事件响应 DataTree.setData()
+
+```java
+public Stat setData(String path, byte[] data, int version, long zxid, long time) throws KeeperException.NoNodeException {
+    Stat s = new Stat();
+    DataNode n = nodes.get(path);
+    if (n == null) {
+        throw new KeeperException.NoNodeException();
+    }
+    byte[] lastdata = null;
+    synchronized (n) {
+        lastdata = n.data;
+        nodes.preChange(path, n);
+        n.data = data;
+        n.stat.setMtime(time);
+        n.stat.setMzxid(zxid);
+        n.stat.setVersion(version);
+        n.copyStat(s);
+        nodes.postChange(path, n);
+    }
+    // now update if the path is in a quota subtree.
+    String lastPrefix = getMaxPrefixWithQuota(path);
+    long dataBytes = data == null ? 0 : data.length;
+    if (lastPrefix != null) {
+        this.updateCountBytes(lastPrefix, dataBytes - (lastdata == null ? 0 : lastdata.length), 0);
+    }
+    nodeDataSize.addAndGet(getNodeSize(path, data) - getNodeSize(path, lastdata));
+    updateWriteStat(path, dataBytes);
+  	 //触发对应节点的 NodeDataChanged 事件
+    dataWatches.triggerWatch(path, EventType.NodeDataChanged);
+    return s;
+}
+```
+
+**WatcherManager. triggerWatch**
+
+```java
+public WatcherOrBitSet triggerWatch(String path, EventType type, WatcherOrBitSet supress) {
+  	// 根据事件类型、连接状态、节点路径创建 WatchedEvent
+    WatchedEvent e = new WatchedEvent(type, KeeperState.SyncConnected, path);
+    Set<Watcher> watchers = new HashSet<>();
+    PathParentIterator pathParentIterator = getPathParentIterator(path);
+    synchronized (this) {
+        for (String localPath : pathParentIterator.asIterable()) {
+            Set<Watcher> thisWatchers = watchTable.get(localPath);
+            if (thisWatchers == null || thisWatchers.isEmpty()) {
+                continue;
+            }
+            Iterator<Watcher> iterator = thisWatchers.iterator();
+            while (iterator.hasNext()) {
+                Watcher watcher = iterator.next();
+                WatcherMode watcherMode = watcherModeManager.getWatcherMode(watcher, localPath);
+                if (watcherMode.isRecursive()) {
+                    if (type != EventType.NodeChildrenChanged) {
+                        watchers.add(watcher);
+                    }
+                } else if (!pathParentIterator.atParentPath()) {
+                    watchers.add(watcher);
+                    if (!watcherMode.isPersistent()) {
+                        iterator.remove();
+                      	// 遍历 watcher 集合
+                        // 根据 watcher 从 watcher 表中取出路径集合
+                        Set<String> paths = watch2Paths.get(watcher);
+                        if (paths != null) {
+                            paths.remove(localPath);
+                        }
+                    }
+                }
+            }
+             // 从 watcher 表中移除 path，并返回其对应的 watcher 集合
+            if (thisWatchers.isEmpty()) {
+                watchTable.remove(localPath);
+            }
+        }
+    }
+    if (watchers.isEmpty()) {
+        if (LOG.isTraceEnabled()) {
+            ZooTrace.logTraceMessage(LOG, ZooTrace.EVENT_DELIVERY_TRACE_MASK, "No watchers for " + path);
+        }
+        return null;
+    }
+  	 
+    for (Watcher w : watchers) {
+        if (supress != null && supress.contains(w)) {
+            continue;
+        }
+      	//OK，重点又来了，w.process 是做什么呢？
+        w.process(e);
+    }
+    ...
+    return new WatcherOrBitSet(watchers);
+}
+```
+
+**w.process(e);**
+
+还记得我们在服务端绑定事件的时候，watcher 绑定是是什么？是 ServerCnxn，所以 w.process(e)，其实调用的应该是 ServerCnxn 的 process 方法。而 servercnxn 又是一个抽象方法，有两个实现类，分别是：NIOServerCnxn 和 NIOServerCnxn。那接下来我们扒开 NIOServerCnxn 这个类的 process 方法看看究竟：
+
+```java
+public void process(WatchedEvent event) {
+    ReplyHeader h = new ReplyHeader(ClientCnxn.NOTIFICATION_XID, -1L, 0);
+    if (LOG.isTraceEnabled()) {
+        ZooTrace.logTraceMessage(
+            LOG,
+            ZooTrace.EVENT_DELIVERY_TRACE_MASK,
+            "Deliver event " + event + " to 0x" + Long.toHexString(this.sessionId) + " through " + this);
+    }
+    WatcherEvent e = event.getWrapper();
+  	//look， 这个地方发送了一个事件，事件对象为 WatcherEvent。完美
+    int responseSize = sendResponse(h, e, "notification", null, null, ZooDefs.OpCode.error);
+    ServerMetrics.getMetrics().WATCH_BYTES.add(responseSize);
+}
+```
+
+那接下里，客户端会收到这个 response，触发 SendThread.readResponse 方法。
+
+### 6.6.2 客户端处理事件响应
+
+**SendThread.readResponse**
+
+这块代码上面已经贴过了，所以我们只挑选当前流程的代码进行讲解，按照前面我们将到过的，notifacation 通知消息的 xid 为-1，意味着~直接找到-1 的判断进行分析。
+
+**eventThread.queueEvent**
+
+SendThread 接收到服务端的通知事件后，会通过调用 EventThread 类的 queueEvent 方法将事件传给 EventThread 线程，queueEvent 方法根据该通知事件，从 ZKWatchManager 中取出所有相关的 Watcher，如果获取到相应的 Watcher，就会让 Watcher 移除失效。
+
+```java
+public void queueEvent(WatchedEvent event) {
+    // 判断类型
+    if (event.getType() == EventType.None
+            && sessionState == event.getState()) {
+        return;
+    }
+    sessionState = event.getState();
+    // 封装 WatcherSetEventPair 对象，添加到 waitngEvents 队列中
+    WatcherSetEventPair pair = new WatcherSetEventPair(
+            watcher.materialize(event.getState(), event.getType(),
+                    event.getPath()),
+                    event);
+    waitingEvents.add(pair);
+}
+```
+
+**meterialize 方法**
+
+通过 dataWatches 或者 existWatches 或者 childWatches 的 remove 取出对应的 watch，表明客户端 watch 也是注册一次就移除。同时需要根据 keeperState、eventType 和 path 返回应该被通知的 Watcher 集合。
+
+```java
+public Set<Watcher> materialize(Watcher.Event.KeeperState state,
+                                Watcher.Event.EventType type,
+                                String clientPath)
+{
+    Set<Watcher> result = new HashSet<Watcher>();
+    switch (type) {
+    case None:
+        result.add(defaultWatcher);
+        boolean clear = ClientCnxn.getDisableAutoResetWatch() &&
+                state != Watcher.Event.KeeperState.SyncConnected;
+        synchronized(dataWatches) {
+            for(Set<Watcher> ws: dataWatches.values()) {
+                result.addAll(ws);
+            }
+            if (clear) {
+                dataWatches.clear();
+            }
+        }
+        synchronized(existWatches) {
+            for(Set<Watcher> ws: existWatches.values()) {
+                result.addAll(ws);
+            }
+            if (clear) {
+                existWatches.clear();
+            }
+        }
+        synchronized(childWatches) {
+            for(Set<Watcher> ws: childWatches.values()) {
+                result.addAll(ws);
+            }
+            if (clear) {
+                childWatches.clear();
+            }
+        }
+        return result;
+    case NodeDataChanged:
+    case NodeCreated:
+        synchronized (dataWatches) {
+            addTo(dataWatches.remove(clientPath), result);
+        }
+        synchronized (existWatches) {
+            addTo(existWatches.remove(clientPath), result);
+        }
+        break;
+    case NodeChildrenChanged:
+        synchronized (childWatches) {
+            addTo(childWatches.remove(clientPath), result);
+        }
+        break;
+    case NodeDeleted:
+        synchronized (dataWatches) {
+            addTo(dataWatches.remove(clientPath), result);
+        }
+        // XXX This shouldn't be needed, but just in case
+        synchronized (existWatches) {
+            Set<Watcher> list = existWatches.remove(clientPath);
+            if (list != null) {
+                addTo(existWatches.remove(clientPath), result);
+                LOG.warn("We are triggering an exists watch for delete! Shouldn't happen!");
+            }
+        }
+        synchronized (childWatches) {
+            addTo(childWatches.remove(clientPath), result);
+        }
+        break;
+    default:
+        String msg = "Unhandled watch event type " + type
+            + " with state " + state + " on path " + clientPath;
+        LOG.error(msg);
+        throw new RuntimeException(msg);
+    }
+    return result;
+}
+```
+
+**waitingEvents.add**
+
+waitingEvents 是 EventThread 这个线程中的阻塞队列，很明显，又是在我们第一步操作的时候实例化的一个线程。
+
+从名字可以指导，waitingEvents 是一个待处理 Watcher 的队列，EventThread 的 run() 方法会不断从队列中取数据，交由 processEvent 方法处理：
+
+```java
+public void run() {
+   try {
+      isRunning = true;
+      //死循环
+      while (true) {
+         // 从待处理的事件队列中取出事件
+         Object event = waitingEvents.take();
+         if (event == eventOfDeath) {
+            wasKilled = true;
+         } else {
+            // 执行事件处理
+            processEvent(event);
+         }
+         if (wasKilled)
+            synchronized (waitingEvents) {
+               if (waitingEvents.isEmpty()) {
+                  isRunning = false;
+                  break;
+               }
+            }
+      }
+   } catch (InterruptedException e) {
+      LOG.error("Event thread exiting due to interruption", e);
+   }
+    LOG.info("EventThread shut down for session: 0x{}",
+             Long.toHexString(getSessionId()));
+}
+```
+
+**ProcessEvent**
+
+由于这块的代码太长，我只把核心的代码贴出来，这里就是处理事件触发的核心代码：
+
+```java
+private void processEvent(Object event) {
+   try {
+       // 判断事件类型
+       if (event instanceof WatcherSetEventPair) {
+           // each watcher will process the event
+           WatcherSetEventPair pair = (WatcherSetEventPair) event;
+           //拿到符合触发机制的所有 watcher 列表，循环进行调用
+           for (Watcher watcher : pair.watchers) {
+               try {
+                   //调用客户端的回调 process
+                   watcher.process(pair.event);
+               } catch (Throwable t) {
+                   LOG.error("Error while calling watcher ", t);
+               }
+           }
+       } else {}
+       }
+		...
+}
+```
+
+## 6.7 服务端接收数据请求
+
+服务端收到的数据包应该在哪里呢？在上节课分析过了，zookeeper 启动的时候，通过下面的代码构建了一个
+
+```java
+ServerCnxnFactory cnxnFactory = ServerCnxnFactory.createFactory();
+```
+
+NIOServerCnxnFactory，它实现了 Thread，所以在启动的时候，会在 run 方法中不断循环接收客户端的请求进行分发。
+
+```java
+public void run() {
+    while (!ss.socket().isClosed()) {
+        try {
+            selector.select(1000);
+            Set<SelectionKey> selected;
+            synchronized (this) {
+                selected = selector.selectedKeys();
+            }
+            ArrayList<SelectionKey> selectedList = new ArrayList<SelectionKey>(
+                    selected);
+            Collections.shuffle(selectedList);
+            for (SelectionKey k : selectedList) {
+                // 获取 client 的连接请求
+                if ((k.readyOps() & SelectionKey.OP_ACCEPT) != 0) {
+                    ...
+                } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
+                  	//处理客户端的读/写请求
+                    NIOServerCnxn c = (NIOServerCnxn) k.attachment();
+                    //处理 IO 操作
+                    c.doIO(k);
+                } else {
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("Unexpected ops in select "
+                                  + k.readyOps());
+                    }
+                }
+            }
+            selected.clear();
+        } catch (RuntimeException e) {
+            LOG.warn("Ignoring unexpected runtime exception", e);
+        } catch (Exception e) {
+            LOG.warn("Ignoring exception", e);
+        }
+    }
+    closeAll();
+    LOG.info("NIOServerCnxn factory exited run method");
+}
+```
+
+**NIOServerCnxn.doIO**
+
+```java
+void doIO(SelectionKey k) throws InterruptedException {
+    try {
+        ...
+        if (k.isReadable()) {
+            //处理读请求，表示接收中间这部分逻辑用来处理报文以及粘包问题
+            	  ...
+                if (isPayload) { // not the case for 4letterword
+                    // 处理报文
+                    readPayload();
+                }
+                else {
+                    return;
+                }
+            }
+        }
+        ...
+    }
+}
+private void readPayload() throws IOException, InterruptedException {
+    if (incomingBuffer.remaining() != 0) { // have we read length bytes?
+        int rc = sock.read(incomingBuffer); // sock is non-blocking, so ok
+        if (rc < 0) {
+            throw new EndOfStreamException(
+                    "Unable to read additional data from client sessionid 0x"
+                    + Long.toHexString(sessionId)
+                    + ", likely client has closed socket");
+        }
+    }
+    if (incomingBuffer.remaining() == 0) {
+        packetReceived();
+        incomingBuffer.flip();
+        if (!initialized) {
+            readConnectRequest();
+        } else {
+            readRequest();
+        }
+        lenBuffer.clear();
+        incomingBuffer = lenBuffer;
+    }
+```
+
+**NIOServerCnxn.readRequest**
+
+读取客户端的请求，进行具体的处理：
+
+```java
+private void readRequest() throws IOException {
+    zkServer.processPacket(this, incomingBuffer);
+}
+```
+
+**ZookeeperServer.processPacket**
+
+这个方法根据数据包的类型来处理不同的数据包，对于读写请求，我们主要关注下面这块代码即可：
+
+```java
+Request si = new Request(cnxn, cnxn.getSessionId(), h.getXid(),
+  h.getType(), incomingBuffer, cnxn.getAuthInfo());
+si.setOwner(ServerCnxn.me);
+submitRequest(si);
+```
+
+**集群模式下的处理流程**
+
+集群模式下，涉及到 zab 协议，所以处理流程比较复杂，大家可以基于这个图来定位代码的流程。
+
+![image-20201227233324438](分布式协调服务 Zookeeper.assets/image-20201227233324438.png)
+
 ------
 

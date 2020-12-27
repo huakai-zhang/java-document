@@ -352,11 +352,13 @@ Curator 有两种选举 recipe（Leader Latch 和 Leader Election）
 
 **Leader Latch**
 
-参与选举的所有节点，会创建一个顺序节点，其中最小的节点会设置为 master 节点, 没抢到 Leader 的节点都监听前一个节点的删除事件，在前一个节点删除后进行重新抢主，当 master 节点手动调用 close 方法或者 master 节点挂了之后，后续的子节点会抢占 master。 其中 spark 使用的就是这种方法。
+参与选举的所有节点，会创建一个顺序节点，其中最小的节点会设置为 master 节点, 没抢到 Leader 的节点都监听前一个节点的删除事件，在前一个节点删除后进行重新抢主，当 master 节点手动调用 close 方法或者 master 节点挂了之后，后续的子节点才会去抢占 master。 其中 spark 使用的就是这种方法。
 
 **LeaderSelector**
 
-LeaderSelector 和 Leader Latch 最的差别在于，leader 可以释放领导权以后，还可以继续参与竞争。
+LeaderSelector 和 Leader Latch 最大的差别在于，leader 调用 takeLeadership() 方法进行业务逻辑处理，释放领导权以后，还可以继续参与竞争。
+
+autoRequeue() 方法的调用确保此实例在释放领导权后还可能获得领导权，这样保证了每个节点都可以获得领导权。
 
 ```java
 public class SelectorClient extends LeaderSelectorListenerAdapter implements Closeable {
@@ -1181,13 +1183,19 @@ public QuorumMaj(Properties props) throws ConfigException {
 
 ## 4.7 投票的网络通信流程
 
-通信流程图 
+### 4.7.1 通信流程图
 
-接收数据 Notification 和发送 ToSend 
+<img src="Zookeeper 核心原理.assets/image-20201227185257250.png" alt="image-20201227185257250" style="zoom:50%;" />
 
-通信过程源码分析 
+**接收数据 Notification 和发送 ToSend**
 
-每个 zk 服务启动后创建 socket 监听
+| ToSender                                                     | Notification                                                 |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| leader 被推荐的服务器 sid<br>zxid 被推荐服务器当前最新的事物id<br/>peerEpoch 被推荐的服务器当前所处的epoch<br/>electionepoch 当前服务器所处的epoch<br/>stat 当前服务器状态<br>sid 接收消息的服务器 sid（myid） | leader 被推荐的服务器 sid<br>zxid 被推荐的服务器最新事务 id<br>peerEpoch 被推荐的服务器当前所处的epoch<br/>electionepoch 选举服务器所处的epoch<br/>stat 选举服务器当前的状态<br/>sid 选举服务器的 sid |
+
+### 4.7.2 通信过程源码分析 
+
+**每个 zk 服务启动后创建 socket 监听**
 
 ```java
 protected Election createElectionAlgorithm(int electionAlgorithm) {
@@ -1446,11 +1454,13 @@ private void handleConnection(Socket sock, DataInputStream din) throws IOExcepti
 }
 ```
 
-4.8 leader 选举完成之后的处理逻辑
+## 4.8 leader 选举完成之后的处理逻辑
 
 通过 lookForLeader 方法选举完成以后，会设置当前节点的 PeerState， 要么为 Leading、要么就是 FOLLOWING、或者 OBSERVING 到这里，只是表示当前的 leader 选出来了，但是 QuorumPeer.run 方法里面还没执行完，我们再回过头看看后续的处理过程。
 
-QuorumPeer.run 分别来看看 case 为 FOLLOWING 和 LEADING，会做什么事情：
+**QuorumPeer.run**
+
+分别来看看 case 为 FOLLOWING 和 LEADING，会做什么事情：
 
 ```java
 while (running) {
