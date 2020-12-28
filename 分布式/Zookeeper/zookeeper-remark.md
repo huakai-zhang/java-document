@@ -1,9 +1,3 @@
-### leader选举
-
-leaderElection，AuthFastLeaderElection，FastLeaderElection(默认方式) 
-
-
-
 ## 内存数据和磁盘数据
 
 zookeeper会定时把数据存储在磁盘上。 DataDir，存储的是数据的快照（快照： 存储某一个时刻全量的内存数据内容）

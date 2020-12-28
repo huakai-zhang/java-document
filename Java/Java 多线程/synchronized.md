@@ -125,11 +125,11 @@ class MyThread extends Thread {
 
 synchronized是可重入锁，内部锁对象中会有一个计数器记录线程获取几次锁啦，在执行完同步代码块时，计数器的数量会-1，知道计数器的数量为0，就释放这个锁。
 
-#### 2.2 不可中断特性
+### 2.2 不可中断特性
 
 一个线程获得锁后，另一个线程想要获得锁，必须处于阻塞或等待状态，如果第一个线程不释放锁，第二个线程就会一直阻塞或等待（不可被中断）。
 
-##### synchronized 不可中断
+#### synchronized 不可中断
 
 synchronized是不可中断，处于阻塞状态的线程会一直等待锁。
 
@@ -164,7 +164,7 @@ public class Uninterruptible {
 }
 ```
 
-##### ReentrantLock 可中断
+#### ReentrantLock 可中断
 
 ```java
 public class InterruptibleLock {
