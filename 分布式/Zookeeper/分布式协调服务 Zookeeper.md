@@ -586,7 +586,7 @@ zooKeeper.setData("/watch", "1".getBytes(), -1);
 System.in.read();
 ```
 
-## 6.3Watcher 的基本流程
+## 6.3 Watcher 的基本流程
 
 **ZooKeeper API 的初始化过程**
 
@@ -664,29 +664,23 @@ public void processPacket(ServerCnxn cnxn, ByteBuffer incomingBuffer) throws IOE
             ...
         } 
   			// 如果不是授权操作，再判断是否为 sasl 操作
-  			else if (h.getType() == OpCode.sasl) {
-            processSasl(incomingBuffer, cnxn, h);
-        } 
-  			// 最终进入这个代码块进行处理
-				// 封装请求对象
   			else {
-            if (!authHelper.enforceAuthentication(cnxn, h.getXid())) {
-                // Authentication enforcement is failed
-                // Already sent response to user about failure and closed the session, lets return
-                return;
-            } else {
-                Request si = new Request(cnxn, cnxn.getSessionId(), h.getXid(), h.getType(), incomingBuffer, cnxn.getAuthInfo());
-                int length = incomingBuffer.limit();
-                if (isLargeRequest(length)) {
-                    // checkRequestSize will throw IOException if request is rejected
-                    checkRequestSizeWhenMessageReceived(length);
-                    si.setLargeRequestSize(length);
-                }
-                si.setOwner(ServerCnxn.me);
-                // 提交请求
-                submitRequest(si);
-            }
-        }
+            if (h.getType() == OpCode.sasl) {
+					    Record rsp = processSasl(incomingBuffer,cnxn);
+					    ReplyHeader rh = new ReplyHeader(h.getXid(), 0, KeeperException.Code.OK.intValue());
+  					  cnxn.sendResponse(rh,rsp, "response"); // not sure about 3rd arg..what is it?
+    					return;
+						} 
+          // 最终进入这个代码块进行处理
+				// 封装请求对象
+          else {
+    					Request si = new Request(cnxn, cnxn.getSessionId(), h.getXid(),
+      				h.getType(), incomingBuffer, cnxn.getAuthInfo());
+    					si.setOwner(ServerCnxn.me);
+            // 提交请求
+    					submitRequest(si);
+						}
+        } 
     }
 ```
 
@@ -696,44 +690,14 @@ public void processPacket(ServerCnxn cnxn, ByteBuffer incomingBuffer) throws IOE
 
 ```java
 public void submitRequest(Request si) {
-    enqueueRequest(si);
-}
-public void enqueueRequest(Request si) {
-    if (requestThrottler == null) {
-        synchronized (this) {
-            try {
-                while (state == State.INITIAL) {
-                    wait(1000);
-                }
-            } catch (InterruptedException e) {
-                LOG.warn("Unexpected interruption", e);
-            }
-            if (requestThrottler == null) {
-                throw new RuntimeException("Not started");
-            }
-        }
-    }
-    requestThrottler.submitRequest(si);
-}
-public void submitRequest(Request request) {
-    if (stopping) {
-        LOG.debug("Shutdown in progress. Request cannot be processed");
-        dropRequest(request);
-    } else {
-        request.requestThrottleQueueTime = Time.currentElapsedTime();
-        submittedRequests.add(request);
-    }
-}
-```
-
-RequestThrottler 是一个线程，会执行 run() 方法，run() 方法中调用 submitRequestNow()：
-
-```java
-public void submitRequestNow(Request si) {
-  	// processor 处理器，request 过来以后会经历一系列处理器的处理过程
+  //processor 处理器，request 过来以后会经历一系列处理器的处理过程
     if (firstProcessor == null) {
         synchronized (this) {
             try {
+                // Since all requests are passed to the request
+                // processor it should wait for setting up the request
+                // processor chain. The state will be updated to RUNNING
+                // after the setup.
                 while (state == State.INITIAL) {
                     wait(1000);
                 }
@@ -747,28 +711,24 @@ public void submitRequestNow(Request si) {
     }
     try {
         touch(si.cnxn);
+       //判断是否合法
         boolean validpacket = Request.isValid(si.type);
         if (validpacket) {
-            setLocalSessionFlag(si);
-          	// 调用 firstProcessor发起请求，而这个 firstProcess 是一个接口，有多个实现类，具体的调用链是怎么样的？往下看吧
+          //调用 firstProcessor发起请求，而这个 firstProcess 是一个接口，有多个实现类，具体的调用链是怎么样的？往下看吧
             firstProcessor.processRequest(si);
             if (si.cnxn != null) {
                 incInProcess();
             }
         } else {
-            LOG.warn("Received packet at server of unknown type {}", si.type);
-            // Update request accounting/throttling limits
-            requestFinished(si);
+            LOG.warn("Received packet at server of unknown type " + si.type);
             new UnimplementedRequestProcessor().processRequest(si);
         }
     } catch (MissingSessionException e) {
-        LOG.debug("Dropping request.", e);
-        // Update request accounting/throttling limits
-        requestFinished(si);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Dropping request: " + e.getMessage());
+        }
     } catch (RequestProcessorException e) {
-        LOG.error("Unable to process request", e);
-        // Update request accounting/throttling limits
-        requestFinished(si);
+        LOG.error("Unable to process request:" + e.getMessage(), e);
     }
 }
 ```
@@ -818,11 +778,8 @@ LinkedBlockingQueue submittedRequests = new LinkedBlockingQueue();
 public void run() {
     try {
         while (true) {
-            ServerMetrics.getMetrics().PREP_PROCESSOR_QUEUE_SIZE.add(submittedRequests.size());
           	//ok，从队列中拿到请求进行处理
             Request request = submittedRequests.take();
-            ServerMetrics.getMetrics().PREP_PROCESSOR_QUEUE_TIME
-                .add(Time.currentElapsedTime() - request.prepQueueStartTime);
             long traceMask = ZooTrace.CLIENT_REQUEST_TRACE_MASK;
             if (request.type == OpCode.ping) {
                 traceMask = ZooTrace.CLIENT_PING_TRACE_MASK;
@@ -857,64 +814,74 @@ nextProcessor.processRequest(request);
 ```java
 public void run() {
     try {
-        resetSnapshotStats();
-        lastFlushTime = Time.currentElapsedTime();
+        int logCount = 0;
+        // we do this in an attempt to ensure that not all of the servers
+        // in the ensemble take a snapshot at the same time
+        setRandRoll(r.nextInt(snapCount/2));
         while (true) {
-            ServerMetrics.getMetrics().SYNC_PROCESSOR_QUEUE_SIZE.add(queuedRequests.size());
-            long pollTime = Math.min(zks.getMaxWriteQueuePollTime(), getRemainingDelay());
-            Request si = queuedRequests.poll(pollTime, TimeUnit.MILLISECONDS);
-            // 从阻塞队列中获取请求
-          	if (si == null) {
-                /* We timed out looking for more writes to batch, go ahead and flush immediately */
-                flush();
+            Request si = null;
+          //从阻塞队列中获取请求
+            if (toFlush.isEmpty()) {
                 si = queuedRequests.take();
+            } else {
+                si = queuedRequests.poll();
+                if (si == null) {
+                    flush(toFlush);
+                    continue;
+                }
             }
-            if (si == REQUEST_OF_DEATH) {
+            if (si == requestOfDeath) {
                 break;
             }
-            long startProcessTime = Time.currentElapsedTime();
-            ServerMetrics.getMetrics().SYNC_PROCESSOR_QUEUE_TIME.add(startProcessTime - si.syncQueueStartTime);
-            // track the number of records written to the log
-          	//下面这块代码，粗略看来是触发快照操作，启动一个处理快照的线程
-            if (!si.isThrottled() && zks.getZKDatabase().append(si)) {
-                if (shouldSnapshot()) {
-                    resetSnapshotStats();
-                    // roll the log
-                    zks.getZKDatabase().rollLog();
-                    // take a snapshot
-                    if (!snapThreadMutex.tryAcquire()) {
-                        LOG.warn("Too busy to snap, skipping");
-                    } else {
-                        new ZooKeeperThread("Snapshot Thread") {
-                            public void run() {
-                                try {
-                                    zks.takeSnapshot();
-                                } catch (Exception e) {
-                                    LOG.warn("Unexpected exception", e);
-                                } finally {
-                                    snapThreadMutex.release();
-                                }
-                            }
-                        }.start();
+            if (si != null) {
+                // track the number of records written to the log
+              //下面这块代码，粗略看来是触发快照操作，启动一个处理快照的线程
+                if (zks.getZKDatabase().append(si)) {
+                    logCount++;
+                    if (logCount > (snapCount / 2 + randRoll)) {
+                        setRandRoll(r.nextInt(snapCount/2));
+                        // roll the log
+                        zks.getZKDatabase().rollLog();
+                        // take a snapshot
+                        if (snapInProcess != null && snapInProcess.isAlive()) {
+                            LOG.warn("Too busy to snap, skipping");
+                        } else {
+                            snapInProcess = new ZooKeeperThread("Snapshot Thread") {
+                                    public void run() {
+                                        try {
+                                            zks.takeSnapshot();
+                                        } catch(Exception e) {
+                                            LOG.warn("Unexpected exception", e);
+                                        }
+                                    }
+                                };
+                            snapInProcess.start();
+                        }
+                        logCount = 0;
                     }
-                }
-            } else if (toFlush.isEmpty()) {
-                if (nextProcessor != null) {
-                    nextProcessor.processRequest(si);
-                    if (nextProcessor instanceof Flushable) {
-                        ((Flushable) nextProcessor).flush();
+                } else if (toFlush.isEmpty()) {
+                    // optimization for read heavy workloads
+                    // iff this is a read, and there are no pending
+                    // flushes (writes), then just pass this to the next
+                    // processor
+                    if (nextProcessor != null) {
+                      //继续调用下一个处理器来处理请求
+                        nextProcessor.processRequest(si);
+                        if (nextProcessor instanceof Flushable) {
+                            ((Flushable)nextProcessor).flush();
+                        }
                     }
+                    continue;
                 }
-                continue;
+                toFlush.add(si);
+                if (toFlush.size() > 1000) {
+                    flush(toFlush);
+                }
             }
-            toFlush.add(si);
-            if (shouldFlush()) {
-                flush();
-            }
-            ServerMetrics.getMetrics().SYNC_PROCESS_TIME.add(Time.currentElapsedTime() - startProcessTime);
         }
     } catch (Throwable t) {
         handleException(this.getName(), t);
+        running = false;
     }
     LOG.info("SyncRequestProcessor exited!");
 }
@@ -932,16 +899,14 @@ case OpCode.exists: {
     ExistsRequest existsRequest = new ExistsRequest();
   	//反序列化 (将 ByteBuffer 反序列化成为 ExitsRequest.这个就是我们在客户端发起请求的时候传递过来的 Request 对象
     ByteBufferInputStream.byteBuffer2Record(request.request, existsRequest);
-    path = existsRequest.getPath();
+    String path = existsRequest.getPath();
     if (path.indexOf('\0') != -1) {
         throw new KeeperException.BadArgumentsException();
     }
   	// 终于找到一个很关键的代码，判断请求的 getWatch 是否存在，如果存在，则传递 cnxn（servercnxn）
 		// 对于 exists 请求，需要监听 data 变化事件，添加 watcher
     Stat stat = zks.getZKDatabase().statNode(path, existsRequest.getWatch() ? cnxn : null);
-    rsp = new ExistsResponse(stat);
-    requestPathMetricsCollector.registerRequest(request.type, path);
-  	//在服务端内存数据库中根据路径得到结果进行组装，设置为 ExistsResponse
+    rsp = new ExistsResponse(stat); //在服务端内存数据库中根据路径得到结果进行组装，设置为 ExistsResponse
     break;
 }
 ```
@@ -1222,22 +1187,17 @@ public Stat setData(String path, byte[] data, int version, long zxid, long time)
     byte[] lastdata = null;
     synchronized (n) {
         lastdata = n.data;
-        nodes.preChange(path, n);
         n.data = data;
         n.stat.setMtime(time);
         n.stat.setMzxid(zxid);
         n.stat.setVersion(version);
         n.copyStat(s);
-        nodes.postChange(path, n);
     }
     // now update if the path is in a quota subtree.
     String lastPrefix = getMaxPrefixWithQuota(path);
-    long dataBytes = data == null ? 0 : data.length;
     if (lastPrefix != null) {
         this.updateCountBytes(lastPrefix, dataBytes - (lastdata == null ? 0 : lastdata.length), 0);
     }
-    nodeDataSize.addAndGet(getNodeSize(path, data) - getNodeSize(path, lastdata));
-    updateWriteStat(path, dataBytes);
   	 //触发对应节点的 NodeDataChanged 事件
     dataWatches.triggerWatch(path, EventType.NodeDataChanged);
     return s;
@@ -1247,60 +1207,44 @@ public Stat setData(String path, byte[] data, int version, long zxid, long time)
 **WatcherManager. triggerWatch**
 
 ```java
-public WatcherOrBitSet triggerWatch(String path, EventType type, WatcherOrBitSet supress) {
-  	// 根据事件类型、连接状态、节点路径创建 WatchedEvent
-    WatchedEvent e = new WatchedEvent(type, KeeperState.SyncConnected, path);
-    Set<Watcher> watchers = new HashSet<>();
-    PathParentIterator pathParentIterator = getPathParentIterator(path);
+public Set<Watcher> triggerWatch(String path, EventType type) {
+    return triggerWatch(path, type, null);
+}
+public Set<Watcher> triggerWatch(String path, EventType type, Set<Watcher> supress) {
+   // 根据事件类型、连接状态、节点路径创建 WatchedEvent
+    WatchedEvent e = new WatchedEvent(type,
+            KeeperState.SyncConnected, path);
+    HashSet<Watcher> watchers;
     synchronized (this) {
-        for (String localPath : pathParentIterator.asIterable()) {
-            Set<Watcher> thisWatchers = watchTable.get(localPath);
-            if (thisWatchers == null || thisWatchers.isEmpty()) {
-                continue;
+       // 从 watcher 表中移除 path，并返回其对应的 watcher 集合
+        watchers = watchTable.remove(path);
+        if (watchers == null || watchers.isEmpty()) {
+            if (LOG.isTraceEnabled()) {
+                ZooTrace.logTraceMessage(LOG,
+                        ZooTrace.EVENT_DELIVERY_TRACE_MASK,
+                        "No watchers for " + path);
             }
-            Iterator<Watcher> iterator = thisWatchers.iterator();
-            while (iterator.hasNext()) {
-                Watcher watcher = iterator.next();
-                WatcherMode watcherMode = watcherModeManager.getWatcherMode(watcher, localPath);
-                if (watcherMode.isRecursive()) {
-                    if (type != EventType.NodeChildrenChanged) {
-                        watchers.add(watcher);
-                    }
-                } else if (!pathParentIterator.atParentPath()) {
-                    watchers.add(watcher);
-                    if (!watcherMode.isPersistent()) {
-                        iterator.remove();
-                      	// 遍历 watcher 集合
-                        // 根据 watcher 从 watcher 表中取出路径集合
-                        Set<String> paths = watch2Paths.get(watcher);
-                        if (paths != null) {
-                            paths.remove(localPath);
-                        }
-                    }
-                }
-            }
-             // 从 watcher 表中移除 path，并返回其对应的 watcher 集合
-            if (thisWatchers.isEmpty()) {
-                watchTable.remove(localPath);
+            return null;
+        }
+      // 遍历 watcher 集合
+        for (Watcher w : watchers) {
+          // 根据 watcher 从 watcher 表中取出路径集合
+            HashSet<String> paths = watch2Paths.get(w);
+            if (paths != null) {
+               //移除路径
+                paths.remove(path);
             }
         }
     }
-    if (watchers.isEmpty()) {
-        if (LOG.isTraceEnabled()) {
-            ZooTrace.logTraceMessage(LOG, ZooTrace.EVENT_DELIVERY_TRACE_MASK, "No watchers for " + path);
-        }
-        return null;
-    }
-  	 
+   // 遍历 watcher 集合
     for (Watcher w : watchers) {
         if (supress != null && supress.contains(w)) {
             continue;
         }
-      	//OK，重点又来了，w.process 是做什么呢？
+      //OK，重点又来了，w.process 是做什么呢？
         w.process(e);
     }
-    ...
-    return new WatcherOrBitSet(watchers);
+    return watchers;
 }
 ```
 

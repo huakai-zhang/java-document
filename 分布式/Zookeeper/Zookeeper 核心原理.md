@@ -575,6 +575,7 @@ protected void initializeAndRun(String[] args) throws ConfigException, IOExcepti
     if (args.length == 1 && config.isDistributed()) {
         runFromConfig(config);
     } else {
+       //否则直接运行单机模式
         LOG.warn("Either no config or no quorum defined in config, running in standalone mode");
         // there is only server in the quorum -- run as standalone
         ZooKeeperServerMain.main(args);
@@ -597,20 +598,10 @@ QuorumPeer.start 方法，重写了 Thread 的 start。也就是在线程启动�
 
 ```java
 public synchronized void start() {
-    if (!getView().containsKey(myid)) {
-        throw new RuntimeException("My id " + myid + " not in the peer list");
-    }
     loadDataBase();
-    startServerCnxnFactory();
-    try {
-        adminServer.start();
-    } catch (AdminServerException e) {
-        LOG.warn("Problem starting AdminServer", e);
-        System.out.println(e);
-    }
-    startLeaderElection();
-    startJvmPauseMonitor();
-    super.start();
+		cnxnFactory.start();     
+		startLeaderElection();
+		super.start();
 }
 ```
 
@@ -619,18 +610,36 @@ public synchronized void start() {
 终于进入 leader 选举的方法了
 
 ```java
-public synchronized void startLeaderElection() {
-    try {
-        if (getPeerState() == ServerState.LOOKING) {
-            // 构建一个票据，用于投票
-            currentVote = new Vote(myid, getLastLoggedZxid(), getCurrentEpoch());
+synchronized public void startLeaderElection() {
+	try {
+    //构建一个票据，用于投票
+		currentVote = new Vote(myid, getLastLoggedZxid(), getCurrentEpoch());
+	} catch(IOException e) {
+		RuntimeException re = new RuntimeException(e.getMessage());
+		re.setStackTrace(e.getStackTrace());
+		throw re;
+	}
+  //这个 getView 返回的就是在配置文件中配置的 server.myid=ip:port:port。view 在哪里解析的呢？
+    for (QuorumServer p : getView().values()) {
+      //获得当前 zkserver myid 对应的 ip 地址
+        if (p.id == myid) {
+            myQuorumAddr = p.addr;
+            break;
         }
-    } catch (IOException e) {
-        RuntimeException re = new RuntimeException(e.getMessage());
-        re.setStackTrace(e.getStackTrace());
-        throw re;
+    }
+    if (myQuorumAddr == null) {
+        throw new RuntimeException("My id " + myid + " not in the peer list");
     }
     //根据 electionType 匹配对应的选举算法,electionType 默认值为 3.可以在配置文件中动态配置
+    if (electionType == 0) {
+        try {
+            udpSocket = new DatagramSocket(myQuorumAddr.getPort());
+            responder = new ResponderThread();
+            responder.start();
+        } catch (SocketException e) {
+            throw new RuntimeException(e);
+        }
+    }
     this.electionAlg = createElectionAlgorithm(electionType);
 }
 ```
@@ -644,25 +653,28 @@ protected Election createElectionAlgorithm(int electionAlgorithm) {
     Election le = null;
     //TODO: use a factory rather than a switch
     switch (electionAlgorithm) {
-    case 1:
-        throw new UnsupportedOperationException("Election Algorithm 1 is not supported.");
-    case 2:
-        throw new UnsupportedOperationException("Election Algorithm 2 is not supported.");
+    // 新版本中移除0，1，2
+    //case 1:
+        //throw new UnsupportedOperationException("Election Algorithm 1 is not supported.");
+    //case 2:
+        //throw new UnsupportedOperationException("Election Algorithm 2 is not supported.");
+    case 0:
+    		le = new LeaderElection(this);
+    		break;
+		case 1:
+    		le = new AuthFastLeaderElection(this);
+    		break;
+		case 2:
+    		le = new AuthFastLeaderElection(this, true);
+    		break;
     case 3:
-        QuorumCnxManager qcm = createCnxnManager();
-        QuorumCnxManager oldQcm = qcmRef.getAndSet(qcm);
-        if (oldQcm != null) {
-            LOG.warn("Clobbering already-set QuorumCnxManager (restarting leader election?)");
-            oldQcm.halt();
-        }
+        qcm = createCnxnManager();
         QuorumCnxManager.Listener listener = qcm.listener;
         if (listener != null) {
             //启动监听器，这个监听具体做什么的暂时不管，后面遇到需要了解的地方再回过头来看
             listener.start();
             // 初始化 FastLeaderElection
-            FastLeaderElection fle = new FastLeaderElection(this, qcm);
-            fle.start();
-            le = fle;
+            le = new FastLeaderElection(this, qcm);
         } else {
             LOG.error("Null listener when initializing cnx manager");
         }
@@ -708,11 +720,15 @@ private void starter(QuorumPeer self, QuorumCnxManager manager) {
 ```java
 Messenger(QuorumCnxManager manager) {
     this.ws = new WorkerSender(manager);
-    this.wsThread = new Thread(this.ws, "WorkerSender[myid=" + self.getId() + "]");
-    this.wsThread.setDaemon(true);
+    Thread t = new Thread(this.ws,
+            "WorkerSender[myid=" + self.getId() + "]");
+    t.setDaemon(true);
+    t.start();
     this.wr = new WorkerReceiver(manager);
-    this.wrThread = new Thread(this.wr, "WorkerReceiver[myid=" + self.getId() + "]");
-    this.wrThread.setDaemon(true);
+    t = new Thread(this.wr,
+            "WorkerReceiver[myid=" + self.getId() + "]");
+    t.setDaemon(true);
+    t.start();
 }
 ```
 
@@ -730,7 +746,7 @@ getView 里面实际上调用的是一个 QuorumVerifier.getAllMembers() 方法�
 
 ```java
 ...
-quorumPeer.setQuorumVerifier(config.getQuorumVerifier(), false);
+quorumPeer.setQuorumPeers(config.getServers());
 ...
 ```
 
@@ -750,64 +766,25 @@ if (args.length == 1) {
 ```java
 public void parse(String path) throws ConfigException {
 	...
-    // 设置 quorumVerifier
-	setupQuorumPeerConfig(dynamicCfg, false);
+	parseProperties(cfg);
 	...
 }
-
-void setupQuorumPeerConfig(Properties prop, boolean configBackwardCompatibilityMode) throws IOException, ConfigException {
-    quorumVerifier = parseDynamicConfig(prop, electionAlg, true, configBackwardCompatibilityMode);
-    setupMyId();
-    setupClientPort();
-    setupPeerType();
-    checkValidity();
-}
-public static QuorumVerifier parseDynamicConfig(Properties dynamicConfigProp, int eAlg, boolean warnings, boolean configBackwardCompatibilityMode) throws IOException, ConfigException {
-	...
-    QuorumVerifier qv = createQuorumVerifier(dynamicConfigProp, isHierarchical);
-    ...
-}
-
-private static QuorumVerifier createQuorumVerifier(Properties dynamicConfigProp, boolean isHierarchical) throws ConfigException {
-    if (isHierarchical) {
-        return new QuorumHierarchical(dynamicConfigProp);
-    } else {
-        /*
-         * The default QuorumVerifier is QuorumMaj
-         */
-        //LOG.info("Defaulting to majority quorums");
-        return new QuorumMaj(dynamicConfigProp);
-    }
-}
-```
-
-**QuorumMaj**
-
-这里会根据一个外部的文件去进行解析，然后解析对应的集群配置数据放到 allMembers 这个集合中。
-
-```java
-private Map<Long, QuorumServer> allMembers = new HashMap<Long, QuorumServer>();
-
-public QuorumMaj(Properties props) throws ConfigException {
-    for (Entry<Object, Object> entry : props.entrySet()) {
-        String key = entry.getKey().toString();
-        String value = entry.getValue().toString();
-        if (key.startsWith("server.")) {
-            int dot = key.indexOf('.');
-            long sid = Long.parseLong(key.substring(dot + 1));
-            QuorumServer qs = new QuorumServer(sid, value);
-            allMembers.put(Long.valueOf(sid), qs);
-            if (qs.type == LearnerType.PARTICIPANT) {
-                votingMembers.put(Long.valueOf(sid), qs);
-            } else {
-                observingMembers.put(Long.valueOf(sid), qs);
-            }
-        } else if (key.equals("version")) {
-            version = Long.parseLong(value, 16);
-        }
-    }
-    half = votingMembers.size() / 2;
-}
+// parseProperties()方法的部分代码
+else if (key.startsWith("server.")) {
+  int dot = key.indexOf('.');
+  long sid = Long.parseLong(key.substring(dot + 1));
+  String parts[] = splitWithLeadingHostname(value);
+  if ((parts.length != 2) && (parts.length != 3) && (parts.length !=4)) {
+      LOG.error(value
+         + " does not have the form host:port or host:port:port " +
+         " or host:port:port:type");
+  }
+  ...
+  if (type == LearnerType.OBSERVER){
+     observers.put(Long.valueOf(sid), new QuorumServer(sid, hostname, port, electionPort, type));
+  } else {
+      servers.put(Long.valueOf(sid), new QuorumServer(sid, hostname, port, electionPort, type));
+  }
 ```
 
 ## 4.5 ZkServer 服务启动的逻辑
@@ -817,10 +794,17 @@ public QuorumMaj(Properties props) throws ConfigException {
 我们来分析看看 QuorumPeerMain.runFromConfig 在 runFromConfig 中，有构建了一个 ServerCnxnFactory：
 
 ```java
-cnxnFactory = ServerCnxnFactory.createFactory();
-cnxnFactory.configure(config.getClientPortAddress(), config.getMaxClientCnxns(), config.getClientPortListenBacklog(), false);
-...
-quorumPeer.setCnxnFactory(cnxnFactory);
+public void runFromConfig(QuorumPeerConfig config) throws IOException {
+  ...
+  LOG.info("Starting quorum peer");
+  try {
+      ServerCnxnFactory cnxnFactory = ServerCnxnFactory.createFactory();
+      cnxnFactory.configure(config.getClientPortAddress(),
+                            config.getMaxClientCnxns());
+      ...
+        //并且将这个 factory 设置给了 quorumPeer 的成员属性
+      quorumPeer.setCnxnFactory(cnxnFactory);
+    	...
 ```
 
 这个很明显是一个工厂模式，基于这个工厂类创建什么呢？ 打开 createFactory 方法看看就知道了。
@@ -857,21 +841,9 @@ public static ServerCnxnFactory createFactory() throws IOException {
 
 ```java
 public void start() {
-    stopped = false;
-    if (workerPool == null) {
-        workerPool = new WorkerService("NIOWorker", numWorkerThreads, false);
-    }
-    for (SelectorThread thread : selectorThreads) {
-        if (thread.getState() == Thread.State.NEW) {
-            thread.start();
-        }
-    }
     // ensure thread is started once and only once
-    if (acceptThread.getState() == Thread.State.NEW) {
-        acceptThread.start();
-    }
-    if (expirerThread.getState() == Thread.State.NEW) {
-        expirerThread.start();
+    if (thread.getState() == Thread.State.NEW) {
+        thread.start();
     }
 }
 ```
@@ -883,37 +855,18 @@ thread 其实构建的是一个 SelectorThread(最终继承自ZookeeperThread) �
 到此，NIOServer 的初始化以及启动过程就完成了。并且对 2181 的这个端口进行监听。一旦发现有请求进来，就执行相应的处理即可。这块后续在分析数据同步的时候再做详细了解：
 
 ```java
-public void configure(InetSocketAddress addr, int maxcc, int backlog, boolean secure) throws IOException {
-    if (secure) {
-        throw new UnsupportedOperationException("SSL isn't supported in NIOServerCnxn");
-    }
+public void configure(InetSocketAddress addr, int maxcc) throws IOException {
     configureSaslLogin();
-    ...
-    // 32 cores sweet spot seems to be 4 selector threads
-    numSelectorThreads = Integer.getInteger(
-        ZOOKEEPER_NIO_NUM_SELECTOR_THREADS,
-        Math.max((int) Math.sqrt((float) numCores / 2), 1));
-    if (numSelectorThreads < 1) {
-        throw new IOException("numSelectorThreads must be at least 1");
-    }
-    ...
-    for (int i = 0; i < numSelectorThreads; ++i) {
-        selectorThreads.add(new SelectorThread(i));
-    }
-    listenBacklog = backlog;
+    thread = new ZooKeeperThread(this, "NIOServerCxn.Factory:" + addr);
+    thread.setDaemon(true);
+    maxClientCnxns = maxcc;
     this.ss = ServerSocketChannel.open();
     ss.socket().setReuseAddress(true);
-    LOG.info("binding to port {}", addr);
-    if (listenBacklog == -1) {
-        ss.socket().bind(addr);
-    } else {
-        ss.socket().bind(addr, listenBacklog);
-    }
+    LOG.info("binding to port " + addr);
+    ss.socket().bind(addr);
     ss.configureBlocking(false);
-    acceptThread = new AcceptThread(ss, addr, selectorThreads);
+    ss.register(selector, SelectionKey.OP_ACCEPT);
 }
-public class SelectorThread extends AbstractSelectThread {}
-private abstract class AbstractSelectThread extends ZooKeeperThread {}
 ```
 
 ## 4.6 选举流程分析
@@ -936,28 +889,20 @@ getPeerState 表示获取选举状态。对于选举来说，默认都是 LOOKIN
 
 ```java
 public void run() {
-    ...
-    try {
+    setName("QuorumPeer" + "[myid=" + getId() + "]" +
+            cnxnFactory.getLocalAddress());
+    //… 根据选举状态，选择不同的处理方式
         while (running) {
-            if (unavailableStartTime == 0) {
-                unavailableStartTime = Time.currentElapsedTime();
-            }
-            // 根据选举状态，选择不同的处理方式
             switch (getPeerState()) {
             case LOOKING:
                 LOG.info("LOOKING");
-                ServerMetrics.getMetrics().LOOKING_COUNT.add(1);
-                // 判断是否为只读模式,通过”readonlymode.enabled”开启
+                //判断是否为只读模式,通过”readonlymode.enabled”开启
                 if (Boolean.getBoolean("readonlymode.enabled")) {
-                    // 只读模式的启动流程
+                    //只读模式的启动流程
                 } else {
                     try {
-                        reconfigFlagClear();
-                        if (shuttingDownLE) {
-                            shuttingDownLE = false;
-                            startLeaderElection();
-                        }
-                        //设置当前的投票，通过策略模式来决定当前用哪个选举算法来进行领导选举
+                        setBCVote(null);
+                      //设置当前的投票，通过策略模式来决定当前用哪个选举算法来进行领导选举
                         setCurrentVote(makeLEStrategy().lookForLeader());
                     } catch (Exception e) {
                         LOG.warn("Unexpected exception", e);
@@ -965,7 +910,7 @@ public void run() {
                     }
                 }
                 break;
-                ...
+            	...
             }
         }
     } finally {
@@ -1071,29 +1016,35 @@ else if (validVoter(n.sid) && validVoter(n.leader)) {
             Long.toHexString(n.electionEpoch));
         //将收到的投票信息放入投票的集合 recvset 中, 用来作为最终的 "过半原则" 判断
         recvset.put(n.sid, new Vote(n.leader, n.zxid, n.electionEpoch, n.peerEpoch));
-        voteSet = getVoteTracker(recvset, new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch));
-        // 判断选举是否结束
-        if (voteSet.hasAllQuorums()) {
-            //进入这个判断，说明选票达到了 leader 选举的要求
- 			//在更新状态之前，服务器会等待 finalizeWait 毫秒时间来接收新的选票，以防止漏下关键选票。如果收到可能改变 Leader 的新选票，则重新进行计票
-            while ((n = recvqueue.poll(finalizeWait, TimeUnit.MILLISECONDS)) != null) {
-                if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, proposedLeader, proposedZxid, proposedEpoch)) {
-                    recvqueue.put(n);
-                    break;
-                }
-            }
-            //如果 notifaction 为空，说明 Leader 节点是可以确定好了
-            if (n == null) {
-                // 设置当前当前节点的状态（判断 leader 节点是不是我自己，如果是，直接更新当前节点的 state 为 LEADING）否则，根据当前节点的特性进行判断，决定是FOLLOWING 还是 OBSERVING
-                setPeerState(proposedLeader, voteSet);
-                //组装生成这次 Leader 选举最终的投票的结果
-                Vote endVote = new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch);
-                // 清空recvqueue
-                leaveInstance(endVote);
-                // 返回最终的票据
-                return endVote;
-            }
-        }
+        //判断选举是否结束
+        if (termPredicate(recvset,
+        new Vote(proposedLeader, proposedZxid,
+                logicalclock.get(), proposedEpoch))) {
+    				//进入这个判断，说明选票达到了 leader 选举的要求
+//在更新状态之前，服务器会等待 finalizeWait 毫秒时间来接收新的选票，以防止漏下关键选票。如果收到可能改变 Leader 的新选票，则重新进行计票
+   				 while((n = recvqueue.poll(finalizeWait,
+            TimeUnit.MILLISECONDS)) != null){
+        		if(totalOrderPredicate(n.leader, n.zxid, n.peerEpoch,
+                proposedLeader, proposedZxid, proposedEpoch)){
+            			recvqueue.put(n);
+            			break;
+        		}
+    		}		
+          //如果 notifaction 为空，说明 Leader 节点是可以确定好了
+    		if (n == null) {
+          //设置当前当前节点的状态（判断 leader 节点是不是我自己，如果是，直接更新当前节点的 state 为 LEADING）否则，根据当前节点的特性进行判断，决定是FOLLOWING 还是 OBSERVING
+        		self.setPeerState((proposedLeader == self.getId()) ?
+                ServerState.LEADING: learningState());
+        	// 组装生成这次 Leader 选举最终的投票的结果	
+          Vote endVote = new Vote(proposedLeader,
+                                proposedZxid,
+                                logicalclock.get(),
+                                proposedEpoch);
+          // 清空recvqueue
+        		leaveInstance(endVote);
+          //返回最终的票据
+        		return endVote;
+    		}
         break;
    	...
     }
@@ -1102,9 +1053,9 @@ else if (validVoter(n.sid) && validVoter(n.leader)) {
 
 **投票处理的流程图**
 
+??????????????
 
-
-**hasAllQuorums**
+**termPredicate**
 
 这个方法是使用过半原则来判断选举是否结束，如果返回 true，说明能够选出 leader 服务器。
 
@@ -1113,48 +1064,19 @@ votes 表示收到的外部选票的集合
 vote 表示当前服务器的选票
 
 ```java
-// SyncedLearnerTracker.java
-protected ArrayList<QuorumVerifierAcksetPair> qvAcksetPairs = new ArrayList<QuorumVerifierAcksetPair>();
-
-public void addQuorumVerifier(QuorumVerifier qv) {
-    qvAcksetPairs.add(new QuorumVerifierAcksetPair(qv, new HashSet<Long>(qv.getVotingMembers().size())));
-}
-
-public boolean addAck(Long sid) {
-    boolean change = false;
-    for (QuorumVerifierAcksetPair qvAckset : qvAcksetPairs) {
-        if (qvAckset.getQuorumVerifier().getVotingMembers().containsKey(sid)) {
-            qvAckset.getAckset().add(sid);
-            change = true;
+protected boolean termPredicate(
+        HashMap<Long, Vote> votes,
+        Vote vote) {
+    HashSet<Long> set = new HashSet<Long>();
+    //遍历接收到的所有选票数据
+    for (Map.Entry<Long,Vote> entry : votes.entrySet()) {
+      //对选票进行归纳，就是把所有选票数据中和当前节点的票据相同的票据进行统计
+        if (vote.equals(entry.getValue())){
+            set.add(entry.getKey());
         }
     }
-    return change;
-}
-
-public boolean hasAllQuorums() {
-    for (QuorumVerifierAcksetPair qvAckset : qvAcksetPairs) {
-        if (!qvAckset.getQuorumVerifier().containsQuorum(qvAckset.getAckset())) {
-            return false;
-        }
-    }
-    return true;
-}
-
-// FastLeaderElection.java
-// lookForLeader()中调用getVoteTracker()获取SyncedLearnerTracker，以便调用hasAllQuorums()
-protected SyncedLearnerTracker getVoteTracker(Map<Long, Vote> votes, Vote vote) {
-    SyncedLearnerTracker voteSet = new SyncedLearnerTracker();
-    voteSet.addQuorumVerifier(self.getQuorumVerifier());
-    if (self.getLastSeenQuorumVerifier() != null
-        && self.getLastSeenQuorumVerifier().getVersion() > self.getQuorumVerifier().getVersion()) {
-        voteSet.addQuorumVerifier(self.getLastSeenQuorumVerifier());
-    }
-    for (Map.Entry<Long, Vote> entry : votes.entrySet()) {
-        if (vote.equals(entry.getValue())) {
-            voteSet.addAck(entry.getKey());
-        }
-    }
-    return voteSet;
+  //对选票进行判断
+    return self.getQuorumVerifier().containsQuorum(set);
 }
 ```
 
@@ -1163,23 +1085,29 @@ protected SyncedLearnerTracker getVoteTracker(Map<Long, Vote> votes, Vote vote) 
 判断当前节点的票数是否是大于一半，默认采用 QuorumMaj 来实现。
 
 ```java
-public boolean containsQuorum(Set<Long> ackSet) {
-    return (ackSet.size() > half);
+public boolean containsQuorum(Set<Long> set) {
+    return (set.size() > half);
 }
 ```
 
 这个 half 的值是多少呢？ 
 
-在读取配置时，会创建通过 QuorumPeerConfig.createQuorumVerifier 方法创建 QuorumVerifier，其中 QuorumMaj 是 QuorumVerifier 的一个默认实现：
+可以在 QuorumPeerConfig.parseProperties 这个方法中，找到如下代码。
 
 ```java
-public QuorumMaj(Properties props) throws ConfigException {
-    ...
-    half = votingMembers.size() / 2;
+LOG.info("Defaulting to majority quorums");
+quorumVerifier = new QuorumMaj(servers.size());
+```
+
+也就是说，在构建 QuorumMaj 的时候，传递了当前集群节点的数量，这里是 3 那么，hafl=3/2=1。
+
+```java
+public QuorumMaj(int n){
+    this.half = n/2;
 }
 ```
 
-那么 votingMembers.size() > 1，意味着至少要有两个节点的票据是选择你当 leader，否则，还得继续投。
+那么 set.size() > 1，意味着至少要有两个节点的票据是选择你当 leader，否则，还得继续投。
 
 ## 4.7 投票的网络通信流程
 
@@ -1201,8 +1129,7 @@ public QuorumMaj(Properties props) throws ConfigException {
 protected Election createElectionAlgorithm(int electionAlgorithm) {
     ...
     case 3:
-        QuorumCnxManager qcm = createCnxnManager();
-        ...
+        qcm = createCnxnManager();
         QuorumCnxManager.Listener listener = qcm.listener;
         if (listener != null) {
             //启动监听
@@ -1217,66 +1144,12 @@ listener 实现了线程，所以在 run 方法中可以看到构建 ServerSocke
 
 ```java
 public void run() {
-    if (!shutdown) {
-        Set<InetSocketAddress> addresses;
-        if (self.getQuorumListenOnAllIPs()) {
-            addresses = self.getElectionAddress().getWildcardAddresses();
-        } else {
-            addresses = self.getElectionAddress().getAllAddresses();
-        }
-        CountDownLatch latch = new CountDownLatch(addresses.size());
-        listenerHandlers = addresses.stream().map(address ->
-                        new ListenerHandler(address, self.shouldUsePortUnification(), self.isSslQuorum(), latch))
-                .collect(Collectors.toList());
-        ExecutorService executor = Executors.newFixedThreadPool(addresses.size());
-        listenerHandlers.forEach(executor::submit);
-        latch.await();
-    }
-    if (!shutdown) {
-        ...
-        if (socketException.get()) {
-            socketBindErrorHandler.run();
-        }
-    }
-}
-// ListenerHandler也是一个实现线程的类，查看他的run方法
-public void run() {
-    Thread.currentThread().setName("ListenerHandler-" + address);
-    acceptConnections();
-    latch.countDown();
-}
-private void acceptConnections() {
     int numRetries = 0;
-    Socket client = null;
-    while ((!shutdown) && (portBindMaxRetry == 0 || numRetries < portBindMaxRetry)) {
+    InetSocketAddress addr;
+    while((!shutdown) && (numRetries < 3)){
         try {
-            serverSocket = createNewServerSocket();
-            while (!shutdown) {
-                try {
-                    client = serverSocket.accept();
-                    setSockOpts(client);
-                    ...
-            }
-        }
-    }
- 
-}
-private ServerSocket createNewServerSocket() throws IOException {
-    ServerSocket socket;
-    if (portUnification) {
-        LOG.info("Creating TLS-enabled quorum server socket");
-        socket = new UnifiedServerSocket(self.getX509Util(), true);
-    } else if (sslQuorum) {
-        LOG.info("Creating TLS-only quorum server socket");
-        socket = new UnifiedServerSocket(self.getX509Util(), false);
-    } else {
-        socket = new ServerSocket();
-    }
-    socket.setReuseAddress(true);
-    address = new InetSocketAddress(address.getHostString(), address.getPort());
-    socket.bind(address);
-    return socket;
-}
+            ss = new ServerSocket();
+          ...
 ```
 
 **FastLeaderElection.lookForLeader**
@@ -1322,11 +1195,16 @@ public void toSend(Long sid, ByteBuffer b) {
         addToRecvQueue(new Message(b.duplicate(), sid));
     } else {
         //否则发送到对应的发送队列上
-        //判断当前的 sid 是否已经存在于发送队列，如果是，则直接把已经存在的数据发送出去
-        BlockingQueue<ByteBuffer> bq = queueSendMap.computeIfAbsent(sid, serverId -> new CircularBlockingQueue<>(SEND_CAPACITY));
-        addToSendQueue(bq, b);
-        //连接申请,调用链 connectOne(long sid, MultipleAddresses electionAddr)-->initiateConnectionAsync --> QuorumConnectionReqThread.run() --> initiateConnection --> startConnection ， startConnection 就是发送方启动入口
-        connectOne(sid);
+        ArrayBlockingQueue<ByteBuffer> bq = new ArrayBlockingQueue<ByteBuffer>(SEND_CAPACITY);
+      	//判断当前的 sid 是否已经存在于发送队列，如果是，则直接把已经存在的数据发送出去
+				ArrayBlockingQueue<ByteBuffer> bqExisting = queueSendMap.putIfAbsent(sid, bq);
+				if (bqExisting != null) {
+				    addToSendQueue(bqExisting, b);
+				} else {
+ 				   addToSendQueue(bq, b);
+				}
+      //连接申请,调用链 connectOne --> initiateConnection --> startConnection ， startConnection 就是发送方启动入口
+				connectOne(sid);
     }
 }
 ```
@@ -1345,15 +1223,7 @@ private boolean startConnection(Socket sock, Long sid) throws IOException {
         SendWorker sw = new SendWorker(sock, sid);
         RecvWorker rw = new RecvWorker(sock, din, sid, sw);
         sw.setRecv(rw);
-        SendWorker vsw = senderWorkerMap.get(sid);
-        if (vsw != null) {
-            vsw.finish();
-        }
-        senderWorkerMap.put(sid, sw);
-        queueSendMap.putIfAbsent(sid, new CircularBlockingQueue<>(SEND_CAPACITY));
-        sw.start();
-        rw.start();
-        return true;
+       ...
     }
     return false;
 }
@@ -1367,18 +1237,26 @@ RecvWorker 不停监听 socket 的 inputstream，读取消息放到消息接收�
 
 listener 监听到客户端请求之后，开始处理消息：
 
-listener.run() --> ListenerHandler.run() --> acceptConnections()
-
 ```java
+public void run() {
+//省略部分代码
 while (!shutdown) {
-	client = serverSocket.accept();
-	setSockOpts(client);
-
-	if (quorumSaslAuthEnabled) {
-		receiveConnectionAsync(client);
-	} else {
-		receiveConnection(client);
-	}                       
+    Socket client = ss.accept();
+    setSockOpts(client);
+    LOG.info("Received connection request "
+            + client.getRemoteSocketAddress());
+    // Receive and handle the connection request
+    // asynchronously if the quorum sasl authentication is
+    // enabled. This is required because sasl server
+    // authentication process may take few seconds to finish,
+    // this may delay next peer connection requests.
+    if (quorumSaslAuthEnabled) {
+        receiveConnectionAsync(client);
+    } else {
+      //接收客户端请求
+        receiveConnection(client);
+    }
+    numRetries = 0;
 }
 ```
 
@@ -1391,7 +1269,7 @@ public void receiveConnection(final Socket sock) {
         //获取客户端的数据包
         din = new DataInputStream(new BufferedInputStream(sock.getInputStream()));
         LOG.debug("Sync handling of connection request received from: {}", sock.getRemoteSocketAddress());
-        //获取客户端的数据包
+        //调用 handle 进行处理
         handleConnection(sock, din);
     } catch (IOException e) {
         LOG.error("Exception handling connection, addr: {}, closing server connection", sock.getRemoteSocketAddress());
@@ -1404,52 +1282,34 @@ public void receiveConnection(final Socket sock) {
 **handleConnection**
 
 ```java
-private void handleConnection(Socket sock, DataInputStream din) throws IOException {
-    Long sid = null, protocolVersion = null;
-    MultipleAddresses electionAddr = null;
+private void handleConnection(Socket sock, DataInputStream din)
+        throws IOException {
+    Long sid = null;
     try {
-        protocolVersion = din.readLong();
-        if (protocolVersion >= 0) { // this is a server id and not a protocol version
-            sid = protocolVersion;
+        //获取客户端的 sid，也就是 myid
+        sid = din.readLong();
+        if (sid < 0) { // this is not a server id but a protocol version (see ZOOKEEPER-1633)
+            sid = din.readLong();
         }
-        ...
-    } catch (IOException e) {
-        LOG.warn("Exception reading or writing challenge", e);
-        closeSocket(sock);
-        return;
-    }
-    // do authenticating learner
-    authServer.authenticate(sock, din);
-    //If wins the challenge, then close the new connection.
-    if (sid < self.getId()) {
+    if (sid < this.mySid) {
         //为了防止重复建立连接，只允许 sid 大的主动连接 sid 小的
         SendWorker sw = senderWorkerMap.get(sid);
         if (sw != null) {
-            //关闭连接
             sw.finish();
         }
-        LOG.debug("Create new connection to server: {}", sid);
-        //关闭连接
-        closeSocket(sock);
-        //向 sid 发起连接
-        if (electionAddr != null) {
-            connectOne(sid, electionAddr);
-        } else {
-            connectOne(sid);
-        }
+        /*
+         * Now we start a new connection
+         */
+        LOG.debug("Create new connection to server: " + sid);
+        closeSocket(sock);//关闭连接
+        connectOne(sid);//向 sid 发起连接
+        // Otherwise start worker threads to receive data.
     } else {
-        //同样，构建一个 SendWorker 和 RecvWorker 进行发送和接收数据
+      //同样，构建一个 SendWorker 和 RecvWorker 进行发送和接收数据
         SendWorker sw = new SendWorker(sock, sid);
         RecvWorker rw = new RecvWorker(sock, din, sid, sw);
         sw.setRecv(rw);
-        SendWorker vsw = senderWorkerMap.get(sid);
-        if (vsw != null) {
-            vsw.finish();
-        }
-        senderWorkerMap.put(sid, sw);
-        queueSendMap.putIfAbsent(sid, new CircularBlockingQueue<>(SEND_CAPACITY));
-        sw.start();
-        rw.start();
+        ...
     }
 }
 ```
@@ -1463,10 +1323,10 @@ private void handleConnection(Socket sock, DataInputStream din) throws IOExcepti
 分别来看看 case 为 FOLLOWING 和 LEADING，会做什么事情：
 
 ```java
+@Override
+public void run() {
+setName("QuorumPeer" + "[myid=" + getId() + "]" + cnxnFactory.getLocalAddress());
 while (running) {
-    if (unavailableStartTime == 0) {
-        unavailableStartTime = Time.currentElapsedTime();
-    }
     switch (getPeerState()) {
     case LOOKING:
     case OBSERVING:
@@ -1553,9 +1413,11 @@ void followLeader() throws InterruptedException {
             ...
             // create a reusable packet to reduce gc impact
             QuorumPacket qp = new QuorumPacket();
+          //接受 Leader消息，执行并反馈给 leader，线程在此自旋
             while (this.isRunning()) {
-                //接受 Leader消息，执行并反馈给 leader，线程在此自旋
+              //从 leader 读取数据包
                 readPacket(qp);
+              //处理 packets
                 processPacket(qp);
             }
         ...
