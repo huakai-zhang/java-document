@@ -982,11 +982,19 @@ private void unparkSuccessor(Node node) {
 
 **为什么在释放锁的时候是从 tail 进行扫描**
 
-我们再回到 enq 那个方法。在标注为红色部分的代码来看一个新的节点是如何加入到链表中的 
+我们再回到 enq 那个方法。在下面的代码来看一个新的节点是如何加入到链表中的 
 
 1. 将新的节点的 prev 指向 tail 
 2. 通过 cas 将 tail 设置为新的节点，因为 cas 是原子操作所以能够保证线程安全性 
 3. t.next=node；设置原 tail 的 next 节点指向新的节点
+
+```java
+node.prev = t;
+if (compareAndSetTail(t, node)) {
+	t.next = node;
+	return t;
+}
+```
 
 ![image-20201229135035306](JUC.assets/image-20201229135035306.png)
 
