@@ -878,13 +878,19 @@ Thread.interrupted，返回当前线程是否被其他线程触发过中断请�
 ```java
 private final boolean parkAndCheckInterrupt() {
     LockSupport.park(this);
+  	// 如果在挂起期间被中断过会返回ture
+  	// acquireQueued 中的 interrupted 被设置为 true
+    // 最终 acquireQueued 会返回true
     return Thread.interrupted();
 }
 ```
 
-selfInterrupt： 标识如果当前线程在 acquireQueued 中被中断过，则需要产生一 个中断请求，原因是线程在调用 acquireQueued 方法的时候是不会响应中断请求的 
+selfInterrupt： 标识如果当前线程在 acquireQueued 中被中断过，则需要产生一个中断请求，原因是线程在调用 acquireQueued 方法的时候是不会响应中断请求的 
 
 ```java
+// 响应中断
+// acquireQueued 返回 true
+// acquire 的判断就会执行此方法，进行中断（即响应中断）
 static void selfInterrupt() { 
 	Thread.currentThread().interrupt(); 
 }
