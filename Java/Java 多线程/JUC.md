@@ -335,7 +335,32 @@ void unlock() 释放锁
 
 ## 3.4 ReentrantLock 重入锁
 
+重入锁，表示支持重新进入的锁，也就是说，如果当前线程 t1 通过调用 lock 方法获取了锁之后，再次调用 lock，是不会再阻塞去获取锁的，直接增加重试次数就行了。synchronized 和 ReentrantLock 都是可重入锁。很多同学不理解为什么锁会存在重入的特性，那是因为对于同步锁的理解程度还不够，比如在下面这类的场景中，存在多个加锁的方法的相互调用，其实就是一种重入特性的场景。
+
+### 3.4.1 重入锁的设计目的
+
+比如调用 demo 方法获得了当前的对象锁，然后在这个方法中再去调用demo2，demo2 中的存在同一个实例锁，这个时候当前线程会因为无法获得demo2 的对象锁而阻塞，就会产生死锁。
+
 重入锁的设计目的是`避免线程的死锁`。
+
+```java
+// 假定无法重入
+public class ReentrantDemo{
+	public synchronized void demo(){
+		System.out.println("begin:demo");
+		demo2();
+	}
+	public void demo2(){
+		System.out.println("begin:demo1");
+			synchronized (this){
+		} 
+	}
+	public static void main(String[] args) {
+		ReentrantDemo rd=new ReentrantDemo();
+		new Thread(rd::demo).start();
+	} 
+}
+```
 
 使用 ReentrantLock 实现多线程累加的示例：
 
@@ -566,6 +591,7 @@ final void lock() {
 **CAS 的实现原理**
 
 ```java
+// 表示期望将 expect 更新为 update
 protected final boolean compareAndSetState(int expect, int update) {
     // See below for intrinsics setup to support this
     return unsafe.compareAndSwapInt(this, stateOffset, expect, update);
@@ -976,12 +1002,33 @@ private void unparkSuccessor(Node node) {
 
 通过 ReentrantLock.unlock，原本挂起的线程被唤醒以后继续执行，应该从哪里执行大家还有印象吧。 原来被挂起的线程是在 acquireQueued 方法中，所以被唤醒以后继续从这个方法开始执行。
 
-AQS.acquireQueued
+**AQS.acquireQueued**
 
 这个方法前面已经完整分析过了，我们只关注一下 Thread2 被唤醒以后的执行流程。 由于 Thread2 的 prev 节点指向的是 head，并且 Thread1 已经释放了锁。所以这个时候调用 tryAcquire 方法时，可以顺利获取到锁 
 
 1. 把 Thread2 节点当成 head 
 2. 把原 head 节点的 next 节点指向为 null
+
+```java
+final boolean acquireQueued(final Node node, int arg) {
+	...
+  for (;;) {
+		final Node p = node.predecessor();
+  	if (p == head && tryAcquire(arg)) { //可以顺利获得锁
+			setHead(node);
+			p.next = null; // help GC
+			failed = false;
+  		return interrupted;
+    }
+    ...
+}
+private void setHead(Node node) {
+    head = node;
+  	// 将 thread 设置为null
+    node.thread = null;
+    node.prev = null;
+}  
+```
 
 ![image-20201229140625492](JUC.assets/image-20201229140625492.png)
 
