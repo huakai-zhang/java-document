@@ -224,6 +224,24 @@ public class MyThread extends OtherClass implements Runnable {
 
 <img src="JUC.assets/image-20200905201213273.png" alt="image-20200905201213273" style="zoom:50%;" />
 
+**FutureTask**
+
+Thread类的构造方法根本没有Callable，可以找中间人介绍。中间人是什么？ java多态，一个类可以实现多个接口！！ 
+
+<img src="JUC.assets/image-20200905201704019.png" alt="image-20200905201704019"/>
+
+未来的任务，用它就干一件事，异步调用 main方法就像一个冰糖葫芦，一个个方法由main串起来。 
+
+但解决不了一个问题：正常调用挂起堵塞问题 
+
+在主线程中需要执行比较耗时的操作时，但又不想阻塞主线程时，可以把这些作业交给Future对象在后台完成，当主线程将来需要时，就可以通过Future对象获得后台作业的计算结果或者执行状态。 
+
+一般FutureTask多用于耗时的计算，主线程可以在完成自己的任务后，再去获取结果。 
+
+仅在计算完成时才能检索结果；如果计算尚未完成，则阻塞 get 方法。一旦计算完成， 就不能再重新开始或取消计算。get方法而获取结果只有在计算完成时获取，否则会一直阻塞直到任务转入完成状态， 然后会返回结果或者抛出异常。 
+
+只计算一次，get方法放到最后 
+
 ```java
 // 与Runnable对比
 // 创建新类MyThread实现runnable接口 
@@ -233,17 +251,25 @@ class MyThread implements Runnable{
   
  } 
 } 
-// 新类MyThread2实现callable接口 
-class MyThread2 implements Callable<Integer>{ 
- @Override 
- public Integer call() throws Exception { 
-  return 200; 
- }  
+
+// 新类MyThread实现callable接口 
+class MyThread implements Callable<Integer> {
+    @Override
+    public Integer call() throws Exception {
+        System.out.println("********come in");
+        try { TimeUnit.SECONDS.sleep(4); } catch (InterruptedException e) { e.printStackTrace(); }
+        return 1024;
+    }
 }
-FutureTask futureTask = new FutureTask(new MyThread2());
-new Thread(futureTask, "A").start();
-System.out.println(futureTask.get());
-System.out.println("main*******计算完成");
+
+public class CallableDemo {
+    public static void main(String[] args) throws ExecutionException, InterruptedException {
+        FutureTask futureTask = new FutureTask(new MyThread());
+        new Thread(futureTask, "A").start();
+        System.out.println(futureTask.get());
+        System.out.println("main*******计算完成");
+    }
+}
 ```
 
 callable接口与runnable接口的区别？ 
