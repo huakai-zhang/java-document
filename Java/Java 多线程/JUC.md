@@ -77,7 +77,9 @@ public class SaleTicket {
 }
 ```
 
-## 2.5 创建线程的方式
+## 2.5 线程的应用
+
+### 2.5.1 创建线程的方式
 
 ```java
 // 不能这样写
@@ -99,6 +101,46 @@ new  Thread( new  Runnable() {
 new  Thread(() -> { 
   
  },  "your thread name" ).start(); 
+```
+
+**lambda 表达式复习**
+
+```java
+@FunctionalInterface
+interface Foo {
+    int add(int x, int y);
+
+    default int div(int x, int y) {
+        System.out.println("div");
+        return x / y;
+    }
+    default int mul(int x, int y) {
+        System.out.println("mul");
+        return x * y;
+    }
+    public static int sub (int x, int y) {
+        System.out.println("sub");
+        return x - y;
+    }
+}
+
+/**
+ * 拷贝小括号，写死右箭头，落地大括号
+ * FunctionInterface
+ * default
+ */
+public class LambdaExpress {
+    public static void main(String[] args) {
+        Foo foo = (x, y) -> {
+            System.out.println("add");
+            return x + y;
+        };
+        System.out.println(foo.add(10, 5));
+        System.out.println(foo.div(10,5));
+        System.out.println(foo.mul(10,5));
+        System.out.println(Foo.sub(10,5));
+    }
+}
 ```
 
 ```java
@@ -144,47 +186,75 @@ public class SaleTicket {
 }
 ```
 
-## 2.6 lambda 表达式复习
+### 2.5.2 获得多线程的几种方式
+
+在 Java 中，有多种方式来实现多线程。继承 Thread 类、 实现 Runnable 接口、使用线程池 ExecutorService、Callable 接口通过 Future 实现带返回结果的多线程。 
+
+**继承 Thread 类创建线程**
+
+Thread 类本质上是实现了 Runnable 接口的一个实例，代 表一个线程的实例。启动线程的唯一方法就是通过 Thread 类的 start()实例方法。start()方法是一个 native 方法，它会 启动一个新线程，并执行 run()方法。这种方式实现多线程 很简单，通过自己的类直接 extend Thread，并复写 run() 方法，就可以启动新线程并执行自己定义的 run()方法。 
 
 ```java
-@FunctionalInterface
-interface Foo {
-    int add(int x, int y);
-
-    default int div(int x, int y) {
-        System.out.println("div");
-        return x / y;
-    }
-    default int mul(int x, int y) {
-        System.out.println("mul");
-        return x * y;
-    }
-    public static int sub (int x, int y) {
-        System.out.println("sub");
-        return x - y;
-    }
-}
-
-/**
- * 拷贝小括号，写死右箭头，落地大括号
- * FunctionInterface
- * default
- */
-public class LambdaExpress {
-    public static void main(String[] args) {
-        Foo foo = (x, y) -> {
-            System.out.println("add");
-            return x + y;
-        };
-        System.out.println(foo.add(10, 5));
-        System.out.println(foo.div(10,5));
-        System.out.println(foo.mul(10,5));
-        System.out.println(Foo.sub(10,5));
-    }
-}
+public class MyThread extends Thread { 
+    public void run() { 
+        System.out.println("MyThread.run()"); 
+    } 
+} 
+MyThread myThread = new MyThread(); 
+myThread.start();
 ```
 
-## 2.7 多线程锁
+**实现 Runnable 接口创建线程**
+
+如果自己的类已经 extends 另一个类，就无法直接 extends Thread，此时，可以实现一个 Runnable 接口。
+
+```java
+public class MyThread extends OtherClass implements Runnable { 
+    public void run() { 
+        System.out.println("MyThread.run()"); 
+    } 
+} 
+```
+
+**实现 Callable 接口通过 FutureTask 包装器来创建 Thread 线程**
+
+有的时候，我们可能需要让一步执行的线程在执行完成以后，提供一个返回值给到当前的主线程，主线程需要依赖这个值进行后续的逻辑处理，那么这个时候，就需要用到带返回值的线程了，Java 中提供了这样的实现方式。
+
+`Callable` 是一个``函数式接口``，因此可以用作 lambda 表达式或方法引用的赋值对象 。 
+
+<img src="JUC.assets/image-20200905201213273.png" alt="image-20200905201213273" style="zoom:50%;" />
+
+```java
+// 与Runnable对比
+// 创建新类MyThread实现runnable接口 
+class MyThread implements Runnable{ 
+ @Override 
+ public void run() { 
+  
+ } 
+} 
+// 新类MyThread2实现callable接口 
+class MyThread2 implements Callable<Integer>{ 
+ @Override 
+ public Integer call() throws Exception { 
+  return 200; 
+ }  
+}
+FutureTask futureTask = new FutureTask(new MyThread2());
+new Thread(futureTask, "A").start();
+System.out.println(futureTask.get());
+System.out.println("main*******计算完成");
+```
+
+callable接口与runnable接口的区别？ 
+
+（1）是否有返回值 
+
+（2）是否抛异常
+
+（3）落地方法不一样，一个是run，一个是call 
+
+## 2.6 多线程锁
 
 ```java
 class Phone {
@@ -1086,47 +1156,113 @@ protected final boolean tryAcquire(int acquires) {
 
 # 5 BlockingQueueDemo 阻塞队列
 
-阻塞：必须要阻塞/不得不阻塞
+在使用过分布式消息队列，比如 ActiveMQ、 kafka、RabbitMQ 等等，消息队列的是有可以使得程序之间实现解耦，提升程序响应的效率。 如果我们把多线程环境比作是分布式的话，那么线程与线程之间是不是也可以使用这种消息队列的方式进行数据通 信和解耦呢？
+
+## 5.1 阻塞队列的使用案例
+
+**注册成功后增加积分**
+
+假如我们模拟一个场景，就是用户注册的时候，在注册成功以后发放积分。这个场景在一般来说，我们会这么去实现。
+
+![image-20201230134059100](JUC.assets/image-20201230134059100.png)
+
+```java
+public boolean register(){
+    User user=new User();
+    user.setName("Mic");
+    addUser(user);
+    sendPoints(user);
+    return true;
+}
+```
+
+优化之后：
+
+```java
+private final ExecutorService single = Executors.newSingleThreadExecutor();
+private volatile boolean isRunning = true;
+ArrayBlockingQueue arrayBlockingQueue=new ArrayBlockingQueue(10);
+{
+    init();
+}
+public void init(){
+    single.execute(()->{
+        while(isRunning){
+            try {
+                User user = (User) arrayBlockingQueue.take();//阻塞的方式获取队列中的数据
+                sendPoints(user);
+            } catch (InterruptedException e)
+            {
+                e.printStackTrace();
+            }
+        }
+    });
+}
+public boolean register(){
+    User user=new User();
+    user.setName("Mic");
+    addUser(user);
+    arrayBlockingQueue.add(user);//添加到异步队列
+    return true;
+}
+public static void main(String[] args) {
+    new QueueUserService().register();
+}
+private void addUser(User user){
+    System.out.println("添加用户："+user);
+    try {
+        Thread.sleep(1000);
+    } catch (InterruptedException e) {
+        e.printStackTrace();
+    }
+}
+private void sendPoints(User user){
+    System.out.println("发送积分给指定用户:"+user);
+    try {
+        Thread.sleep(1000);
+    } catch (InterruptedException e) {
+        e.printStackTrace();
+    }
+}
+```
+
+![image-20201230134932380](JUC.assets/image-20201230134932380.png)
+
+在这个案例中，我们使用了 ArrayBlockingQueue 基于数组的阻塞队列，来优化代码的执行逻辑。 
+
+## 5.2 阻塞队列的应用场景
+
+阻塞队列这块的应用场景，比较多的仍然是对于生产者消费者场景的应用，但是由于分布式架构的普及，大家更多的关注在分布式消息队列上。所以其实如果把阻塞队列比作成分布式消息队列的话，那么所谓的生产者和消费者其实就是基于阻塞队列的解耦。 另外，阻塞队列是一个 fifo 的队列，所以对于希望在线程级别需要实现对目标服务的顺序访问的场景中，也可以使用。
+
+## 5.3 J.U.C 中的阻塞队列
+
+### 5.3.1 J.U.C 提供的阻塞队列
 
 阻塞队列是一个队列，在数据结构中起的作用如下图：
 
-￼￼￼￼![image-20200905202846062](JUC.assets/image-20200905202846062.png)
+<img src="JUC.assets/image-20200905202846062.png" alt="image-20200905202846062" style="zoom: 67%;" />
 
-当队列是空的，从队列中 获取 元素的操作将会被阻塞 
-
-当队列是满的，从队列中 添加 元素的操作将会被阻塞 
-
-试图从空的队列中获取元素的线程将会被阻塞，直到其他线程往空的队列插入新的元素 
+试图从空的队列中获取元素的线程将会被阻塞，直到其他线程往空的队列插入新的元素。
 
 试图向已满的队列中添加新元素的线程将会被阻塞，直到其他线程从队列中移除一个或多个元素或者完全清空，使队列变得空闲起来并后续新增 
 
-## 5.1 阻塞队列的用处
+在多线程领域：所谓阻塞，在某些情况下会挂起线程（即阻塞），一旦条件满足，被挂起的线程又会自动被唤起。
 
-在多线程领域：所谓阻塞，在某些情况下会 挂起 线程（即阻塞），一旦条件满足，被挂起的线程又会自动被唤起 
-
-为什么需要BlockingQueue 
-
-好处是我们不需要关心什么时候需要阻塞线程，什么时候需要唤醒线程，因为这一切BlockingQueue都给你一手包办了。在concurrent包发布以前，在多线程环境下， 我们每个程序员都必须去自己控制这些细节，尤其还要兼顾效率和线程安全 ，而这会给我们的程序带来不小的复杂度。 
-
-## 5.2 架构和种类
+在 Java8 中，提供了 7 个阻塞队列：
 
 ![image-20200905203427194](JUC.assets/image-20200905203427194.png)
 
-ArrayBlockingQueue：由数组结构组成的有界阻塞队列。
+| 队列名称              | 介绍                                                         |
+| --------------------- | ------------------------------------------------------------ |
+| ArrayBlockingQueue    | 数组实现的有界阻塞队列, 此队列按照先进先出（FIFO）的原则 对元素进行排序 |
+| LinkedBlockingQueue   | 链表实现的有界阻塞队列, 此队列的默认和最大长度为 Integer.MAX_VALUE。此队列按照先进先出的原则对元素进行排序 |
+| PriorityBlockingQueue | 支持优先级排序的无界阻塞队列, 默认情况下元素采取自然顺序升序排列。也可以自定义类实现 compareTo()方法来指定元素排序规则，或者初始化 PriorityBlockingQueue 时，指定构造参数 Comparator 来对元素进行排序 |
+| DelayQueue            | 优先级队列实现的无界阻塞队列                                 |
+| SynchronousQueue      | 不存储元素的阻塞队列, 每一个 put 操作必须等待一个 take 操 作，否则不能继续添加元素 |
+| LinkedTransferQueue   | 链表组成的无界阻塞队列                                       |
+| LinkedBlockingDeque   | 链表组成的双向阻塞队列                                       |
 
-LinkedBlockingQueue：由链表结构组成的有界（但大小默认值为integer.MAX_VALUE）阻塞队列。
-
-PriorityBlockingQueue：支持优先级排序的无界阻塞队列。
-
-DelayQueue：使用优先级队列实现的延迟无界阻塞队列。
-
-SynchronousQueue：不存储元素的阻塞队列，也即单个元素的队列。
-
-LinkedTransferQueue：由链表组成的无界阻塞队列。
-
-LinkedBlockingDeque：由链表组成的双向阻塞队列。
-
-## 5.3 BlockingQueue核心方法
+### 5.3.2 阻塞队列的操作方法
 
 ![image-20200906093512436](JUC.assets/image-20200906093512436.png)
 
@@ -1198,6 +1334,291 @@ public class BlockingQueueDemo {
     }
 }
 ```
+
+## 5.4 ArrayBlockingQueue 原理分析
+
+**构造方法**
+
+ArrayBlockingQueue 提供了三个构造方法，分别如下。 
+
+capacity： 表示数组的长度，也就是队列的长度 
+
+fair：表示是否为公平的阻塞队列，默认情况下构造的是非公平的阻塞队列。 
+
+```java
+public ArrayBlockingQueue(int capacity) {
+    this(capacity, false);
+}
+
+public ArrayBlockingQueue(int capacity, boolean fair) {
+    if (capacity <= 0)
+        throw new IllegalArgumentException();
+    this.items = new Object[capacity];
+    //重入锁，出队和入队持有这一把锁
+    lock = new ReentrantLock(fair);
+    //初始化非空等待队列
+    notEmpty = lock.newCondition();
+    //初始化非满等待队列
+    notFull =  lock.newCondition();
+}
+```
+
+其中第三个构造方法就不解释了，它提供了接收一个几个作为数据初始化的方法。
+
+**Add 方法**
+
+以 add 方法作为入口，在 add 方法中会调用父类的 add 方法，也就是 AbstractQueue。如果看源码看得比较多的话， 一般这种写法都是调用父类的模版方法来解决通用性问题。
+
+```java
+public boolean add(E e) {
+    return super.add(e);
+}
+// 从父类的 add 方法可以看到，这里做了一个队列是否满了的判断，如果队列满了直接抛出一个异常
+public boolean add(E e) {
+    if (offer(e))
+        return true;
+    else
+        throw new IllegalStateException("Queue full");
+}
+```
+
+**offer 方法**
+
+add 方法最终还是调用 offer 方法来添加数据，返回一个添加成功或者失败的布尔值反馈。
+
+这段代码做了几个事情
+
+1. 判断添加的数据是否为空 
+2. 添加重入锁 
+3. 判断队列长度，如果队列长度等于数组长度，表示满了 直接返回 false 
+4. 否则，直接调用 enqueue 将元素添加到队列中
+
+```java
+public boolean offer(E e) {
+    checkNotNull(e);
+    final ReentrantLock lock = this.lock;
+    lock.lock();
+    try {
+        if (count == items.length)
+            return false;
+        else {
+            enqueue(e);
+            return true;
+        }
+    } finally {
+        lock.unlock();
+    }
+}
+```
+
+**enqueue**
+
+这个是最核心的逻辑，方法内部通过 putIndex 索引直接将 元素添加到数组 items。
+
+```java
+private void enqueue(E x) {
+    // assert lock.getHoldCount() == 1;
+    // assert items[putIndex] == null;
+    final Object[] items = this.items;
+    //通过 putIndex 对数据赋值
+    items[putIndex] = x;
+    // 当 putIndex 等于数组长度时，将 putIndex 重置为 0
+    if (++putIndex == items.length)
+        putIndex = 0;
+    //记录队列元素的个数
+    count++;
+    //唤醒处于等待状态下的线程，表示当前队列中的元素不为空,如果存在消费者线程阻塞，就可以开始取出元素
+    notEmpty.signal();
+}
+```
+
+**putIndex 为什么会在等于数组长度的时候重新设置为 0？**
+
+因为 ArrayBlockingQueue 是一个 FIFO 的队列，队列添加元素时，是从队尾获取 putIndex 来存储元素，当 putIndex 等于数组长度时，下次就需要从数组头部开始添加了。
+
+下面这个图模拟了添加到不同长度的元素时，putIndex 的变化，当 putIndex 等于数组长度时，不可能让 putIndex 继续累加，否则会超出数组初始化的容量大小。同时大家还需要思考两个问题
+
+1. 当元素满了以后是无法继续添加的，因为会报错 
+2. 其次，队列中的元素肯定会有一个消费者线程通过 take 或者其他方法来获取数据，而获取数据的同时元素也会从队列中移除
+
+![image-20201230143454269](JUC.assets/image-20201230143454269.png)
+
+**put 方法**
+
+put 方法和 add 方法功能一样，差异是 put 方法如果队列满了，会阻塞。
+
+```java
+public void put(E e) throws InterruptedException {
+    checkNotNull(e);
+    final ReentrantLock lock = this.lock;
+    //这个也是获得锁，但是和 lock 的区别是，这个方法优先允许在等待时由其他线程调用等待线程的 interrupt 方法来中断等待直接返回。而 lock 方法是尝试获得锁成功后才响应中断
+    lock.lockInterruptibly();
+    try {
+        //队列满了的情况下，当前线程将会被 notFull 条件对象挂起加到等待队列中
+        while (count == items.length)
+            notFull.await();
+        enqueue(e);
+    } finally {
+        lock.unlock();
+    }
+}
+```
+
+**take 方法**
+
+take 方法是一种阻塞获取队列中元素的方法。
+
+它的实现原理很简单，有就删除没有就阻塞，注意这个阻塞是可以中断的，如果队列没有数据那么就加入 notEmpty 条件队列等待(有数据就直接取走，方法结束)，如果有新的 put 线程添加了数据，那么 put 操作将会唤醒 take 线程， 执行 take 操作。
+
+```java
+public E take() throws InterruptedException {
+    final ReentrantLock lock = this.lock;
+    lock.lockInterruptibly();
+    try {
+        //如果队列为空的情况下，直接通过 await 方法阻塞
+        while (count == 0)
+            notEmpty.await();
+        return dequeue();
+    } finally {
+        lock.unlock();
+    }
+}
+```
+
+如果队列中添加了元素，那么这个时候，会在 enqueue 中调用 notempty.signal 唤醒 take 线程来获得元素。
+
+**dequeue 方法**
+
+这个是出队列的方法，主要是删除队列头部的元素并发回给客户端 takeIndex，是用来记录拿数据的索引值。
+
+```java
+private E dequeue() {
+    // assert lock.getHoldCount() == 1;
+    // assert items[takeIndex] != null;
+    final Object[] items = this.items;
+    @SuppressWarnings("unchecked")
+    //默认获取 0 位置的元素
+    E x = (E) items[takeIndex];
+    //将该位置的元素设置为空
+    items[takeIndex] = null;
+    //这里的作用也是一样，如果拿到数组的最大值，那么重置为 0，继续从头部位置开始获取数据
+    if (++takeIndex == items.length)
+        takeIndex = 0;
+    //记录元素个数递减
+    count--;
+    //同时更新迭代器中的元素数据
+    if (itrs != null)
+        itrs.elementDequeued();
+    //触发 因为队列满了以后导致的被阻塞的线程
+    notFull.signal();
+    return x;
+}
+```
+
+**itrs.elementDequeued()**
+
+ArrayBlockingQueue 中，实现了迭代器的功能，也就是可以通过迭代器来遍历阻塞队列中的元素。
+
+```java
+public class BlockingQueueTest {
+    public static void main(String[] args) throws InterruptedException {
+        BlockingQueue<String> blockingQueue = new ArrayBlockingQueue<>(10);
+        blockingQueue.add("a");
+        blockingQueue.add("b");
+        blockingQueue.add("c");
+        blockingQueue.add("d");
+        blockingQueue.add("e");
+        blockingQueue.add("f");
+        blockingQueue.take();
+        blockingQueue.remove("c");
+        Iterator<String> iterator = blockingQueue.iterator();
+        while (iterator.hasNext()) {
+            System.out.println(iterator.next());
+        }
+    }
+}
+// b d e f
+```
+
+所以 itrs.elementDequeued() 是用来更新迭代器中的元素数据的 takeIndex 的索引。
+
+**remove 方法**
+
+remove 方法是移除一个指定元素。看看它的实现代码：
+
+```java
+public boolean remove(Object o) {
+    if (o == null) return false;
+    //获取数组元素
+    final Object[] items = this.items;
+    //获得锁
+    final ReentrantLock lock = this.lock;
+    lock.lock();
+    try {
+         //如果队列不为空
+        if (count > 0) {
+            //获取下一个要添加元素时的索引
+            final int putIndex = this.putIndex;
+            //获取当前要被移除的元素的索引
+            int i = takeIndex;
+            do {
+                //从 takeIndex 下标开始，找到要被删除的元素
+                if (o.equals(items[i])) {
+                    //移除指定元素
+                    removeAt(i);
+                    //返回执行结果
+                    return true;
+                }
+                //当前删除索引执行加 1 后判断是否与数组长度相等
+				//若为 true，说明索引已到数组尽头，将 i 设置为 0
+                if (++i == items.length)
+                    i = 0;
+            } while (i != putIndex);//继续查找，直到找到最后一个元素
+        }
+        return false;
+    } finally {
+        lock.unlock();
+    }
+}
+void removeAt(final int removeIndex) {
+    final Object[] items = this.items;
+    if (removeIndex == takeIndex) {
+        items[takeIndex] = null;
+        if (++takeIndex == items.length)
+            takeIndex = 0;
+        count--;
+        if (itrs != null)
+            itrs.elementDequeued();
+    } else {
+        // 调整数据结构
+        final int putIndex = this.putIndex;
+        // 遍历 removeIndex 后的数据，均向前移动一位，并重新给 putIndex 赋值
+        for (int i = removeIndex;;) {
+            int next = i + 1;
+            if (next == items.length)
+                next = 0;
+            if (next != putIndex) {
+                items[i] = items[next];
+                i = next;
+            } else {
+                items[i] = null;
+                this.putIndex = i;
+                break;
+            }
+        }
+        count--;
+        if (itrs != null)
+            itrs.removedAt(removeIndex);
+    }
+    notFull.signal();
+}
+```
+
+**图解分析**
+
+以迭代器示例 BlockingQueueTest 为例
+
+![image-20201230153355567](JUC.assets/image-20201230153355567.png)
 
 # 6 线程池
 
@@ -1386,4 +1807,6 @@ ExecutorService threadPool = new ThreadPoolExecutor(
         Executors.defaultThreadFactory(),
         new ThreadPoolExecutor.AbortPolicy());
 ```
+
+------
 
