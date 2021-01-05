@@ -1,8 +1,8 @@
-1 Java IO 演进之路
+# 1 Java IO 演进之路
 
-1.1 必须明白的几个概念
+## 1.1 必须明白的几个概念
 
-1.1.1 阻塞(Block)和非阻塞(Non-Block)
+### 1.1.1 阻塞(Block)和非阻塞(Non-Block)
 
 阻塞和非阻塞是进程在访问数据的时候，数据是否准备就绪的一种处理方式。
 
@@ -12,7 +12,7 @@
 
 `非阻塞`：当进程访问数据缓冲区的时候，如果数据没有准备好则直接返回，不会等待。如果已经准备好，也直接返回。
 
-1.1.2 同步(Synchronization)和异步(Asynchronous)
+### 1.1.2 同步(Synchronization)和异步(Asynchronous)
 
 同步和异步都是基于应用程序和操作系统处理IO事件所采用的方式。
 
@@ -24,7 +24,7 @@
 
 同步：阻塞到IO事件，阻塞到read或者write。这个时候我们就完全不能去做自己的事情。让读写加入到线程里面，然后阻塞线程来实现，对线程的性能开销比较大。
 
-1.2 BIO 与 NIO 对比
+## 1.2 BIO 与 NIO 对比
 
 | IO模型 | BIO              | NIO                              |
 | ------ | ---------------- | -------------------------------- |
@@ -34,25 +34,19 @@
 
 <img src="深入理解 NIO 原理.assets/20200526211130633.png" alt="img" style="zoom: 67%;" />
 
-1.2.1 面向流与面向缓冲
+### 1.2.1 面向流与面向缓冲
 
 Java NIO 和 BIO 之间第一个最大区别是，BIO是面向流的，NIO 是面向缓冲区的。Java IO 面向流意味着每次从流中读一个或多个字节，直至读取所有字节，它们没有被缓存在任何地方。此外，它不能前后移动流中数据，需要先将它缓存到一个缓冲区。Java NIO的缓冲导向方法略有不同。数据读取到一个它稍后处理的缓冲区，需要时刻在缓冲区中前后移动。这就增加了处理过程中的灵活性。但是，还需要检查是否该缓冲区中包含所有需要处理的数据。而且，需确保当更多的数据读入缓冲区时，不要覆盖缓冲区里尚未处理的数据。
 
-1.2.2 阻塞与非阻塞 IO
+### 1.2.2 阻塞与非阻塞 IO
 
 Java IO的各种流是阻塞的。这意味着，当一个线程调用read()或write()时，该线程被阻塞,直到有一些数据被读取,或数据完全写入。该线程在此期间不能再干任何事情了。Java NIO的`非阻塞模式(默认为阻塞模式，并非所有 Channel 可以设置非阻塞模式)`，使一个线程从某通道发送请求读取数据，但是它仅能得到目前可用的数据，如果目前没有数据可用时，就什么都不会获取。而不是保持线程阻塞，所以直至数据变的可以读取之前，该线程可以继续做其他的事情。非阻塞写也是如此。 一个线程请求写入一些数据到某通道，但不需要等待它完全写入，这个线程同时可以去做别的事情。线程通常将非阻塞IO的空闲时间用于在其它通道上执行IO操作,所以一个单独的线程现在可以管理多个输入和输出通道(channel) 。
 
-> 将 IO 操作比作顾客去咖啡店点咖啡，服务员制作咖啡比作加载资源。
->
-> 阻塞 IO 相当于顾客必须按照顺序取咖啡，如果后面的顾客的咖啡制作完毕，也必须等前面的顾客取完咖啡，后面的顾客才能取
->
-> 非阻塞 IO 相当于谁先制作完毕谁可以先取
-
-1.2.3 选择器(Selector)
+### 1.2.3 选择器(Selector)
 
 Java NIO的选择器允许一个单独的线程来监视多个输入通道，你可以注册多个通道使用一个选择器，然后使用一个单独的线程来“选择”通道:这些通道里已经有可以处理的输入,或者选择已准备写入的通道。这种选择机制，使得一个单独的线程很容易来管理多个通道。
 
-1.2.4 NIO 和 BIO 如何影响应用程序的设计
+### 1.2.4 NIO 和 BIO 如何影响应用程序的设计
 
 
 无论选择 BIO 或 NIO 工具箱，可能会影响程序设计的以下几个方面：
@@ -141,13 +135,13 @@ NIO 可只使用一个（或几个）单线程管理多个通道（网络连接�
 
 在Java1.4之前的I/O系统中，提供的都是面向流的I/O系统,系统一次一个字节地处理数据，一个输入流产生一个字节的数据，一个输出流消费一个字节的数据，面向流的I/O速度非常慢，而在Java 1.4中推出了NIO, 这是一个面向块的I/O系统，系统以块的方式处理处理,每一个操作在一步中产生或者消费一个数据库,按块处理要比按字节处理数据快的多。
 
-2 Netty 与 NIO 之前世今生
+# 2 Netty 与 NIO 之前世今生
 
-2.1 Java NIO 三件套
+## 2.1 Java NIO 三件套
 
 在NIO中有几个核心对象需要掌握:缓冲区(Buffer)、通道(Channel) 、选择器(Selector)。
 
-2.1.1 缓冲区 Buffer
+### 2.1.1 缓冲区 Buffer
 
 #### Buffer 操作基本 API
 
@@ -428,7 +422,7 @@ public class MapperBuffer {
 }
 ```
 
-2.1.2 选择器 Selector
+### 2.1.2 选择器 Selector
 
 传统的Server/Client模式会基于TPR (Thread per Request) , 服务器会为每个客户端请求建立一个线程，由该线程单独负责处理一个客户请求。这种模式带来的一个问题就是线程数量的剧增，大量的线程会增大服务器的开销。大多数的实现为了避免这个问题，都采用了线程池模型，并设置线程池线程的最大数量，这又带来了新的问题，如果线程池中有200个线程，而有200个用户都在进行大文件下载，会导致第201个用户的请求无法及时处理，即便第201个用户只想请求一个几KB大小的页面。传统的Server/Client模式如下图所示： 
 
@@ -533,7 +527,7 @@ public void process(SelectionKey key) throws IOException {
 
 此处分别判断是接受请求、读数据还是写事件，分别作不同的处理。在 Java1.4 之前的 I/O 系统中，提供的都是面向流的 I/O 系统，系统一次一个字节地处理数据，一个输入流产生一个字节的数据，一个输出流消费一个字节的数据，面向流的 I/O 速度非常慢，而在 Java 1.4 中推出了 NIO，这是一个面向块的 I/O 系统，系统以块的方式处理处理，每一个操作在 一步中产生或者消费一个数据库，按块处理要比按字节处理数据快的多。
 
-2.2.3 通道 Channel
+### 2.2.3 通道 Channel
 
 通道是一个对象，通过它可以读取和写入数据，当然了所有数据都通过Buffer对象来处理。永远不会将字节直接写入通道中，相反是将数据写入包含一个或多个字节的缓冲区。同样不会直接从通道中读取字节，而是将数据从通道读入缓冲区，再从缓冲区获取这个字节。
 
@@ -645,7 +639,7 @@ public class FileOutputProgram {
 
 多路复用 IO 技术最适用的是“高并发”场景，所谓高并发是指 1 毫秒内至少同时有上千个连接请求准备好。其他情 况下多路复用 IO 技术发挥不出来它的优势。另一方面，使用 JAVA NIO 进行功能实现，相对于传统的 Socket 套接字实现要复杂一些，所以实际应用中，需要根据自己的业务需求进行技术选择。     
 
-2.2 NIO 源码初探
+## 2.2 NIO 源码初探
 
 说到源码先得从 Selector 的 open 方法开始看起 `java.nio.channels.Selector`：
 
@@ -677,7 +671,7 @@ public static SelectorProvider provider() {
 }
 ```
 
-其中 provider = sun.nio.ch.DefaultSelectorProvider.create();会根据操作系统来返回不同的实现类，windows 平台就返回 WindowsSelectorProvider；
+其中 `provider = sun.nio.ch.DefaultSelectorProvider.create();` 会根据操作系统来返回不同的实现类，windows 平台就返回 `WindowsSelectorProvider`；
 
 而 if (provider != null) return provider; 保证了整个 server 程序中只有一个 WindowsSelectorProvider 对象； 
 
@@ -689,27 +683,27 @@ public AbstractSelector openSelector() throws IOException {
 }
 ```
 
-new WindowsSelectorImpl(SelectorProvider)代码：
+new WindowsSelectorImpl(SelectorProvider) 代码：
 
 ```java
 WindowsSelectorImpl(SelectorProvider sp) throws IOException {
-	super(sp);
-	pollWrapper = new PollArrayWrapper(INIT_CAP);
-	wakeupPipe = Pipe.open();
-	wakeupSourceFd = ((SelChImpl)wakeupPipe.source()).getFDVal();
-	// Disable the Nagle algorithm so that the wakeup is more immediate
-	SinkChannelImpl sink = (SinkChannelImpl)wakeupPipe.sink();
-	(sink.sc).socket().setTcpNoDelay(true);
-	wakeupSinkFd = ((SelChImpl)sink).getFDVal();
-	pollWrapper.addWakeupSocket(wakeupSourceFd, 0);
+    super(sp);
+    pollWrapper = new PollArrayWrapper(INIT_CAP);
+    wakeupPipe = Pipe.open();
+    wakeupSourceFd = ((SelChImpl)wakeupPipe.source()).getFDVal();
+    // Disable the Nagle algorithm so that the wakeup is more immediate
+    SinkChannelImpl sink = (SinkChannelImpl)wakeupPipe.sink();
+    (sink.sc).socket().setTcpNoDelay(true);
+    wakeupSinkFd = ((SelChImpl)sink).getFDVal();
+    pollWrapper.addWakeupSocket(wakeupSourceFd, 0);
 }
 ```
 
 其中 Pipe.open()是关键，这个方法的调用过程是： 
 
 ```java
-public static Pipe open() throws IOException { 
-    return SelectorProvider.provider().openPipe(); 
+public static Pipe open() throws IOException {
+    return SelectorProvider.provider().openPipe();
 }
 ```
 
@@ -725,15 +719,15 @@ public Pipe openPipe() throws IOException {
 
 ```java
 PipeImpl(SelectorProvider sp) {
-	long pipeFds = IOUtil.makePipe(true);
-	int readFd = (int) (pipeFds >>> 32);
-	int writeFd = (int) pipeFds;
-	FileDescriptor sourcefd = new FileDescriptor();
-	IOUtil.setfdVal(sourcefd, readFd);
-	source = new SourceChannelImpl(sp, sourcefd);
-	FileDescriptor sinkfd = new FileDescriptor();
-	IOUtil.setfdVal(sinkfd, writeFd);
-	sink = new SinkChannelImpl(sp, sinkfd);
+    long pipeFds = IOUtil.makePipe(true);
+    int readFd = (int) (pipeFds >>> 32);
+    int writeFd = (int) pipeFds;
+    FileDescriptor sourcefd = new FileDescriptor();
+    IOUtil.setfdVal(sourcefd, readFd);
+    source = new SourceChannelImpl(sp, sourcefd);
+    FileDescriptor sinkfd = new FileDescriptor();
+    IOUtil.setfdVal(sinkfd, writeFd);
+    sink = new SinkChannelImpl(sp, sinkfd);
 }
 ```
 
@@ -783,7 +777,7 @@ public ServerSocketChannelImpl(SelectorProvider sp) throws IOException {
 }
 ```
 
-然后通过 `serverChannel1.register(selector, SelectionKey.OP_ACCEPT);` 把 selector 和 channel 绑定在一起，也就是把 new ServerSocketChannel 时创建的 FD 与 selector 绑定在了一起。 
+然后通过 `server.register(selector, SelectionKey.OP_ACCEPT);` 把 selector 和 channel 绑定在一起，也就是把 new ServerSocketChannel 时创建的 FD 与 selector 绑定在了一起。 
 
 到此，server 端已启动完成了，主要创建了以下对象： 
 
@@ -886,9 +880,9 @@ private native void setWakeupSocket0(int wakeupSinkFd);
 	}
 ```
 
-可见 wakeup()是通过 pipe 的 write 端 send(scoutFd, &byte, 1, 0)，发生一个字节 1，来唤醒 poll()。所以在需要的时候就 可以调用 selector.wakeup()来唤醒 selector。
+可见 wakeup()是通过 pipe 的 write 端 send(scoutFd, &byte, 1, 0)，发送一个字节 1，来唤醒 poll()。所以在需要的时候就可以调用 selector.wakeup()来唤醒 selector。
 
-2.3 反应堆 Reactor
+## 2.3 反应堆 Reactor
 
 现在对阻塞 I/O 已有了一定了解，我们知道阻塞 I/O 在调用InputStream. read()方法时是阻塞的，它会一直等到数据到来时(或超时)才会返回;同样，在调用ServerSocket. accept()方法时，也会一直阻塞到有客户端连接才会返回，每个客户端连接过来后,服务端都会启动一个线程去处理该客户端的请求。阻塞 I/O 的通信模型示意图如下： 
 
@@ -899,7 +893,7 @@ private native void setWakeupSocket0(int wakeupSinkFd);
 1. 当客户端多时，会创建大量的处理线程。且每个线程都要占用栈空间和一些CPU时间 
 2. 阻塞可能带来频繁的上下文切换，且大部分上下文切换可能是无意义的。这种情况下非阻塞式 I/O 就有了应用前景。
 
-Java NIO是在jdk1.4开始使用的，它既可以说成“新 I/O ”，也可以说成非阻塞式 I/O。 下面是Java NIO 的工作原理：
+Java NIO是在jdk1.4开始使用的(JAVA NIO就是采用多路复用IO模式)，它既可以说成“新 I/O ”，也可以说成非阻塞式 I/O。 下面是Java NIO 的工作原理：
 
 
 1. 由一个专门的线程来处理所有的IO事件，并负责分发。 
@@ -912,12 +906,36 @@ Java NIO是在jdk1.4开始使用的，它既可以说成“新 I/O ”，也可�
 
 （注：每个线程的处理流程大概都是读取数据、解码、计算处理、编码、发送响应。）
 
-2.4 Netty 与 NIO 
+## 2.4 Netty 与 NIO 
 
-2.6.1 Netty 支持的功能与特性
+### 2.4.1 Netty 支持的功能与特性
 
-按照定义来说，Netty 是一个异步、事件驱动的用来做高性能、高可靠性的网络应用框架。主要的优点有： 1. 框架设计优雅，底层模型随意切换适应不同的网络协议要求。 2. 提供很多标准的协议、安全、编码解码的支持。 3. 解决了很多 NIO 不易用的问题。 4. 社区更为活跃，在很多开源框架中使用，如 Dubbo、RocketMQ、Spark 等。 上图体现的主要是 Netty 支持的功能或者特性： 1.底层核心有：Zero-Copy-Capable Buffer，非常易用的灵拷贝 Buffer（这个内容很有意思，稍后专门来说）；统一的 API；标准可扩展的时间模型 2.传输方面的支持有：管道通信（具体不知道干啥的，还请老司机指教）；Http 隧道；TCP 与 UDP 3.协议方面的支持有：基于原始文本和二进制的协议；解压缩；大文件传输；流媒体传输；protobuf 编解码；安全认 证；http 和 websocket
+按照定义来说，Netty 是一个异步、事件驱动的用来做高性能、高可靠性的网络应用框架。主要的优点有： 
 
-2.6.2 Netty 采用 NIO 而非 AIO 的理由 
+1. 框架设计优雅，底层模型随意切换适应不同的网络协议要求。 
+2. 提供很多标准的协议、安全、编码解码的支持。 
+3. 解决了很多 NIO 不易用的问题。 
+4. 社区更为活跃，在很多开源框架中使用，如 Dubbo、RocketMQ、Spark 等。 
 
-1.Netty 不看重 Windows 上的使用，在 Linux 系统上，AIO 的底层实现仍使用 EPOLL，没有很好实现 AIO，因此在性 能上没有明显的优势，而且被 JDK 封装了一层不容易深度优化 2.Netty 整体架构是 reactor 模型, 而 AIO 是 proactor 模型, 混合在一起会非常混乱,把 AIO 也改造成 reactor 模型看起 来是把 epoll 绕个弯又绕回来 3.AIO还有个缺点是接收数据需要预先分配缓存, 而不是NIO那种需要接收时才需要分配缓存, 所以对连接数量非常大 但流量小的情况, 内存浪费很多 4.Linux 上 AIO 不够成熟，处理回调结果速度跟不到处理需求，比如外卖员太少，顾客太多，供不应求，造成处理速度 有瓶颈（待验证）
+![image-20210105103520218](深入理解 NIO 原理.assets/image-20210105103520218.png)
+
+上图体现的主要是 Netty 支持的功能或者特性： 
+
+1. 底层核心有：Zero-Copy-Capable Buffer，非常易用的灵拷贝 Buffer（这个内容很有意思，稍后专门来说）；统一的 API；标准可扩展的时间模型 
+
+2. 传输方面的支持有：管道通信（具体不知道干啥的，还请老司机指教）；Http 隧道；TCP 与 UDP 
+
+3. 协议方面的支持有：基于原始文本和二进制的协议；解压缩；大文件传输；流媒体传输；protobuf 编解码；安全认 证；http 和 websocket
+
+### 2.4.2 Netty 采用 NIO 而非 AIO 的理由 
+
+1. Netty 不看重 Windows 上的使用，在 Linux 系统上，AIO 的底层实现仍使用 EPOLL，没有很好实现 AIO，因此在性能上没有明显的优势，而且被 JDK 封装了一层不容易深度优化 
+
+2. Netty 整体架构是 reactor 模型, 而 AIO 是 proactor 模型, 混合在一起会非常混乱,把 AIO 也改造成 reactor 模型看起来是把 epoll 绕个弯又绕回来 
+
+3. AIO还有个缺点是接收数据需要预先分配缓存, 而不是NIO那种需要接收时才需要分配缓存, 所以对连接数量非常大但流量小的情况, 内存浪费很多 
+
+4. Linux 上 AIO 不够成熟，处理回调结果速度跟不到处理需求，比如外卖员太少，顾客太多，供不应求，造成处理速度有瓶颈（待验证）
+
+------
+
