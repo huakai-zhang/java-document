@@ -1,12 +1,12 @@
-1 背景介绍
+# 1 背景介绍
 
-1.1 Netty 惊人的性能数据
+## 1.1 Netty 惊人的性能数据
 
 Netty是一个高性能、异步事件驱动的 NIO 框架，它提供了对 TCP、UDP 和文件传输的支持，`作为一个异步 NIO框架，Netty 的所有 IO 操作都是异步非阻塞的`，通过Future-Listener机制，用户可以方便的主动获取或者通过通知机制获得IO操作结果。 作为当前最流行的NIO框架，Netty 在互联网领域、大数据分布式计算领域、游戏行业、通信行业等获得了广泛的应用，一些业界著名的开源组件也基于Netty的NIO框架构建。
 
 通过使用 Netty（NIO 框架）相比于传统基于 Java 序列化+BIO（同步阻塞 IO）的通信框架，性能提升了 8 倍多。事实上，通过选择合适的 NIO 框架，精心的设计 Reactor 线程模型，达到上述性能指标是完全有可能的。
 
-1.2 传统 RPC 调用性能差的三宗罪
+## 1.2 传统 RPC 调用性能差的三宗罪
 
 **网络传输方式问题**
 
@@ -28,7 +28,7 @@ Java 序列化存在如下几个典型问题：
 
 由于采用同步阻塞IO，这会导致每个TCP连接都占用1个线程，由于线程资源是JVM虚拟机非常宝贵的资源，当IO读写阻塞导致线程无法及时释放时，会导致系统性能急剧下降，严重的甚至会导致虚拟机无法创建新的线程。
 
-1.3 高性能的三个主题
+## 1.3 高性能的三个主题
 
 `传输` 用什么样的通道将数据发送给对方, BIO、NIO或者AIO, IO模型在很大程度上决定了框架的性能。 
 
@@ -36,9 +36,9 @@ Java 序列化存在如下几个典型问题：
 
 `线程` 数据报如何读取？读取之后的编解码在哪个线程进行，编解码后的消息如何派发，Reactor 线程模型的不同，对性能的影响也非常大。
 
-2 Netty 高性能之道
+# 2 Netty 高性能之道
 
-2.1 异步非阻塞通信
+## 2.1 异步非阻塞通信
 
 在IO编程过程中，当需要同时处理多个客户端接入请求时，可以利用多线程或者IO多路复用技术进行处理。IO多路复用技术通过把多个IO的阻塞复用到同一个select的阻塞上，从而使得系统在单线程的情况下可以同时处理多个客户端请求。与传统的多线程/多进程模型比，I/O多路复用的最大优势是系统开销小，系统不需要创建新的额外进程或者线程，也不需要维护这些进程和线程的运行，降低了系统的维护工作量，节省了系统资源。 JDK1.4提供了对非阻塞IO (NIO)的支持，JDK1.5_update10版本使用epoll替代了传统的select/poll，极大的提升了NIO通信的性能。 JDK NIO通信模型如下所示：
 
@@ -54,7 +54,33 @@ Java 序列化存在如下几个典型问题：
 
 Netty的IO线程 NioEventLoop 由于聚合了多路复用器Selector，可以同时并发处理成百上千个客户端Channel，由于读写操作都是非阻塞的，这就可以充分提升IO线程的运行效率，避免由于频繁IO阻塞导致的线程挂起。另外，由于Netty采用了异步通信模式，一个IO线程可以并发处理N个客户端连接和读写操作，这从根本上解决了传统同步阻塞IO一连接一线程模型，架构的性能、弹性伸缩能力和可靠性都得到了极大的提升。
 
-2.2 零拷贝
+## 2.2 零拷贝
+
+零拷贝是指避免在用户态(User-space) 与内核态(Kernel-space) 之间来回拷贝数据的技术。
+
+### 传统 IO
+
+传统IO读取数据并通过网络发送的流程，如下图：
+
+![image-20210105165756313](高性能框架 Netty.assets/image-20210105165756313.png)
+
+1. read()调用导致上下文从用户态切换到内核态。内核通过sys_read()（或等价的方法）从文件读取数据。DMA引擎执行第一次拷贝：从文件读取数据并存储到内核空间的缓冲区。
+2. 请求的数据从内核的读缓冲区拷贝到用户缓冲区，然后read()方法返回。read()方法返回导致上下文从内核态切换到用户态。现在待读取的数据已经存储在用户空间内的缓冲区。至此，完成了一次IO的读取过程。
+3. send()调用导致上下文从用户态切换到内核态。第三次拷贝数据从用户空间重新拷贝到内核空间缓冲区。但是，这一次，数据被写入一个不同的缓冲区，一个与目标套接字相关联的缓冲区。
+4. send()系统调用返回导致第四次上下文切换。当DMA引擎将数据从内核缓冲区传输到协议引擎缓冲区时，第四次拷贝是独立且异步的。
+
+### NIO 的零拷贝
+
+NIO 的零拷贝由 transferTo 方法实现。transferTo方法将数据从FileChannel对象传送到可写的字节通道（如Socket Channel等）。在transferTo方法内部实现中，由native方法transferTo0来实现，它依赖底层操作系统的支持。在UNIX和Linux系统中，调用这个方法会引起sendfile()系统调用，实现了数据直接从内核的读缓冲区传输到套接字缓冲区，避免了用户态(User-space) 与内核态(Kernel-space) 之间的数据拷贝。
+
+![image-20210105170013912](高性能框架 Netty.assets/image-20210105170013912.png)
+
+使用NIO零拷贝，流程简化为两步：
+
+1. transferTo方法调用触发DMA引擎将文件上下文信息拷贝到内核读缓冲区，接着内核将数据从内核缓冲区拷贝到与套接字相关联的缓冲区。
+2. DMA引擎将数据从内核套接字缓冲区传输到协议引擎（第三次数据拷贝）。
+
+### Netty 的零拷贝
 
 Netty的零拷贝主要体现在如下三个方面：
 
@@ -91,24 +117,7 @@ public final void read() {
             pipeline.fireChannelRead(byteBuf);
             byteBuf = null;
         } while (allocHandle.continueReading());
-        allocHandle.readComplete();
-        pipeline.fireChannelReadComplete();
-        if (close) {
-            closeOnRead(pipeline);
-        }
-    } catch (Throwable t) {
-        handleReadException(pipeline, byteBuf, t, close, allocHandle);
-    } finally {
-        // Check if there is a readPending which was not processed yet.
-        // This could be for two reasons:
-        // * The user called Channel.read() or ChannelHandlerContext.read() in channelRead(...) method
-        // * The user called Channel.read() or ChannelHandlerContext.read() in channelReadComplete(...) method
-        //
-        // See https://github.com/netty/netty/issues/2254
-        if (!readPending && !config.isAutoRead()) {
-            removeReadOp();
-        }
-    }
+        ...
 }
 ```
 
@@ -126,7 +135,35 @@ public ByteBuf allocate(ByteBufAllocator alloc) {
 public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {...}
 ```
 
-当进行 Socket IO 读写的时候，为了避免从堆内存拷贝一份副本到直接内存，Netty 的 ByteBuf 分配器直接创建非堆内存避免缓冲区的二次拷贝，通过“零拷贝”来提升读写性能。
+最后通过判断来决定返回直接内存，还是堆内存的 ByteBuf 对象：
+
+```java
+// AbstractByteBufAllocator
+public ByteBuf ioBuffer(int initialCapacity) {
+    if (PlatformDependent.hasUnsafe()) {
+        return directBuffer(initialCapacity);
+    }
+    return heapBuffer(initialCapacity);
+}
+```
+
+当进行 Socket IO 读写的时候，为了避免从堆内存拷贝一份副本到直接内存，`Netty 的 ByteBuf 分配器直接创建非堆内存`避免缓冲区的二次拷贝，通过“零拷贝”来提升读写性能。
+
+> **使用直接内存的原因**
+>
+> 1. 对垃圾回收停顿的改善。因为 full gc 时，垃圾收集器会对所有分配的堆内内存进行扫描，垃圾收集对 Java 应用造成的影响，跟堆的大小是成正比的。过大的堆会影响Java应用的性能。如果使用堆外内存的话，堆外内存是直接受操作系统管理。这样做的结果就是能保持一个较小的JVM堆内存，以减少垃圾收集对应用的影响。（full gc时会触发堆外空闲内存的回收。）
+> 2. 减少了数据从JVM拷贝到native堆的次数，在某些场景下可以提升程序I/O的性能。
+> 3. 可以突破JVM内存限制，操作更多的物理内存。
+>
+> 当直接内存不足时会触发 full gc，排查 full gc 的时候，一定要考虑。
+>
+> **使用直接内存的问题**
+>
+> 1. 堆外内存难以控制，如果内存泄漏，那么很难排查（VisualVM可以通过安装插件来监控堆外内存）。
+> 2. 堆外内存只能通过序列化和反序列化来存储，保存对象速度比堆内存慢，不适合存储很复杂的对象。一般简单的对象或者扁平化的比较适合。
+> 3. 直接内存的访问速度（读写方面）会快于堆内存。在申请内存空间时，堆内存速度高于直接内存。
+>
+> 直接内存适合申请次数少，访问频繁的场合。如果内存空间需要频繁申请，则不适合直接内存。
 
 下面我们继续看``第二种“零拷贝”的实现 CompositeByteBuf``，它对外将多个 ByteBuf 封装成一个 ByteBuf，对外提供统一封装后的 ByteBuf 接口，它的类定义如下：
 
@@ -244,7 +281,55 @@ Netty 文件传输 DefaultFileRegion 通过 transferTo()方法将文件发送到
 
 对于很多操作系统它直接将文件缓冲区的内容发送到目标 Channel 中，而不需要通过拷贝的方式，这是一种更加高效的传输方式，它实现了文件传输的“`零拷贝`”。
 
-2.3 内存池
+### NIO 的零拷贝代码示例
+
+```java
+public class ZeroCopyDemo {
+
+    /**
+     * filechannel进行文件复制（零拷贝）
+     */
+    public static void fileCopyWithFileChannel(File fromFile, File toFile) {
+        try (// 得到fileInputStream的文件通道
+             FileChannel fileChannelInput = new FileInputStream(fromFile).getChannel();
+             // 得到fileOutputStream的文件通道
+             FileChannel fileChannelOutput = new FileOutputStream(toFile).getChannel()) {
+
+            //将fileChannelInput通道的数据，写入到fileChannelOutput通道
+            fileChannelInput.transferTo(0, fileChannelInput.size(), fileChannelOutput);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    static final int BUFFER_SIZE = 1024;
+    /**
+     * BufferedInputStream进行文件复制（用作对比实验）
+     */
+    public static void bufferedCopy(File fromFile,File toFile) throws IOException {
+        try(BufferedInputStream bis = new BufferedInputStream(new FileInputStream(fromFile));
+            BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(toFile))){
+            byte[] buf = new byte[BUFFER_SIZE];
+            while ((bis.read(buf)) != -1) {
+                bos.write(buf);
+            }
+        }
+    }
+
+    public static void main(String[] args) throws IOException {
+        long startTime = System.currentTimeMillis();
+        //fileCopyWithFileChannel(new File("E:\\CentOS-7-x86_64-DVD-2003.iso"), new File("D:\\CentOS-7-x86_64-DVD-2003.iso")); // 4.6G文件
+        // 8333
+        bufferedCopy(new File("E:\\CentOS-7-x86_64-DVD-2003.iso"), new File("D:\\CentOS-7-x86_64-DVD-2003.iso"));
+        // 22677
+        System.out.println(System.currentTimeMillis() - startTime);
+    }
+}
+```
+
+在不需要进行数据文件操作时，可以使用NIO的零拷贝。但如果既需要IO速度，又需要进行数据操作，则需要使用NIO的直接内存映射。
+
+## 2.3 内存池
 
 随着 JVM 虚拟机和 JIT 即时编译技术的发展，对象的分配和回收是个非常轻量级的工作。但是对于缓冲区 Buffer，情况却稍有不同，特别是对于堆外直接内存的分配和回收，是一件耗时的操作。为了尽量重用缓冲区，Netty 提供了基于内存池的缓冲区重用机制。下面我们一起看下 Netty ByteBuf 的实现：
 
@@ -355,7 +440,7 @@ static PooledDirectByteBuf newInstance(int maxCapacity) {
 
 通过 ``RECYCLER`` 的 get 方法循环使用 ByteBuf 对象，如果是非内存池实现，则直接创建一个新的 **ByteBuf** 对象。从缓冲池中获取 ByteBuf 之后，调用 AbstractReferenceCountedByteBuf 的 setRefCnt 方法设置引用计数器，用于对象的引用计数和内存回收（类似 JVM 垃圾回收机制）。
 
-2.4 高效的 Reactor 线程模型
+## 2.4 高效的 Reactor 线程模型
 
 常用的Reactor线程模型有三种，分别如下：
 
@@ -398,7 +483,7 @@ Reactor多线程模型的特点：
 
 利用主从NIO线程模型,可以解决1个服务端监听线程无法有效处理所有客户端连接的性能不足问题。因此，在Netty的官方demo中，推荐使用该线程模型。 事实上，Netty 的线程模型并非固定不变,通过在启动辅助类中创建不同的EventLoopGroup实例并通过适当的参数配置，就可以支持上述三种Reactor线程模型。正是因为Netty对Reactor线程模型的支持提供了灵活的定制能力，所以可以满足不同业务场景的性能诉求。
 
-2.5 无锁化的串行设计理念
+## 2.5 无锁化的串行设计理念
 
 在大多数场景下，并行多线程处理可以提升系统的并发性能。但是，如果对于共享资源的并发访问处理不当，会带来严重的锁竞争，这最终会导致性能的下降。为了尽可能的避免锁竞争带来的性能损耗，可以通过串行化设计，即消息的处理尽可能在同一个线程内完成，期间不进行线程切换，这样就避免了多线程竞争和同步锁。 为了尽可能提升性能，Netty采用了串行无锁化设计，在IO线程内部进行串行操作，避免多线程竞争导致的性能下降。表面上看，串行化设计似乎CPU利用率不高，并发程度不够。但是，通过调整NIO线程池的线程参数，可以同时启动多个串行化的线程并行运行，这种局部无锁化的串行线程设计相比一个队列-多个工作线程模型性能更优。 Netty的串行化设计工作原理图如下：
 
@@ -406,7 +491,7 @@ Reactor多线程模型的特点：
 
 Netty的NioEventLoop读取到消息之后，直接调用ChannelPipeline的fireChannelRead(object msg)，只要用户不主动切换线程，一直会由NioEventLoop调用到用户的Handler,期间不进行线程切换，这种串行化处理方式避免了多线程操作导致的锁的 竞争，从性能角度看是最优的。
 
-2.6 高效的并发编程.
+## 2.6 高效的并发编程.
 
 Netty的高效并发编程主要体现在如下几点：
 
@@ -415,7 +500,7 @@ Netty的高效并发编程主要体现在如下几点：
 3. 线程安全容器的使用; 
 4. 通过读写锁提升并发性能。
 
-2.7 高性能的序列化框架
+## 2.7 高性能的序列化框架
 
 影响序列化性能的关键因素总结如下：
 
@@ -429,7 +514,7 @@ Netty默认提供了对Google Protobuf的支持，通过扩展Netty的编解码�
 
 从上图可以看出，Protobuf 序列化后的码流只有Java序列化的1/4左右。正是由于Java原生序列化性能表现大差，才催生出了各种高性能的开源序列化技术和框架(性能差只是其中的一个原因，还有跨语言、IDL 定义等其它因素)。
 
-2.8 灵活的 TCP 参数配置能力
+## 2.8 灵活的 TCP 参数配置能力
 
 合理设置TCP参数在某些场景下对于性能的提升可以起到显著的效果，例如SO_RCVBUF和SO_SNDBUF。 如果设置不当，对性能的影响是非常大的。下面我们总结下对性能影响比较大的几个配置项：
 
