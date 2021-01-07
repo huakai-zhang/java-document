@@ -162,7 +162,7 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
 
 ![image-20210106133107473](深入分析 Netty 源码(1).assets/image-20210106133107473.png)
 
-1. EventLoopGroup(其实是MultithreadEventExecutorGroup)内部维护一个类型为 EventExecutor 名为 children 的数组，是大小为 nThreads 的SingleThreadEventExecutor，这样就构成了一个线程池。
+1. EventLoopGroup(其实是MultithreadEventExecutorGroup)内部维护一个类型为 EventExecutor 名为 children 的数组，是`大小为 nThreads 的 SingleThreadEventExecutor`，这样就构成了一个线程池。
 
 2. 如果我们在实例化 NioEventLoopGroup 时，如果指定线程池大小，则 nThreads 就是指定的值，反之是处理器核心数* 2。
 
@@ -437,14 +437,24 @@ final ChannelFuture initAndRegister() {
 	...
     channel = channelFactory.newChannel();
     init(channel);
+    // channel 作为 ChannelFuture 的参数
     ChannelFuture regFuture = config().group().register(channel);
     ...
 }
+// MultithreadEventLoopGroup.java
+public EventLoop next() {
+    return (EventLoop) super.next();
+}
+public ChannelFuture register(Channel channel) {
+    return next().register(channel);
+}
+// 最终 next() 调用的是 newChooser 中定义的两个 EventExecutorChooser 的其中一个
+// 实际返回的是 new EventExecutor[nThreads] 数组中的下一个
 ```
 
 当 Channel 初始化后，会紧接着调用 group.register() 方法来注册Channel，其调用链如下: AbstractBootstrap. initAndRegister-&gt;MultithreadEventLoopGroup. register-&gt;SingleThreadEventLoop.register -&gt; AbstractChannel$AbstractUnsafe.register
 
-通过跟踪调用链，最终发现是调用到了unsafe 的 register 方法，那么接下来就仔细看一下`AbstractChannel$AbstractUnsafe. register` 方法中到底做了什么:
+通过跟踪调用链，最终发现是调用到了unsafe 的 register 方法，那么接下来就仔细看一下`AbstractChannel$AbstractUnsafe.register` 方法中到底做了什么:
 
 ```java
 public final void register(EventLoop eventLoop, final ChannelPromise promise) {
@@ -456,7 +466,7 @@ public final void register(EventLoop eventLoop, final ChannelPromise promise) {
 }
 ```
 
-首先，将eventLoop赋值给Channel 的eventLoop 属性，而我们知道这个 eventLoop 对象其实是MultithreadEventLoopGroup.next() 方法获取的，根据我们前面的小节中，我们可以确定next()方法返回的eventLoop 对象是NioEventLoop 实例.register方法接着调用了register0 方法，register0 又调用了 AbstractNioChannel.doRegister：
+首先，`将 eventLoop赋值给 Channel 的eventLoop 属性`，而我们知道这个 eventLoop 对象其实是 MultithreadEventLoopGroup.next() 方法获取的，根据我们前面的小节中，我们可以确定 next() 方法返回的 eventLoop 对象是 NioEventLoop 实例。register方法接着调用了 register0 方法，register0 又调用了 AbstractNioChannel.doRegister：
 
 ```java
 protected void doRegister() throws Exception {
@@ -941,6 +951,7 @@ private void doStartThread() {
                 case SelectStrategy.CONTINUE:
                     continue;
                 case SelectStrategy.SELECT:
+                    // 此方法中调用了 selector.select(timeoutMillis);
                     select(wakenUp.getAndSet(false));
                     if (wakenUp.get()) {
                         selector.wakeup();
@@ -960,32 +971,88 @@ private void doStartThread() {
                 }
             ...
 }
+private void processSelectedKeys() {
+    if (selectedKeys != null) {
+        processSelectedKeysOptimized(selectedKeys.flip());
+    } else {
+        processSelectedKeysPlain(selector.selectedKeys());
+    }
+}
+private void processSelectedKeysPlain(Set<SelectionKey> selectedKeys) {
+    // check if the set is empty and if so just return to not create garbage by
+    // creating a new Iterator every time even if there is nothing to process.
+    // See https://github.com/netty/netty/issues/597
+    if (selectedKeys.isEmpty()) {
+        return;
+    }
+    Iterator<SelectionKey> i = selectedKeys.iterator();
+    for (;;) {
+        final SelectionKey k = i.next();
+        final Object a = k.attachment();
+        i.remove();
+        if (a instanceof AbstractNioChannel) {
+            // 接口类型为 AbstractNioChannel 时调用 processSelectedKey
+            processSelectedKey(k, (AbstractNioChannel ) a);
+        } else 
+        ...
+    }
+}
 ```
 
 终于看到似曾相识的代码。上面代码主要就是用一个死循环，在不断地轮询 SelectionKey.select() 方法，主要用来解决JDK 空轮询 Bug，而 processSelectedKeys() 就是针对不同的轮询事件进行处理。如果客户端有数据写入，最终也会调用AbstractNioMessageChannel 的doReadMessages()方法。那么我们先来看一下是哪里调用的，通过追踪processSelectedKeys()方法，最后会调用到NioEventLoop的processSelectedKey 方法：
 
 ```java
-private static void processSelectedKey(SelectionKey k, NioTask<SelectableChannel> task) {
-    int state = 0;
-    try {
-        task.channelReady(k.channel(), k);
-        state = 1;
-    } catch (Exception e) {
-        k.cancel();
-        invokeChannelUnregistered(task, k, e);
-        state = 2;
-    } finally {
-        switch (state) {
-        case 0:
-            k.cancel();
-            invokeChannelUnregistered(task, k, null);
-            break;
-        case 1:
-            if (!k.isValid()) { // Cancelled by channelReady()
-                invokeChannelUnregistered(task, k, null);
-            }
-            break;
+private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
+    final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe();
+    if (!k.isValid()) {
+        final EventLoop eventLoop;
+        try {
+            eventLoop = ch.eventLoop();
+        } catch (Throwable ignored) {
+            // If the channel implementation throws an exception because there is no event loop, we ignore this
+            // because we are only trying to determine if ch is registered to this event loop and thus has authority
+            // to close ch.
+            return;
         }
+        // Only close ch if ch is still registerd to this EventLoop. ch could have deregistered from the event loop
+        // and thus the SelectionKey could be cancelled as part of the deregistration process, but the channel is
+        // still healthy and should not be closed.
+        // See https://github.com/netty/netty/issues/5125
+        if (eventLoop != this || eventLoop == null) {
+            return;
+        }
+        // close the channel if the key is not valid anymore
+        unsafe.close(unsafe.voidPromise());
+        return;
+    }
+    try {
+        int readyOps = k.readyOps();
+        // We first need to call finishConnect() before try to trigger a read(...) or write(...) as otherwise
+        // the NIO JDK channel implementation may throw a NotYetConnectedException.
+        if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
+            // remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking
+            // See https://github.com/netty/netty/issues/924
+            int ops = k.interestOps();
+            ops &= ~SelectionKey.OP_CONNECT;
+            k.interestOps(ops);
+            unsafe.finishConnect();
+        }
+        // Process OP_WRITE first as we may be able to write some queued buffers and so free memory.
+        if ((readyOps & SelectionKey.OP_WRITE) != 0) {
+            // Call forceFlush which will also take care of clear the OP_WRITE once there is nothing left to write
+            ch.unsafe().forceFlush();
+        }
+        // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
+        // to a spin loop
+        if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
+            unsafe.read();
+            if (!ch.isOpen()) {
+                // Connection already closed - no need to handle write.
+                return;
+            }
+        }
+    } catch (CancelledKeyException ignored) {
+        unsafe.close(unsafe.voidPromise());
     }
 }
 ```
@@ -999,6 +1066,7 @@ private static void processSelectedKey(SelectionKey k, NioTask<SelectableChannel
 
 ```java
 public void read() {
+   ...
    int localRead = doReadMessages(readBuf);
 }
 ```
