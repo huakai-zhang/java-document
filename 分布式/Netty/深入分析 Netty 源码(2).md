@@ -146,6 +146,8 @@ private void doStartThread() {
 
 之前的章节我们分析过，SingleThreadEventExecutor 启动时会调用 doStartThread() 方法，然后调用 executor.execute() 方法，`将当前线程赋值给 thread`。在这个线程中所做的事情主要就是调用 SingleThreadEventExecutor.this.run()方法， 而因为 NioEventLoop 实现了这个方法，因此根据多态性，其实调用的是 NioEventLoop.run()方法。
 
+**newThread**
+
 在 doStartThread() 方法中，调用了我们之前在初始化 NioEventLoopGroup 的时候初始化的 executor 的 execute() ，初始化和 execute() 方法其代码如下:
 
 ```java
@@ -190,6 +192,41 @@ public Thread newThread(Runnable r) {
         // Doesn't matter even if failed to set.
     }
     return t;
+}
+```
+
+**runAllTasks**
+
+在 NioEventLoop.run()方法中，会执行一个名为 runAllTasks 方法，去执行
+
+```java
+protected void run() {
+    for (;;) {
+        try {
+            switch (selectStrategy.calculateStrategy(selectNowSupplier, hasTasks())) {
+                case SelectStrategy.CONTINUE:
+                    continue;
+                case SelectStrategy.SELECT:
+                    select(wakenUp.getAndSet(false));
+                    if (wakenUp.get()) {
+                        selector.wakeup();
+                    }
+                default:
+                    // fallthrough
+            }
+            cancelledKeys = 0;
+            needsToSelectAgain = false;
+            final int ioRatio = this.ioRatio;
+            if (ioRatio == 100) {
+                try {
+                    processSelectedKeys();
+                } finally {
+                    // Ensure we always run tasks.
+                    runAllTasks();
+                }
+            } 
+            ...
+    }
 }
 ```
 
