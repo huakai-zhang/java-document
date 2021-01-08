@@ -1,4 +1,4 @@
-1 客户端 BootStrap
+# 1 客户端 BootStrap
 
 BootStrap 是 Netty 提供的一个便利的工厂类，可以通过它来完成 Netty 的客户端或服务端的 Netty 初始化。 从客户端方面启动 Netty：
 
@@ -20,7 +20,7 @@ ChannelFuture f = b.connect(this.host, this.port).sync();
 f.channel().closeFuture().sync();
 ```
 
-1.1 EventLoop 的初始化
+## 1.1 EventLoop 的初始化
 
 最开始的 Client 用户代码中，我们在一开始就实例化了一个 `NioEventLoopGroup` 对象，因此我们就从它的构造器中追踪一下 EventLoop 的初始化过程。首先来看一下 NioEventLoopGroup 的类继承层次：
 
@@ -178,7 +178,7 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
 
 6. 根据nThreads 的大小，创建不同的Chooser，即如果nThreads 是2 的幂，则使用PowerOfTwoEventExecutorChooser，反之使用GenericEventExecutorChooser。不论使用哪个Chooser，它们的功能都是一样的，即从children 数组中选出一个合适的EventExecutor 实例。
 
-1.2 Channel 简介
+## 1.2 Channel 简介
 
 在Netty 中，Channel 是一个Socket 的抽象，它为用户提供了关于Socket 状态(是否是连接还是断开)以及对Socket的读写等操作。每当Netty 建立了一个连接后, 都创建一个对应的Channel 实例。除了TCP 协议以外，Netty 还支持很多其他的连接协议, 并且每种协议还有NIO(非阻塞IO)和OIO(Old-IO, 即传统的阻塞IO)版本的区别。不同协议不同的阻塞类型的连接都有不同的Channel 类型与之对应下面是一些常用的Channel类型：
 
@@ -195,7 +195,7 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
 
 ![image-20210106134621498](深入分析 Netty 源码(1).assets/image-20210106134621498.png)
 
-1.3 NioSocketChannel 的创建
+## 1.3 NioSocketChannel 的创建
 
 从上面的客户端代码虽然简单, 但是却展示了 Netty 客户端初始化时所需的所有内容：
 
@@ -250,7 +250,7 @@ Channel 的实例化过程其实就是调用ChannelFactory 的newChannel()方法
 
 ![image-20210106140921622](深入分析 Netty 源码(1).assets/image-20210106140921622.png)
 
-1.4 客户端Channel 的初始化
+## 1.4 客户端Channel 的初始化
 
 前面我们已经知道了如何设置一个Channel 的类型，并且了解到Channel 是通过ChannelFactory 的newChannel()方法来实例化的, 那么ChannelFactory 的newChannel()方法在哪里调用呢?继续跟踪, 我们发现其调用链如下:
 
@@ -348,7 +348,7 @@ protected AbstractChannel(Channel parent) {
 
    SocketChannelConfig config = newNioSocketChannelConfig(this,socket. socket())
 
-1.5 unsafe 字段的初始化
+## 1.5 unsafe 字段的初始化
 
 在实例化 NioSocketChannel 的过程中，会在父类AbstractChannel 的构造器中，调用newUnsafe()来获取一个unsafe 实例. 其实unsafe封装了对Java底层Socket 的操作，因此实际上是沟通Netty 上层和Java底层的重要的桥梁. 那么看一下Unsafe接口所提供的方法:
 
@@ -382,7 +382,7 @@ protected AbstractNioUnsafe newUnsafe() {
 
 NioSocketChannel.newUnsafe 方法会返回一个 `NioSocketChannelUnsafe` 实例，可以确定在实例化的 NioSocketChannel 中的 unsafe 字段，其实是一个 NioSocketChannelUnsafe 的实例。
 
-1.6 关于 pipeline 的初始化
+## 1.6 关于 pipeline 的初始化
 
 上面我们分析了NioSocketChannel 的大体初始化过程，但是我们漏掉了一个关键的部分，即 ChannelPipeline 的初始化。
 
@@ -428,7 +428,7 @@ TailContext(DefaultChannelPipeline pipeline) {
 
 关于这一点，要特别注意，因为在分析到Netty Pipeline 时，会反复用到inbound 和outbound 这两个属性。
 
-1.7 Channel 注册到 Selector
+## 1.7 Channel 注册到 Selector
 
 在前面的分析中，我们提到 Channel 会在 Bootstrap 的 initAndRegister() 中进行初始化，但是这个方法还会将初始化好的 Channe 注册到NioEventLoop 的selector 中。接下来我们来分析一下Channel 注册的过程。再回顾一下AbstractBootstrap 的initAndRegister()方法：
 
@@ -489,7 +489,7 @@ protected void doRegister() throws Exception {
 
 总的来说，Channel 注册过程所做的工作就是将Channel与对应的EventLoop 关联，因此这也体现了，在Netty中，每个Channel 都会关联一个特定的EventLoop， 并且这个Channel中的所有IO操作都是在这个EventLoop 中执行的;当关联好Channel 和EventLoop 后，会继续调用底层的 Java NIO SocketChannel 的 register 方法，将底层的 Java NIO SocketChannel 注册到指定的 selector 中，通过这两步，就完成了 Netty Channel 的注册过程。
 
-1.8 Handler 的添加过程
+## 1.8 Handler 的添加过程
 
 Netty的一个强大和灵活之处就是基于Pipeline的自定义handler 机制。基于此，我们可以像添加插件一样自由组合各种各样的handler 来完成业务逻辑。例如我们需要处理HTTP数据，那么就可以在pipeline 前添加一个Http的编解码的Handler， 然后接着添加我们自己的业务逻辑的handler， 这样网络上的数据流就向通过一个管道一样，从不同的handler 中流过并进行编解码，最终在到达我们自定义的handler 中。
 
@@ -593,7 +593,7 @@ ChannelInitializer是一个抽象类，它有一个抽象的方法initChannel, �
 
 分析到这里，我们已经简单了解了自定义的 handler 是如何添加到 ChannelPipeline 中的，后续我们再进行深入的探讨。
 
-1.9 客户端连接分析
+## 1.9 客户端连接分析
 
 首先，客户端会通过调用 Bootstrap 的 connect 方法进行连接。在 connect 中，会进行一些参数检查后，最终调用的是 doConnect 方法，其实现如下：
 
@@ -720,7 +720,7 @@ protected boolean doConnect(SocketAddress remoteAddress, SocketAddress localAddr
 
 ![image-20210106133107473](深入分析 Netty 源码(1).assets/NIO.png)
 
-2 服务端 ServerBootstrap
+# 2 服务端 ServerBootstrap
 
 在分析客户端的代码时，我们已经对Bootstrap 启动Netty 有了一个大致的认识，那么接下来分析服务器端时，就会相对简单一些了。首先还是来看一下服务器端的启动代码：
 
@@ -793,7 +793,7 @@ public class ChatServer {
 2. ChannelType: 指定Channel 的类型.因为是服务器端，因此使用了NioServerSocketChannel. 
 3. Handler:设置数据的处理器.
 
-2.1 bossGroup 与 workerGroup
+## 2.1 bossGroup 与 workerGroup
 
 在客户端的时候，我们初始化了一个EventLoopGroup 对象，而在服务端的初始化时，我们设置了两个EventLoopGroup，一个是bossGroup，另一个是workerGroup。那么这两个EventLoopGroup 都是干什么用的呢? 接下来我们详细探究一下。其实，bossGroup 只用于服务端的 accept，也就是用于处理客户端新连接接入请求。我们可以把 Netty 比作一个餐馆，bossGroup 就像一个大堂经理，当客户来到餐馆吃时，大堂经理就会引导顾客就坐，为顾客端茶送水等。而 workerGroup 就是实际上干活的厨师，它们负责客户端连接通道的IO 操作：当大堂经历接待顾客后，顾客可以稍做休息, 而此时后厨里的厨师们(workerGroup)就开始忙碌地准备饭菜了。关于bossGroup 与workerGroup 的关系，我们可以用如下图来展示：
 
@@ -859,17 +859,26 @@ void init(Channel channel) throws Exception {
     final Entry<ChannelOption<?>, Object>[] currentChildOptions;
     final Entry<AttributeKey<?>, Object>[] currentChildAttrs;
     ...
+    // 在服务端channel注册selector时，执行 p.addLast(ChannelInitializer) 方法体，将服务端自身handler和ServerBootstrapAcceptor 加入到 pipeline
     p.addLast(new ChannelInitializer<Channel>() {
         @Override
         public void initChannel(Channel ch) throws Exception {
             final ChannelPipeline pipeline = ch.pipeline();
             ChannelHandler handler = config.handler();
             if (handler != null) {
+                //ServerBootstrap.handler方法添加的handler是添加到服务端Channel的pipeline上，是在服务端初始化的时候就添加的，而ServerBootstrap.childHandler方法添加的handler是添加到客户端Channel的pipeline上，是在处理新连接接入的时候添加的
+              	// 添加服务端的 handler，一般很少使用
                 pipeline.addLast(handler);
             }
             ch.eventLoop().execute(new Runnable() {
                 @Override
                 public void run() {
+                  // 异步的添加一个新连接接入器——ServerBootstrapAcceptor，具体的，是把添加ServerBootstrapAcceptor到pipeline的操作封装为了一个task，委托给服务端的NIO线程异步执行
+                  //我们通过EventLoop添加这个处理程序，因为用户可能使用了ChannelInitializer作为处理程序。在这种情况下，initChannel（…）方法将仅在该方法返回后调用。因此，我们需要确保以延迟的方式添加处理程序，以便所有用户处理程序都放在ServerBootstrapAcceptor前面。
+                    // We add this handler via the EventLoop as the user may have used a ChannelInitializer as handler.
+// In this case the initChannel(...) method will only be called after this method returns. Because
+// of this we need to ensure we add our handler in a delayed fashion so all the users handler are
+// placed in front of the ServerBootstrapAcceptor.
                     pipeline.addLast(new ServerBootstrapAcceptor(
                             currentChildGroup, currentChildHandler, currentChildOptions, currentChildAttrs));
                 }
@@ -882,6 +891,7 @@ void init(Channel channel) throws Exception {
 init方法在 ServerBootstrap 中重写了，从上面的代码片段中我们看到，它为pipeline 中添加了一个ChannelInitializer，而这个 ChannelInitializer 中添加了一个关键的 ServerBootstrapAcceptor handler。关于handler 的添加与初始化的过程，我们留待下一小节中分析，我们现在关注一下ServerBootstrapAcceptor类。 ServerBootstrapAcceptor 中重写了 channelRead 方法，主要代码如下:
 
 ```java
+// 服务端 NioEventLoop.run 的自旋中调用，下面分析
 public void channelRead(ChannelHandlerContext ctx, Object msg) {
 	final Channel child = (Channel) msg;
     child.pipeline().addLast(childHandler);
@@ -903,7 +913,7 @@ protected int doReadMessages(List<Object> buf) throws Exception {
 
 在 doReadMessages 中，通过 javaChannel().accept() 获取到客户端新连接的 SocketChannel，接着就实例化一个 NioSocketChannel，并传入 NioServerSocketChannel 对象（即 this），由此可知，创建的这个 NioSocketChannel 的父Channel 就是 NioServerSocketChannel 实例。 接下来就经由 Netty 的 ChannelPipeline机制，将读取事件逐级发送到各个handler中，于是就会触发前面提到的 ServerBootstrapAcceptor.channelRead 方法。
 
-2.2 服务端 Selector 事件轮询
+## 2.2 服务端 Selector 事件轮询
 
 再回到服务端ServerBootStrap 的启动代码，是从bind()方法开始的。ServerBootStrapt 的bind()方法实际上就是其父类AbstractBootstrap 的bind()方法，来看代码：
 
@@ -1076,6 +1086,7 @@ private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
         unsafe.close(unsafe.voidPromise());
     }
 }
+// unsafe.read() 是 AbstractNioMessageChannel.NioMessageUnsafe.read()
 ```
 
 这里可以看到熟悉的代码，当有链接进来的时候，便会走 unsafe.read()：这个里面就调用了doReadMessages
@@ -1089,10 +1100,50 @@ private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
 public void read() {
    ...
    int localRead = doReadMessages(readBuf);
+   int size = readBuf.size();
+   for (int i = 0; i < size; i ++) {
+      readPending = false;
+      pipeline.fireChannelRead(readBuf.get(i));
+   }
+   ...
+}
+// DefaultChannelPipeline.java
+public final ChannelPipeline fireChannelRead(Object msg) {
+    AbstractChannelHandlerContext.invokeChannelRead(head, msg);
+    return this;
+}
+// AbstractChannelHandleContext.java
+static void invokeChannelRead(final AbstractChannelHandlerContext next, Object msg) {
+    final Object m = next.pipeline.touch(ObjectUtil.checkNotNull(msg, "msg"), next);
+    EventExecutor executor = next.executor();
+    if (executor.inEventLoop()) {
+        next.invokeChannelRead(m);
+    } else {
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
+                next.invokeChannelRead(m);
+            }
+        });
+    }
+}
+private void invokeChannelRead(Object msg) {
+    if (invokeHandler()) {
+        try {
+          	// 此次如果调用到上面提到的 ServerBootstrapAcceptor 的时候，他重写了 channelRead()方法,上面有分析
+            ((ChannelInboundHandler) handler()).channelRead(this, msg);
+        } catch (Throwable t) {
+            notifyHandlerException(t);
+        }
+    } else {
+        fireChannelRead(msg);
+    }
 }
 ```
 
-2.3 Netty 解决JDK 空轮询 Bug
+![image-20210106133107473](深入分析 Netty 源码(1).assets/pipeline.png)
+
+## 2.3 Netty 解决JDK 空轮询 Bug
 
 各位应该早有耳闻臭名昭著的Java NIO epoll 的bug，它会导致Selector 空轮询，最终导致CPU 100%。官方声称在JDK1.6 版本的 update18 修复了该问题，但是直到JDK1.7 版本该问题仍旧存在，只不过该BUG 发生概率降低了一些而已，它并没有被根本解决。出现此Bug 是因为当 Selector 的轮询结果为空，也没有wakeup 或新消息处理，则发生空轮询，CPU 使用率达到100%。我们来看下这个问题在 issue 中的原始描述：
 
@@ -1171,7 +1222,7 @@ public void rebuildSelector() {
 2. 将原来Selector 中注册的事件全部取消。
 3. 将可用事件重新注册到新的Selector 中，并激活。
 
-2.4 NioServerSocktChannel 的创建
+## 2.4 NioServerSocktChannel 的创建
 
 我们在分析客户端Channel 初始化过程时已经提到，Channel 是对Java 底层Socket 连接的抽象，并且知道了客户端Channel 的具体类型是NioSocketChannel，那么，自然的服务端的Channel 类型就是NioServerSocketChannel 了。通过前面的分析, 我们已经知道了,在客户端中，Channel 类型的指定是在初始化时，通过Bootstrap 的 channel() 方法设置的，服务端也是同样的方式。再看服务端代码，我们调用了ServerBootstarap 的 `channel(NioServerSocketChannel.class)` 方法，传的参数是NioServerSocketChannel.class 对象。如此，按照客户端代码同样的流程，我们可以确定NioServerSocketChannel 的实例化也是通过ReflectiveChannelFactory 工厂类来完成的，而ReflectiveChannelFactory 中的clazz 字段被赋值为NioServerSocketChannel.class，因此当调ReflectiveChannelFactory 的newChannel()方法，就能获取到一个NioServerSocketChannel 的实例。
 
@@ -1180,11 +1231,11 @@ public void rebuildSelector() {
 1. ServerBootstrap 中的ChannelFactory 的实现类是 ReflectiveChannelFactory 类
 2. 创建的Channel 具体类型是 NioServerSocketChannel
 
-2.5 Channel 的实例化过程
+## 2.5 Channel 的实例化过程
 
 其实就是调用ChannelFactory 的newChannel()方法，而实例化的Channel 具体类型就是初始化ServerBootstrap 时传给channel()方法的实参。因此，上面代码案例中的服务端ServerBootstrap, 创建的Channel实例就是NioServerSocketChannel 的实例。
 
-2.6 服务端Channel 的初始化
+## 2.6 服务端Channel 的初始化
 
 我们来分析NioServerSocketChannel 的实例化过程，先看一下NioServerSocketChannel 的类层次结构图：
 
@@ -1256,15 +1307,15 @@ protected AbstractNioUnsafe newUnsafe() {
 
 ![image-20210106181927736](深入分析 Netty 源码(1).assets/Service-NIO.png)
 
-2.7 ChannelPipeline 初始化
+## 2.7 ChannelPipeline 初始化
 
 服务器端和客户端的ChannelPipeline的初始化一致，因此就不再单独分析了
 
-2.8 Channel的注册
+## 2.8 Channel的注册
 
 服务器端和客户端的Channel的注册过程一致，因此就不再单独分析了
 
-2.9 Handler 的添加过程
+## 2.9 Handler 的添加过程
 
 服务器端的 handler 的添加过程和客户端的有点区别，和 EventLoopGroup 一样，服务器端的handler也有两个，一个是通过handler() 方法设置handler 字段，另一个是通过childHandler()设置childHandler字段。通过前面的bossGroup 和workerGroup 的分析，其实我们在这里可以大胆地猜测:handler字段与accept 过程有关，即这个handler 负责处理客户端的连接请求;而childHandler就是负责和客户端的连接的I0交互. 那么实际上是不是这样的呢?
 

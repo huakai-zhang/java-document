@@ -1,6 +1,6 @@
-1 Pipeline 设计原理
+# 1 Pipeline 设计原理
 
-1.1 Channel 与 ChannelPipeline
+## 1.1 Channel 与 ChannelPipeline
 
 在 Netty 中每个 Channel 都有且仅有一个 ChannelPipeline 与之对应，它们的组成关系如下： 
 
@@ -41,7 +41,7 @@ protected DefaultChannelPipeline(Channel channel) {
 
 特别注意到，我们在开始的示意图中，head和tail并没有包含ChannelHandler, 这是`因为HeadContext和TailContext 继承于AbstractChannelHandlerContext的同时也实现了ChannelHandler接口了，因此它们有Context 和Handler的双重属性`。
 
-1.2 ChannelPipeline 的初始化
+## 1.2 ChannelPipeline 的初始化
 
 在实例化一个 Channel 时，会伴随着一个 ChannelPipeline 的实例化，并且相互关联，这点可以通过 NioSocketChannel 的父类 AbstractChannel 的构造器予以佐证。 
 
@@ -81,7 +81,7 @@ HeadContext(DefaultChannelPipeline pipeline) {
 
 它调用了父类AbstractChannelHandlerContext 的构造器，并传入参数inbound = false, outbound = true。TailContext的构造器与HeadContext的相反，它调用了父类AbstractChannelHandlerContext的构造器，并传入参数inbound = true, outbound = false。即header是一个outboundHandler, 而tail 是一个inboundHandler，关于这一点，大家要特别注意，因为在后面的分析中，我们会反复用到inbound 和outbound 这两个属性。
 
-1.3 ChannelInitializer 的添加
+## 1.3 ChannelInitializer 的添加
 
 前面我们已经分析了Channel 的组成，其中我们了解到，最开始的时候ChannelPipeline中含有两个ChannelHandlerContext(同时也是ChannelHandler)， 但是这个Pipeline 并不能实现什么特殊的功能，因为我们还没有给它添加自定义的ChannelHandler。
 
@@ -166,7 +166,9 @@ private void addLast0(AbstractChannelHandlerContext newCtx) {
 }
 ```
 
-1.4 自定义 ChannelHandler 的添加过程
+![image-20210107182500985](深入分析 Netty 源码(3).assets/pipeline-initchannel.png)
+
+## 1.4 自定义 ChannelHandler 的添加过程
 
 前面我们已经分析了一个Channellnitializer 如何插入到Pipeline 中的，接下来就来探讨一下Channellnitializer 在哪里被调用，Channellnitializer 的作用，以及我们自定义的ChanneHandler是如何插入到Pipeline 中的. 现在我们再简单地复习一下Channel的注册过程:
 
@@ -241,6 +243,7 @@ private boolean initChannel(ChannelHandlerContext ctx) throws Exception {
         } catch (Throwable cause) {
             exceptionCaught(ctx, cause);
         } finally {
+          	// 此处会将原 ChannelInitializer 移除
             remove(ctx);
         }
         return true;
@@ -249,7 +252,7 @@ private boolean initChannel(ChannelHandlerContext ctx) throws Exception {
 }
 ```
 
-initChannel(©) ctx.channel()); 这个方法就是在初始化Bootstrap时，调用 handler 方法传入的匿名内部类所实现的方法：
+initChannel((C) ctx.channel()); 这个方法就是在初始化Bootstrap时，调用 handler 方法传入的匿名内部类所实现的方法：
 
 ```java
 .handler(new ChannelInitializer<SocketChannel>() {
@@ -260,17 +263,15 @@ initChannel(©) ctx.channel()); 这个方法就是在初始化Bootstrap时，调
             });
 ```
 
-
-
 因此当调用了这个方法后，自定义的 ChannelHandler 就插入到了 Pipeline 了，此时Pipeline 如下图所示：
 
 ![image-20210107182849075](深入分析 Netty 源码(3).assets/image-20210107182849075.png)
 
-当添加了自定义的 ChannelHandler 后，就会删除 ChannelInitializer 这个 ChannelHandler，即 “ctx.pipeline().remove(this)”，因此最后的 Pipeline 如下：
+<font color=red>当添加了自定义的 ChannelHandler 后，就会删除 ChannelInitializer 这个 ChannelHandler</font>，即 “ctx.pipeline().remove(this)”，因此最后的 Pipeline 如下：
 
 ![image-20210107182912594](深入分析 Netty 源码(3).assets/image-20210107182912594.png)
 
-1.5 ChannelHandler 的名字
+## 1.5 ChannelHandler 的名字
 
 pipeline.addXXX 都有一个重载的方法，例如 addLast，它有一个重载的版本是：
 
@@ -303,7 +304,7 @@ public final ChannelPipeline addLast(EventExecutorGroup group, String name, Chan
 
 第一个参数被设置为null，我们不关心它.第二参数就是这个handler 的名字.看代码可知，在添加一个handler 之前，需要调用checkMultiplicity 方法来确定此handler 的名字是否和已添加的handler 的名字重复.
 
-1.6 自动生成 handler 的名字
+## 1.6 自动生成 handler 的名字
 
 如果调用 ChannelPipeline addLast(ChannelHandler… handlers); 那么 Netty 会调用 generateName 为handler 自动生成一个名字：
 
@@ -346,7 +347,7 @@ private static String generateName0(Class<?> handlerType) {
 }
 ```
 
-2 Pipeline 的事件传输机制
+# 2 Pipeline 的事件传输机制
 
 前面章节中，我们知道AbstractChannelHandlerContext中有inbound 和outbound 两个boolean变量，分别用于标识Context所对应的handler 的类型，即:
 
@@ -450,7 +451,7 @@ public class MyOutboundHandler extends ChannelOutboundHandlerAdapter {
 
 上面例子，MyInboundHandler收到一个 channelActive 事件，它在处理后，希望事件继续传播下去，就需要接着调用ctx.fireChannelActive()。
 
-2.1 Outbound 事件传播方式
+## 2.1 Outbound 事件传播方式
 
 Outbound事件都是请求事件(request event)， 即请求某件事情的发生，然后通过Outbound事件进行通知. Outbound事件的传播方向是tail -&gt; customContext -&gt; head。
 
@@ -532,7 +533,7 @@ public void connect(
 
 到这里，整个 Connect 请求事件就结束了： ![img](https://img-blog.csdnimg.cn/20200606183637811.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) 我们仅仅以Connect 请求事件为例，分析了Outbound 事件的传播过程，但是其实所有的outbound的事件传播都遵循着一样的传播规律,同学们可以试着分析一下其他的outbound 事件，体会一下它们的传播过程.
 
-2.2 Inbound 事件
+## 2.2 Inbound 事件
 
 Inbound 事件和 Outbound 事件的处理过程是类似的，只是传播方向不同。
 
@@ -629,7 +630,7 @@ public void channelActive(ChannelHandlerContext ctx) throws Exception { }
 
 TailContext.channelActive方法是空的.如果读者自行查看TailContext 的Inbound 处理方法时，会发现，它们的实现都是空的.可见，如果是Inbound， 当用户没有实现自定义的处理器时，那么默认是不处理的. 用一幅图来总结一下Inbound 的传输过程: ![img](https://img-blog.csdnimg.cn/20200606183657865.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
 
-### 总结
+# 3 总结
 
 对于Outbound 事件:
 
@@ -650,4 +651,6 @@ TailContext.channelActive方法是空的.如果读者自行查看TailContext 的
 6. Outbound 事件流: Context.fireIN_ EVT - &gt; Connect. findContext Inbound- &gt;nextContext. invokeIN EVT -&gt; nextHandler. IN EVT -&gt; nextContext. fireIN EVT
 
 outbound和inbound 事件十分的像，并且Context 与Handler 直接的调用关系是否容易混淆，因此我们在阅读这里的源码时，需要特别的注意.
+
+------
 

@@ -300,6 +300,7 @@ Netty 中，每个 Channel 都有且仅有一个 EventLoop 与之关联，它们
 ```java
 // MultiThreadEventLoopGroup.java
 // 此处 next() 在上篇中介绍过获取的是 NioEventLoopGroup EventExecutor数组中的 NioEventLoop
+// (暂时理解)对于服务端来说，如果只监听一个端口，只需要一个EventLoop，多个端口可以多次 bind 触发多个线程
 public ChannelFuture register(Channel channel) {
     return next().register(channel);
 }
