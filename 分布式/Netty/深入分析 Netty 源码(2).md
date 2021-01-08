@@ -1,9 +1,9 @@
-1 EventLoopGroup 与 Reactor
+# 1 EventLoopGroup 与 Reactor
 
 
 一个Netty 程序启动时，至少要指定一个EventLoopGroup(如果使用到的是NIO, 那么通常是NioEventlLoopGroup)，那么这个NioEventLoopGroup 在Netty中到底扮演着什么角色呢?我们知道，Netty是Reactor模型的一个实现，那么首先从Reactor的线程模型开始吧。
 
-1.1 浅谈 Reactor 线程模型
+## 1.1 浅谈 Reactor 线程模型
 
 Reactor的线程模型有三种:单线程模型、多线程模型、主从模型。首先看单线程模型：
 
@@ -27,7 +27,7 @@ Reactor多线程模型有如下特点:
 
 可以看到，Reactor 的主从多线程模型和Reactor多线程模型很类似，只不过Reactor 的主从多线程模型的acceptor 使用了线程池来处理大量的客户端请求.
 
-1.2 EventLoopGroup 与 Reactor 关联
+## 1.2 EventLoopGroup 与 Reactor 关联
 
 我们介绍了三种Reactor 的线程模型，那么它们和NioEventLoopGroup 又有什么关系呢?其实，不同的设置NioEventLoopGroup的方式就对应了不同的Reactor 的线程模型. **单线程模型** 来看一下下面的例子:
 
@@ -64,7 +64,7 @@ server.group(bossGroup, workerGroup)
 
 bossGroup为主线程，而workerGroup中的线程是CPU 核心数乘以2，因此对应的到Reactor线程模型中，我们知道，这样设置的NioEventLoopGroup其实就是Reactor 主从多线程模型.
 
-1.3 EventLoopGroup 的实例化
+## 1.3 EventLoopGroup 的实例化
 
 首先，我们先纵览一下 EventLoopGroup 的类结构图，如下图所示：
 
@@ -91,7 +91,7 @@ bossGroup为主线程，而workerGroup中的线程是CPU 核心数乘以2，因�
 
    selector 属性: NioEventLoop 构造器中通过调用 selector = provider. openSelector() 获取一个 Selector 对象
 
-2 任务执行者 EventLoop
+# 2 任务执行者 EventLoop
 
 NioEventLoop 继承于 SingleThreadEventLoop，而SingleThreadEventLoop 又继承于SingleThreadEventExecutor。`SingleThreadEventExecutor 是Netty 中对本地线程的抽象，它内部有一个Thread thread 属性，存储了一个本地 Java 线程。`因此我们可以认为，一个 NioEventLoop 其实和一个特定的线程绑定，并且在其生命周期内，绑定的线程都不会再改变。
 
@@ -103,13 +103,13 @@ NioEventLoop的类层次结构图还是比较复杂的，不过我们只需要�
 
 在AbstractScheduledEventExecutor中，Netty 实现了 NioEventLoop 的 schedule 功能，即我们可以通过调用一个 NioEventLoop 实例的 schedule 方法来运行一些定时任务。而在SingleThreadEventLoop中，又实现了任务队列的功能，通过它可以调用一个 NioEventLoop 实例的execute 方法来向任务队列中添加一个task，并由NioEventlLoop 进行调度执行。
 
-通常来说，NioEventLoop肩负着两种任务：
+通常来说，NioEventLoop 肩负着两种任务：
 
 第一个是作为 IO 线程，执行与Channel 相关的IO操作，包括调用select 等待就绪的IO事件、读写数据与数据的处理等;
 
 第二个任务是作为任务队列，执行 taskQueue 中的任务，例如用户调用eventLoop. schedule提交的定时任务也是这个线程执行的。
 
-2.1 NioEventLoop 的实例化过程
+## 2.1 NioEventLoop 的实例化过程
 
 先简单回顾一下 EventLoop 实例化的运行时序图：
 
@@ -155,6 +155,8 @@ protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
                                         EventExecutorChooserFactory chooserFactory, Object... args) {
     ...
     if (executor == null) {
+        // 默认 executor 是 ThreadPerTaskExecutor
+        // 并传入了一个默认的线程工厂类 DefaultThreadFactory
         executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
     }
 	...
@@ -174,6 +176,7 @@ public void execute(Runnable command) {
 ```java
 // DefaultThreadFactory.java
 public Thread newThread(Runnable r) {
+    // 此处的 Runnable r 就是doStartThread() 方法中 executor.execute(Runnable r)中的内部类 r
     Thread t = newThread(new DefaultRunnableDecorator(r), prefix + nextId.incrementAndGet());
     try {
         if (t.isDaemon()) {
@@ -197,9 +200,10 @@ public Thread newThread(Runnable r) {
 
 **runAllTasks**
 
-在 NioEventLoop.run()方法中，会执行一个名为 runAllTasks 方法，去执行
+SingleThreadEventExecutor.this.run()，最终会调用NioEventLoop.run()。在 NioEventLoop.run() 方法中，会执行一个名为 runAllTasks 方法，去执行 SingleThreadEventExecutor.execute 中添加的 task：
 
 ```java
+// NioEventLoop.java
 protected void run() {
     for (;;) {
         try {
@@ -219,8 +223,10 @@ protected void run() {
             final int ioRatio = this.ioRatio;
             if (ioRatio == 100) {
                 try {
+                    // 作为 IO 线程，执行与Channel 相关的IO操作
                     processSelectedKeys();
                 } finally {
+                    // 作为任务队列，执行 taskQueue 中的任务
                     // Ensure we always run tasks.
                     runAllTasks();
                 }
@@ -228,20 +234,78 @@ protected void run() {
             ...
     }
 }
+// SingleThreadEventExecutor.java
+private final Queue<Runnable> taskQueue;
+protected boolean runAllTasks() {
+    assert inEventLoop();
+    boolean fetchedAll;
+    boolean ranAtLeastOne = false;
+    do {
+        fetchedAll = fetchFromScheduledTaskQueue();
+        if (runAllTasksFrom(taskQueue)) {
+            ranAtLeastOne = true;
+        }
+    } while (!fetchedAll); // keep on processing until we fetched all scheduled tasks.
+    if (ranAtLeastOne) {
+        lastExecutionTime = ScheduledFutureTask.nanoTime();
+    }
+    afterRunningAllTasks();
+    return ranAtLeastOne;
+}
+// SingleThreadEventLoop.java
+protected void afterRunningAllTasks() {
+    runAllTasksFrom(tailTasks);
+}
+protected final boolean runAllTasksFrom(Queue<Runnable> taskQueue) {
+    Runnable task = pollTaskFrom(taskQueue);
+    if (task == null) {
+        return false;
+    }
+    for (;;) {
+        safeExecute(task);
+        task = pollTaskFrom(taskQueue);
+        if (task == null) {
+            return true;
+        }
+    }
+}
+protected final Runnable pollTaskFrom(Queue<Runnable> taskQueue) {
+    for (;;) {
+        // 从队列中取任务
+        Runnable task = taskQueue.poll();
+        if (task == WAKEUP_TASK) {
+            continue;
+        }
+        return task;
+    }
+}
+// AbstractEventExecutor.java
+protected static void safeExecute(Runnable task) {
+    try {
+        task.run();
+    } catch (Throwable t) {
+        logger.warn("A task raised an exception. Task: {}", task, t);
+    }
+}
 ```
 
-2.2 EventLoop 与 Channel 的关联
+## 2.2 EventLoop 与 Channel 的关联
 
 Netty 中，每个 Channel 都有且仅有一个 EventLoop 与之关联，它们的关联过程如下：
 
 ![img](深入分析 Netty 源码(2).assets/20200606205206757.png)
 
-从上图中我们可以看到，当调用了AbstractChannel$AbstractUnsafe.register后，就完成了Channel和EventLoop 的关联. register 实现如下:
+从上图中我们可以看到，当调用了AbstractChannel$AbstractUnsafe.register后，就完成了Channel和EventLoop 的关联。register 实现如下:
 
 ```java
+// MultiThreadEventLoopGroup.java
+// 此处 next() 在上篇中介绍过获取的是 NioEventLoopGroup EventExecutor数组中的 NioEventLoop
+public ChannelFuture register(Channel channel) {
+    return next().register(channel);
+}
 public final void register(EventLoop eventLoop, final ChannelPromise promise) {
     ...
-    AbstractChannel.this.eventLoop = eventLoop;
+    AbstractChannel.this.eventLoop = eventLoop;// 即是 NioEventLoop
     if (eventLoop.inEventLoop()) {
         register0(promise);
     } else {
@@ -259,9 +323,9 @@ public final void register(EventLoop eventLoop, final ChannelPromise promise) {
 }
 ```
 
-在 AbstractChannel¥AbstractUnsafe.register中，会将一个EventLoop赋值给AbstractChannel 内部的 eventLoop 字段，到这里就完成了 EventLoop 与 Channel 的关联过程。
+在 AbstractChannel$AbstractUnsafe.register中，会将一个EventLoop赋值给AbstractChannel 内部的 eventLoop 字段，到这里就完成了 EventLoop 与 Channel 的关联过程。
 
-2.3 EventLoop 的启动
+## 2.3 EventLoop 的启动
 
 在前面我们已经知道了，NioEventLoop本身就是一个SingleThreadEventExecutor， 因此NioEventLoop 的启动，其实就是 NioEventLoop 所绑定的本地Java线程的启动。
 
@@ -277,7 +341,7 @@ private void startThread() {
 }
 ```
 
-STATE_ UPDATER 是 SingleThreadEventExecutor 内部维护的一个属性，它的作用是标识当前的thread的状态，在初始的时候，STATE_UPDATER == ST_NOT_STARTED，因此第一次调用startThread()方法时，就会进入到if语句内，进而调用到thread.start(). 而这个关键的startThread() 方法又是在哪里调用的呢?经过方法调用关系搜索，我们发现，startThread 是在 SingleThreadEventExecutor.exqcute方法中调用的:
+STATE_ UPDATER 是 SingleThreadEventExecutor 内部维护的一个属性，它的作用是标识当前的thread的状态，在初始的时候，STATE_UPDATER == ST_NOT_STARTED，因此第一次调用startThread()方法时，就会进入到if语句内，进而调用到thread.start(). 而这个关键的startThread() 方法又是在哪里调用的呢?经过方法调用关系搜索，我们发现，startThread 是在 SingleThreadEventExecutor.execute 方法中调用的:
 
 ```java
 public void execute(Runnable task) {
@@ -286,6 +350,7 @@ public void execute(Runnable task) {
     }
     boolean inEventLoop = inEventLoop();
     if (inEventLoop) {
+        // 前面分析过从队列中取任务，此处是往队列添加任务
         addTask(task);
     } else {
     	// 调用 startThread 方法，启动EventLoop线程
@@ -298,6 +363,20 @@ public void execute(Runnable task) {
     if (!addTaskWakesUp && wakesUpForTask(task)) {
         wakeup(inEventLoop);
     }
+}
+protected void addTask(Runnable task) {
+    if (task == null) {
+        throw new NullPointerException("task");
+    }
+    if (!offerTask(task)) {
+        reject(task);
+    }
+}
+final boolean offerTask(Runnable task) {
+    if (isShutdown()) {
+        reject();
+    }
+    return taskQueue.offer(task);
 }
 ```
 
@@ -351,13 +430,9 @@ public void execute(Runnable task) {
 
 总结一句话，当EventLoop.execute第一次被调用时，就会触发startThread() 的调用，进而导致了EventLoop 所对应的Java线程的启动。
 
+![img](深入分析 Netty 源码(2).assets/eventloop-thread.png)
 
-
-
-
-
-
-3  。。。。。。。。。
+# 3  Promise 与 Future
 
 
 java.util.concurrent.Future是Java提供的接口，表示异步执行的状态，Future 的get方法会判断任务是否执行完成，如果完成就返回结果，否则阻塞线程，直到任务完成。 Netty扩展了Java的Future,最主要的改进就是增加了监听器Listener接口,通过监听器可以让异步执行更加有效率，不需要通过get来等待异步执行结束，而是通过监听器回调来精确地控制异步执行结束的时间点。
@@ -498,13 +573,14 @@ public interface GenericFutureListener<F extends Future<?>> extends EventListene
 }
 ```
 
+# 4 Handler
 
-## ChannelHandlerContext
+## 4.1 ChannelHandlerContext
 
 
 每个 ChannelHandler 被添加到 ChannelPipeline 后, 都会创建一个 ChannelHandlerContext 并与之创建的ChannelHandler关联绑定。ChannelHandlerContext允许ChannelHandler与其他的ChannelHandler实现进行交互。ChannelHandlerContext不会改变添加到其中的ChannelHandler，因此它是安全的。 下图显示 ChannelHandlerContext，ChannelHandler，ChannelPipeline 的关系: ![img](https://img-blog.csdnimg.cn/20200606220332446.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
 
-## Channel 的状态模型
+## 4.2 Channel 的状态模型
 
 Netty有一个简单但强大的状态模型，并完美映射到Channel InboundHandler的各个方法。下面是Channel生命周期四个不同的状态:
 
@@ -516,12 +592,12 @@ Netty有一个简单但强大的状态模型，并完美映射到Channel Inbound
 
 Channel 的状态在其生命周期中变化，因为状态变化需要触发，下图显示了Channel状态变化： ![img](https://img-blog.csdnimg.cn/20200606220456510.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
 
-## ChannelHandler 和其子类
+## 4.3 ChannelHandler 和其子类
 
 
 先看一张 Handler 的类继承图 ![img](https://img-blog.csdnimg.cn/20200607135555577.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
 
-## ChannelHandler中的方法
+## 4.4 ChannelHandler中的方法
 
 Netty定义了良好的类型层次结构来表示不同的处理程序类型，所有的类型的父类是ChanneHandler。ChannelHandler 提供了在其生命周期内添加或从ChannelPipeline中删除的方法。
 
@@ -531,7 +607,7 @@ Netty定义了良好的类型层次结构来表示不同的处理程序类型，
 
 Netty还提供了一个实现了ChannelHandler的抽象类ChannelHandlerAdapter。ChannelHandlerAdapter 实现了父类的所有方法, 基本上就是传递事件到 ChannelPipeline 中的下一个 ChannelHandler 直到结束。也可以直接继承于 ChannelHandlerAdapter, 然后重写里面的方法。
 
-## ChannelInboundHandler
+## 4.5 ChannelInboundHandler
 
 ChannelInboundHandler 提供了一些方法再接收数据或 Channel 状态改变时被调用. 下面是 ChannelInboundHandler 的一些方法:
 
@@ -570,12 +646,13 @@ public class ReleaseHandler extends SimpleChannelInboundHandler<Object> {
 
 ChannelInitializer 用来初始化 ChannelHandler，将自定义的各种 ChannelHandler 添加到 ChannelPipeline 中。
 
+# 5 数据翻译编码和解码
 
-## TCP 黏包/拆包
+## 5.1 TCP 黏包/拆包
 
 TCP是一个“流”协议，所谓流，就是没有界限的一长串二进制数据。TCP作为传输层协议并不不了解上层业务数据的具体含义，它会根据TCP缓冲区的实际情况进行数据包的划分，所以在业务上认为是一个完整的包，可能会被TCP拆分成多个包进行发送，也有可能把多个小的包封装成一个大的数据包发送，这就是所谓的TCP粘包和拆包问题。
 
-## 粘包问题的解决策略
+## 5.2 粘包问题的解决策略
 
 由于底层的TCP无法理解上层的业务数据，所以在底层是无法保证数据包不被拆分和重组的，这个问题只能通过。上层的应用协议栈设计来解决。业界的主流协议的解决方案，可以归纳如下:
 
@@ -584,18 +661,18 @@ TCP是一个“流”协议，所谓流，就是没有界限的一长串二进�
 3. 将消息分为消息头和消息体，消息头中包含表示信息的总长度(或者消息体长度)的字段 
 4. 更复杂的自定义应用层协议。
 
-## 编、解码技术
+## 5.3 编、解码技术
 
 通常我们也习惯将编码(Encode) 称为序列化(serialization) ，它将对象序列化为字节数组，用于网络传输、数据持久化或者其它用途。 反之，解码(Decode) /反序列化(deserialization) 把从网络、磁盘等读取的字节数组还原成原始对象(通常是原始对象的拷贝)，以方便后续的业务逻辑操作。进行远程跨进程服务调用时(例如RPC调用)，需要使用特定的编解码技术，对需要进行网络传输的对象做编码或者解码，以便完成远程调用。
 
-## Netty为什么要提供编解码框架
+## 5.4 Netty为什么要提供编解码框架
 
 
 作为一个高性能的异步、NIO通信框架，编解码框架是Netty的重要组成部分。尽管站在微内核的角度看，编解码框架并不是Netty微内核的组成部分，但是通过ChannelHandler定制扩展出的编解码框架却是不可或缺的。 然而，我们已经知道在Netty中，从网络读取的Inbound消息，需要经过解码，将二进制的数据报转换成应用层协议消息或者业务消息，才能够被上层的应用逻辑识别和处理;同理，用户发送到网络的Outbound业务消息，需要经过编码转换成二进制字节数组(对于Netty就是ByteBuf)才能够发送到网络对端。编码和解码功能是NIO框架的有机组成部分，无论是由业务定制扩展实现，还是NIO框架内置编解码能力，该功能是必不可少的。 为了降低用户的开发难度，Netty对常用的功能和API做了装饰，以屏蔽底层的实现细节。编解码功能的定制，对于熟悉Netty底层实现的开发者而言，直接基于ChannelHandler扩展开发，难度并不是很大。但是对于大多数初学者或者不愿意去了解底层实现细节的用户，需要提供给他们更简单的类库和API,而不是ChannelHandler. Netty在这方面做得非常出色，针对编解码功能，它既提供了通用的编解码框架供用户扩展，又提供了常用的编解码类库供用户直接使用。在保证定制扩展性的基础之上，尽量降低用户的开发工作量和开发门槛，提升开发效率。 Netty预置的编解码功能列表如下: base64、 Protobuf、 JBoss Marshalling、spdy 等。 ![img](https://img-blog.csdnimg.cn/20200607143954203.png)
 
-## Netty粘包和拆包解决方案
+## 5.5 Netty粘包和拆包解决方案
 
-### Netty中常用的解码器
+### 5.5.1 Netty中常用的解码器
 
 Netty提供了多个解码器，可以进行分包的操作，分别是:
 
@@ -604,7 +681,7 @@ Netty提供了多个解码器，可以进行分包的操作，分别是:
 - FixedLengthFrameDecoder (使用定长的报文来分包) 
 - LengthFieldBasedFrameDecoder
 
-#### LineBasedFrameDecoder解码器
+**LineBasedFrameDecoder解码器**
 
 LineBasedFrameDecoder是回车换行解码器，如果用户发送的消息以回车换行符作为消息结束的标识,则可以直接使用Netty的LineBasedFrameDecoder对消息进行解码,只需要在初始化Netty服务端或者客户端时将LineBasedFrameDecoder正确的添加到ChannelPipeline中即可,不需要自己重新实现一套换行解码器。 LineBasedFrameDecoder的工作原理是它依次遍历ByteBuf中的可读字节，判断看是否有“\n”或者“\r\n”，如果有，就以此位置为结束位置，从可读索引到结束位置区间的字节就组成了一行。它是以换行符为结束标志的解码器，支持携带结束符或者不携带结束符两种解码方式，同时支持配置单行的最大长度。如果连续读取到最大长度后仍然没有发现换行符，就会抛出异常，同时忽略掉之前读到的异常码流。防止由于数据报没有携带换行符导致接收到ByteBuf无限制积压，引起系统内存溢出。 它的使用效果如下：
 
@@ -634,7 +711,7 @@ public void initChannel(SocketChannel ch) throws Exception {
 
 初始化Channel的时候，首先将LineBasedFrameDecoder添加到ChannelPipeline中，然后再依次添加字符串解码器StringDecoder，业务Handler。
 
-### DelimiterBasedFrameDecoder解码器
+**DelimiterBasedFrameDecoder解码器**
 
 DelimiterBasedFrameDecoder是分隔符解码器，用户可以指定消息结束的分隔符，它可以自动完成以分隔符作为码流结束标识的消息的解码。回车换行解码器实际上是一种特殊的DelimiterBasedFrameDecoder解码器。 分隔符解码器在实际工作中也有很广泛的应用，很多简单的文本私有协议，都是以特殊的分隔符作为消息结束的标识，特别是对于那些使用长连接的基于文本的私有协议。分隔符的指定:与大家的习惯不同，分隔符并非以char或者string作为构造参数，而是ByteBuf,下面我们就结合实际例子给出它的用法。假如消息以“$_”作为分隔符，服务端或者客户端初始化ChannelPipeline的代码实例如下:
 
@@ -698,7 +775,7 @@ private static int indexOf(ByteBuf haystack, ByteBuf needle) {
 
 该算法与Java String中的搜索算法类似，对于原字符串使用两个指针来进行搜索，如果搜索成功，则返回索引位置，否则返回-1。
 
-### FixedLengthFrameDecoder解码器
+**FixedLengthFrameDecoder解码器**
 
 FixedLengthFrameDecoder是固定长度解码器，它能够按照指定的长度对消息进行自动解码，开发者不需要考虑TCP的粘包/拆包等问题，非常实用。 对于定长消息，如果消息实际长度小于定长，则往往会进行补位操作，它在一定程度上导致了空间和资源的浪费。但是它的优点也是非常明显的，编解码比较简单，因此在实际项目中仍然有一定的应用场景。 利用FixedLengthFrameDecoder解码器，无论一次接收到多少数据报， 它都会按照构造函数中设置的固定长度进行解码，如果是半包消息，FixedLengthFrameDecoder会缓存半包消息并等待下个包到达后进行拼包，直到读取到一个完整的包。假如单条消息的长度是20字节，使用FixedLengthFrameDecoder解码器的效果如下:
 
@@ -715,7 +792,7 @@ FixedLengthFrameDecoder是固定长度解码器，它能够按照指定的长度
 +------------------------------------------------------------------+
 ```
 
-### LengthFieldBasedFrameDecoder解码器
+**LengthFieldBasedFrameDecoder解码器**
 
 了解TCP通信机制的读者应该都知道TCP底层的粘包和拆包，当我们在接收消息的时候，显示不能认为读取到的报文就是个整包消息，特别是对于采用非阻塞I/O和长连接通信的程序。 如何区分一个整包消息，通常有如下4种做法:
 
@@ -835,7 +912,7 @@ ch.pipeline().addLast("UserDecoder", new UserDecoder());
 
 在pipeline中增加engthFieldBasedFrameDecoder解码器，指定正确的参数组合，它可以将Netty的ByteBuf解码成整 包消息，后面的用户解码器拿到的就是个完整的数据报，按照逻辑正常进行解码即可，不再需要额外考虑“读半包”问题，降低了用户的开发难度。
 
-## 常用的编码器
+### 5.5.2 常用的编码器
 
 Netty并没有提供与前面介绍的匹配的编码器，原因如下:
 
@@ -844,7 +921,7 @@ Netty并没有提供与前面介绍的匹配的编码器，原因如下:
 
 Netty默认提供了丰富的编解码框架供用户集成使用，本文对较常用的Java序列化编码器进行讲解。其它的编码器，实现方式大同小异。
 
-### ObjectEncoder编码器
+**ObjectEncoder编码器**
 
 ObjectEncoder是Java序列化编码器，它负责将实现Serializable接口的对象序列化为byte []，然后写入到ByteBuf中用于消息的跨网络传输。 下面我们一起分析下它的实现: 首先，我们发现它继承自MessageToByteEncoder,它的作用就是将对象编码成ByteBuf，如果要使用Java序列化，对象必须实现Serializable接口，因此，它的泛型类型为Serializable。MessageToByteEncoder的子类只需要实现encode(ChannelHandlerContext ctx,Serializable msg, ByteBuf out)方法即可，下面我们重点关注encode方法的实现:
 
@@ -868,24 +945,25 @@ public class ObjectEncoder extends MessageToByteEncoder<Serializable> {
 
 首先创建ByteBufOutputStream和0bjectOutputStream，用于将0bjec对象序列化到ByteBuf中，值得注意的是在writeObject之前需要先将长度字段(4个字节) 预留，用于后续长度字段的更新。 依次写入长度占位符(4字节) 、序列化之后的0bject对象，之后根据ByteBuf的writelndex计算序列化之后的码流长度，最后调用ByteBuf的setInt(int index, int value)更新长度占位符为实际的码流长度。有个细节需要注意，更新码流长度字段使用了setInt方法而不是writeInt，原因就是setInt方法只更新内容，并不修改readerIndex和writerIndex。
 
-
 尽管Netty预置了丰富的编解码类库功能，但是在实际的业务开发过程中，总是需要对编解码功能做一些定制。使用Netty的编解码框架，可以非常方便的进行协议定制。本章节将对常用的支持定制的编解码类库进行讲解，以期让读者能够尽快熟悉和掌握编解码框架。
 
-## 解码器
+## 5.6 Netty编解码框架可定制性
 
-### ByteToMessageDecoder抽象解码器
+### 5.6.1 解码器
+
+**ByteToMessageDecoder抽象解码器**
 
 
 使用NIO进行网络编程时，往往需要将读取到的字节数组或者字节缓冲区解码为业务可以使用的POJO对象。为了方便业务将ByteBuf解码成业务POJO对象，Netty提供了ByteToMessageDecoder抽象工具解码类。 用户自定义解码器继承Byte ToMessageDecoder,只需要实现void decode (ChannelHandler Context ctx, ByteBufin, List out)抽象方法即可完成ByteBuf到POJO对象的解码。 由于ByteToMessageDecoder并没有考虑TCP粘包和拆包等场景，用户自定义解码器需要自己处理“读半包”问题。正因为如此，大多数场景不会直接继承ByteToMessageDecoder,而是继承另外一些更 高级的解码器来屏蔽半包的处理。实际项目中，通常将L engthFieldBasedFrameDecoder和ByteToMessageDecoder组合使用，前者负责将网络读取的数据报解码为整包消息，后者负责将整包消息解码为最终的业务对象。 除了和其它解码器组合形成新的解码器之外，ByteToMessageDecoder也是很多基础解码器的父类，它的继承关系如下图所示: ![img](https://img-blog.csdnimg.cn/20200607162519341.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
 
-### MessageToMessageDecoder抽象解码器
+**MessageToMessageDecoder抽象解码器**
 
 
 MessageToMessageDecoder实际上是Netty的二次解码器，它的职责是将一个对象二次解码为其它对象。 为什么称它为二次解码器呢?我们知道，从SocketChannel读取到的TCP数据报是ByteBuffer,实际就是字节数组。我们首先需要将ByteBuffer缓冲区中的数据报读取出来，并将其解码为Java对象; 然后对Java对象根据某些规则做二次解码，将其解码为另一个POJO对象。 因为MessageToMessageDecoder在Byte ToMessageDecoder之后，所以称之为二次解码器。 二次解码器在实际的商业项目中非常有用，以HTTP+XML协议栈为例，第一次解码往往是将字节数组解码成HttpRequest对象，然后对HttpRequest消 息中的消息体字符串进行二次解码，将XML 格式的字符串解码为POJO对象，这就用到了二次解码器。类似这样的场景还有很多，不再一一枚举。 事实上，做一个超级复杂的解码器将多个解码器组合成- -个大而全的MessageToMessageDecoder解码器似乎也能解决多次解码的问题，但是采用这种方式的代码可维护性会非常差。例如，如果我们打算在HTTP+XML协议栈中增加一-个打印码流的功能，即首次解码获取HttpRequest对象之后打印XML格式的码流。如果采用多个解码器组合，在中间插入一个打印消息体的Handler即可，不需要修改原有的代码;如果做一个大而全的解码器，就需要在解码的方法中增加打印码流的代码，可扩展性和可维护性都会变差。 用户的解码器只需要实现void decode(ChannelHandlerContext ctx, I msg, List&lt; Object &gt; out)抽象方法即可，由于它是将一个POJO解码为另一个POJO，所以一般不会涉及到半包的处理，相对于ByteToMessageDecoder更加简单些。它的继承关系图如下所示: ![img](https://img-blog.csdnimg.cn/20200607162813384.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
 
-## 编码器
+### 5.6.2编码器
 
-### MessageToByteEncoder抽象编码器
+**MessageToByteEncoder抽象编码器**
 
 MessageToByteEncoder负责将POJO对象编码成ByteBuf,用户的编码器继承MessageToByteEncoder，实现void encode(ChannelHandlerContext ctx, | msg, ByteBuf out)接口接口，示例代码如下:
 
@@ -948,7 +1026,7 @@ protected abstract void encode(ChannelHandlerContext ctx, I msg, ByteBuf out) th
 
 发送操作完成之后，在方法退出之前释放编码缓冲区ByteBuf对象。
 
-### MessageToMessageEncoder抽象编码器
+**MessageToMessageEncoder抽象编码器**
 
 将一个POJO对象编码成另一个对象，以HTTP+XML协议为例， 它的一种实现方式是:先将POJO对象编码成XML字符串，再将字符串编码为HTTP请求或者应答消息。对于复杂协议，往往需要经历多次编码，为了便于功能扩展，可以通过多个编码器组合来实现相关功能。 用户的解码器继承MessageToMessageEncoder解码器，实现void encode(Channel HandlerContext ctx,I msg, List out)方法即可。注意，它与MessageToByteEncoder 的区别是输出是对象列表而不是ByteFBuf：
 
@@ -988,7 +1066,7 @@ public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
 }
 ```
 
-### LengthFieldPrepender编码器
+**LengthFieldPrepender编码器**
 
 如果协议中的第一个字段为长度字段，Netty提供了LengthFieldPrepender编码器，它可以计算当前待发送消息的二进制字节长度，将该长度添加到ByteBuf的缓冲区头中，如图所示:
 
@@ -1056,4 +1134,6 @@ LengthFieldPrepender工作原理分析如下:首先对长度字段进行设置�
 6. 其它长度值:直接抛出Error
 
 最后将原需要发送的ByteBuf复制到List&lt; Object &gt; out中，完成编码。
+
+------
 

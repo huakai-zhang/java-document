@@ -6,7 +6,7 @@
 
 ![image-20210107180635605](深入分析 Netty 源码(3).assets/image-20210107180635605.png)
 
-通过上图我们可以看到，一个Channel 包含了一个ChannelPipeline， 而ChannelPipeline 中又维护了一个由ChannelHandlerContext组成的双向链表。这个链表的头是HeadContext，链表的尾是TailContext，并且每个ChannelHandlerContext 中又关联着一个 Channe lHandler。
+通过上图我们可以看到，一个Channel 包含了一个ChannelPipeline， 而ChannelPipeline 中又维护了一个由ChannelHandlerContext组成的双向链表。这个链表的头是HeadContext，链表的尾是TailContext，并且每个ChannelHandlerContext 中又关联着一个 ChannelHandler。
 
 上面的图示给了我们一个对ChannelPipeline 的直观认识，但是实际上Netty 实现的Channel是否真的是这样的呢?我们继续用源码说话。在前我们已经知道了一个Channel 的初始化的基本过程，下面我们再回顾一下. 下面的代码是AbstractChannel 构造器:
 
@@ -85,7 +85,7 @@ HeadContext(DefaultChannelPipeline pipeline) {
 
 前面我们已经分析了Channel 的组成，其中我们了解到，最开始的时候ChannelPipeline中含有两个ChannelHandlerContext(同时也是ChannelHandler)， 但是这个Pipeline 并不能实现什么特殊的功能，因为我们还没有给它添加自定义的ChannelHandler。
 
-通常来说，我们在初始化Bootstrap，会调用 handler添加自定义的ChannelHandler，同时传入了 ChannelInitializer 对象，它提供了一个 initChannel 方法来初始化 ChannelHandler。 ChannelInitializer实现了ChannelHandler, 那幺它是在什幺吋候添加到ChannelPipeline 中的昵?通过代码跟踪，发现它是在 Bootstrap.init 方法中添加到 ChannelPipeline 中的，其代码如下:
+通常来说，我们在初始化Bootstrap，会调用 handler添加自定义的ChannelHandler，同时传入了 ChannelInitializer 对象，它提供了一个 initChannel 方法来初始化 ChannelHandler。 ChannelInitializer实现了ChannelHandler, 那么它是在什么时候添加到ChannelPipeline 中的昵?通过代码跟踪，发现它是在 Bootstrap.init 方法中添加到 ChannelPipeline 中的，其代码如下:
 
 ```java
 void init(Channel channel) throws Exception {
@@ -120,7 +120,9 @@ private AbstractChannelHandlerContext newContext(EventExecutorGroup group, Strin
 }
 ```
 
-addLast有很多重载的方法，我们关注这个比较重要的方法就可以了。上面的addLast 方法中，首先检查这个ChannelHandler 的名字是否是重复的，如果不重复的话，则调用newContext方法为这个Handler 创建一个对应的DefaultChannelHandlerContext实例，并与之关联起来(Context中有一个handler 属性保存着对应的Handler 实例). 为了添加一个handler 到pipeline 中，必须把此handler 包装成ChannelHandlerContext.因此在上面的代码中我们可以看到新实例化了一个newCtx 对象，并将handler 作为参数传递到构造方法中，那么我们来看一下实例化的DefaultChannelHandlerContext到底有什么玄机. 首先看它的构造器:
+addLast有很多重载的方法，我们关注这个比较重要的方法就可以了。上面的addLast 方法中，首先检查这个ChannelHandler 的名字是否是重复的，如果不重复的话，则调用newContext方法为这个Handler 创建一个对应的DefaultChannelHandlerContext实例，并与之关联起来(Context中有一个handler 属性保存着对应的Handler 实例)。`为了添加一个handler 到pipeline 中，必须把此handler 包装成ChannelHandlerContext。`
+
+因此在上面的代码中我们可以看到新实例化了一个newCtx 对象，并将handler 作为参数传递到构造方法中，那么我们来看一下实例化的DefaultChannelHandlerContext到底有什么玄机. 首先看它的构造器:
 
 ```java
 DefaultChannelHandlerContext(

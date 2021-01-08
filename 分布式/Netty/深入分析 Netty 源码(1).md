@@ -815,6 +815,17 @@ public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGro
     this.childGroup = childGroup;
     return this;
 }
+// AbstractBootstrap.java
+public B group(EventLoopGroup group) {
+    if (group == null) {
+        throw new NullPointerException("group");
+    }
+    if (this.group != null) {
+        throw new IllegalStateException("group set already");
+    }
+    this.group = group;
+    return (B) this;
+}
 ```
 
 显然，这个方法初始化了两个字段，一个是group = parentGroup。它是在 super.group(parentGroup) 中完成初始化的，另一个是childGroup = childGroup。接着从应用程序的启动代码来看调用了 b.bind() 方法来监听一个本地端口。bind()方法会触发如下调用链：AbstractBootstrap.bind() -> AbstractBootstrap.doBind() -> AbstractBootstrap.initAndRegister()源码看到到这里为止，我们发现AbstractBootstrap 的initAndRegister()方法已经是我们的老朋友了，我们在分析客户端程序时和它打过很多交道，现在再来回顾一下这个方法吧：
@@ -823,8 +834,18 @@ public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGro
 final ChannelFuture initAndRegister() {
     channel = channelFactory.newChannel();
     init(channel); // ServerBootstrap
+    // 此处使用的是parentGroup
     ChannelFuture regFuture = config().group().register(channel);
     return regFuture;
+}
+// AbstractBootstrapConfig.java
+// config().group()
+public final EventLoopGroup group() {
+    return bootstrap.group();
+}
+// AbstractBootstrap.java
+public final EventLoopGroup group() {
+    return group;
 }
 ```
 
@@ -1232,6 +1253,8 @@ protected AbstractNioUnsafe newUnsafe() {
 4. NioServerSocketChannel 中的属性： 
 
    ServerSocketChannelConfig config = new NioServerSocketChannelConfig(this, javaChannel (). socket())
+
+![image-20210106181927736](深入分析 Netty 源码(1).assets/Service-NIO.png)
 
 2.7 ChannelPipeline 初始化
 
