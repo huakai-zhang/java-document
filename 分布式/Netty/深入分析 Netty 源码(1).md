@@ -547,6 +547,7 @@ public abstract class ChannelInitializer<C extends Channel> extends ChannelInbou
     public final void channelRegistered(ChannelHandlerContext ctx) throws Exception {
         // 调用 initChannel(ChannelHandlerContext ctx)
         if (initChannel(ctx)) {
+            // 调用下一个 inboundhandler 的 channelRegister 方法
             ctx.pipeline().fireChannelRegistered();
         } else {
             // Called initChannel(...) before which is the expected behavior, so just forward the event.
@@ -859,7 +860,8 @@ void init(Channel channel) throws Exception {
     final Entry<ChannelOption<?>, Object>[] currentChildOptions;
     final Entry<AttributeKey<?>, Object>[] currentChildAttrs;
     ...
-    // 在服务端channel注册selector时，执行 p.addLast(ChannelInitializer) 方法体，将服务端自身handler和ServerBootstrapAcceptor 加入到 pipeline
+    // 在服务端channel注册selector时，执行 p.addLast(ChannelInitializer) 方法体，将服务端自身handler和ServerBootstrapAcceptor 加入到服务端 pipeline
+    // 在有新连接进入时，服务端EventLoop的轮询中，会调用自身pipeline，其中会执行 ServerBootstrapAcceptor 的代码，为 新连接进入的客户端Channel 添加childHandler的内容
     p.addLast(new ChannelInitializer<Channel>() {
         @Override
         public void initChannel(Channel ch) throws Exception {
@@ -943,6 +945,8 @@ public void execute(Runnable task) {
     if (task == null) {
         throw new NullPointerException("task");
     }
+    // 确定它是否是分配给当前 Channel 以及它的 EventLoop 的那个线程
+    // EventLoop 负责处理一个 Channel 的整个生命周期内的所有事件
     boolean inEventLoop = inEventLoop();
     if (inEventLoop) {
         addTask(task);
@@ -1103,6 +1107,7 @@ public void read() {
    int size = readBuf.size();
    for (int i = 0; i < size; i ++) {
       readPending = false;
+      // 调用下一个 inboundhandler 的 channelRead 方法
       pipeline.fireChannelRead(readBuf.get(i));
    }
    ...
@@ -1112,7 +1117,23 @@ public final ChannelPipeline fireChannelRead(Object msg) {
     AbstractChannelHandlerContext.invokeChannelRead(head, msg);
     return this;
 }
+// HeadContext.java
+public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+		ctx.fireChannelRead(msg);
+}
 // AbstractChannelHandleContext.java
+public ChannelHandlerContext fireChannelRead(final Object msg) {
+    invokeChannelRead(findContextInbound(), msg);
+    return this;
+}
+private AbstractChannelHandlerContext findContextInbound() {
+    AbstractChannelHandlerContext ctx = this;
+    do {
+      	// 获取下一个 inbound = true
+        ctx = ctx.next;
+    } while (!ctx.inbound);
+    return ctx;
+}
 static void invokeChannelRead(final AbstractChannelHandlerContext next, Object msg) {
     final Object m = next.pipeline.touch(ObjectUtil.checkNotNull(msg, "msg"), next);
     EventExecutor executor = next.executor();
@@ -1130,7 +1151,8 @@ static void invokeChannelRead(final AbstractChannelHandlerContext next, Object m
 private void invokeChannelRead(Object msg) {
     if (invokeHandler()) {
         try {
-          	// 此次如果调用到上面提到的 ServerBootstrapAcceptor 的时候，他重写了 channelRead()方法,上面有分析
+          	// 此处如果调用到上面提到的 ServerBootstrapAcceptor 的时候，他重写了 channelRead()方法,上面有分析
+          	// 因为 ServerBootstrapAcceptor 是服务端的最后一个Handler，如果要设置服务端Handler并且要重写channelRead方法时，需要在最后指向下一个handler即调用 ctx.fireChannelRead(msg)，否则将无法执行childHandler的注册
             ((ChannelInboundHandler) handler()).channelRead(this, msg);
         } catch (Throwable t) {
             notifyHandlerException(t);

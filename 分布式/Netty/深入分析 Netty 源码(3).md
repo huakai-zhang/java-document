@@ -99,6 +99,16 @@ void init(Channel channel) throws Exception {
 
 ![image-20210107182500985](深入分析 Netty 源码(3).assets/image-20210107182500985.png)
 
+> Netty 提供了一个特殊的 ChannelInboudHandlerAdapter 子类：
+>
+> public abstract class ChannelInitializer< C extends Channel > extends ChannelInboundHandlerAdapter
+>
+> 它定义了下面的方法：
+>
+> protected abstract void initChanel(C ch);
+>
+> 这个方法提供了一种将多个 ChannelHandler 添加到一个 ChannelPipeline 中的简便方法。你只需要简单地向 Bootstrap 或 ServerBootstrap 的实例提供 ChannelInitializer 实现即可，并且一旦 Channel 被注册到了它的 EventLoop 之后，就会调用你的 initChannel 版本。在该方法返回之后，ChannelInitializer 的实例将会从 ChannelPipeline 中移除它自己。(Bootstrap注册过程中)
+
 明明插入的是一个ChannelInitializer 实例，为什么在ChannelPipeline中的双向链表中的元素却是一个ChannelHandlerContext? 为了解答这个问题，我们继续在代码中寻找答案吧。刚提到，在 Bootstrap.init 中会调用 p.addLast()方法，将 ChannelInitializer 插入到链表尾端：
 
 ```java
@@ -452,6 +462,8 @@ public class MyOutboundHandler extends ChannelOutboundHandlerAdapter {
 上面例子，MyInboundHandler收到一个 channelActive 事件，它在处理后，希望事件继续传播下去，就需要接着调用ctx.fireChannelActive()。
 
 ## 2.1 Outbound 事件传播方式
+
+![image-20210107183105454](深入分析 Netty 源码(3).assets/pipeline-channelread.png)
 
 Outbound事件都是请求事件(request event)， 即请求某件事情的发生，然后通过Outbound事件进行通知. Outbound事件的传播方向是tail -&gt; customContext -&gt; head。
 
