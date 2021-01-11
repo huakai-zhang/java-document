@@ -4,11 +4,19 @@
 
 ### 1.1.1 创建项目
 
+**IDEA 编译器方案**
+
 IDEA—&gt;File—&gt;New—&gt;Project—&gt;Spring Initializr 
 
 ![image-20201221113514175](SpringBoot开发实战.assets/image-20201221113514175.png)
 
 ![image-20201221113705666](SpringBoot开发实战.assets/image-20201221113705666.png)
+
+**官方 Spring Initializr 工具**
+
+https://start.spring.io/
+
+![image-20210111151304632](SpringBoot开发实战.assets/image-20210111151304632.png)
 
 ```java
 @SpringBootApplication
@@ -36,6 +44,32 @@ public class HelloController {
 ```
 
 访问localhost:8080/hello，页面输出Hello Spring Boot!
+
+#### 编写单元测试
+
+```java
+@RunWith(SpringRunner.class)
+@SpringBootTest
+// 开启 Web 应用的配置，用于模拟 ServletContext
+@WebAppConfiguration
+public class MvcTest {
+    
+    // 用于模拟调用 Controller 的接口发起请求
+    private MockMvc mvc;
+
+    // 在 Test 内容执行前预加载内容，来初始化对 HelloController 的模拟
+    @Before
+    public void setUp() {
+        mvc = MockMvcBuilders.standaloneSetup(new HelloController()).build();
+    }
+
+    @Test
+    public void hello() throws Exception {
+        mvc.perform(MockMvcRequestBuilders.get("/hello"));
+    }
+
+}
+```
 
 #### 其他启动方式
 
