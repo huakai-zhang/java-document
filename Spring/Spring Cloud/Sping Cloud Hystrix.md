@@ -1,4 +1,4 @@
-1 快速入门
+# 1 快速入门
 
 前面 ribbon-consume 实例中，在未加入断路器之前，关闭 8081 的实例，发送 GET 请求，会得到以下输出：
 
@@ -102,13 +102,13 @@ public String index() throws InterruptedException {
 
 当 sleepTime 大于 2000 的时候，就会返回 error，即服务消费者因调用的服务超时从而触发熔断请求，并调用回调逻辑返回结果。
 
-2 原理分析
+# 2 原理分析
 
-2.1 工作流程
+## 2.1 工作流程
 
 ![image-20210112154002749](Sping Cloud Hystrix.assets/hystrix-command-flow-chart.png)
 
-2.1.1 创建 HystrixCommand 或 HystrixObservableCommand 对象
+### 2.1.1 创建 HystrixCommand 或 HystrixObservableCommand 对象
 
 首先，构建一个HystrixCommand 或是 HystrixObservableCommand对象，用来表示对依赖服务的操作请求，同时传递所有需要的参数。从其命名中我们就能知道它采用了“命令模式”来实现对服务调用操作的封装。而这两个Command 对象分别针对不同的应用场景。
 
@@ -176,7 +176,7 @@ public class Client{
 
 从上面的示例中我们也可以发现，Invoker和Receiver的关系非常类似于“请求-响应”模式，所以它比较适用于实现记录日志、撤销操作、队列请求等。
 
-2.1.2 命令执行
+### 2.1.2 命令执行
 
 从图中我们可以看到一共存在4种命令的执行方式，而Hystrix在执行时会根据创建的 Command 对象以及具体的情况来选择一个执行。其中 HystrixCommand 实现了下面两个执行方式。
 
@@ -211,11 +211,11 @@ Observable<R> ocvalue = command.toObservable();
 
 * 每一个 Observable的执行,最后一定会通过调用subscriber.onCompleted ( )或者subscriber.onError ()来结束该事件的操作流。
 
-2.1.3 结果是否被缓存
+### 2.1.3 结果是否被缓存
 
 若当前命令的请求缓存功能是被启用的，并且该命令缓存命中，那么缓存的结果会立即以 observable 对象的形式返回。
 
-2.1.4 断路器是否打开
+### 2.1.4 断路器是否打开
 
 在命令结果没有缓存命中的时候，Hystrix在执行命令前需要检查断路器是否为打开状态:
 
@@ -223,7 +223,7 @@ Observable<R> ocvalue = command.toObservable();
 
 * 如果断路器是关闭的，那么Hystrix跳到第5步，检查是否有可用资源来执行命令。关于断路器的具体实现细节，后续会做更加详细的分析。
 
-2.1.5 线程池/请求队列/信号量是否占满
+### 2.1.5 线程池/请求队列/信号量是否占满
 
 如果与命令相关的线程池和请求队列，或者信号量（不使用线程池的时候）已经被占满，那么Hystrix也不会执行命令，而是转接到 fallback处理逻辑（对应下面第8步)。
 
@@ -233,7 +233,7 @@ Observable<R> ocvalue = command.toObservable();
 
 线程池隔离：会为每个 HystrixCommand 设置一个独立的线程池，这样在一个 HystrixCommand 包装下的依赖服务出现延迟过高的情况，也只是对该依赖服务的调用产生影响，并不会拖慢其他服务。 Hystric自动实现了依赖隔离。
 
-2.1.6 HystrixObservableCommand.construct() 或 HystrixCommand.run( )
+### 2.1.6 HystrixObservableCommand.construct() 或 HystrixCommand.run()
 
 Hystrix 会根据我们编写的方法来决定采取什么样的方式去请求依赖服务。
 
@@ -245,13 +245,14 @@ Hystrix 会根据我们编写的方法来决定采取什么样的方式去请求
 
 如果命令没有抛出异常并返回了结果，那么 Hystrix 在记录一些日志并采集监控报告之后将该结果返回。在使用run() 的情况下，Hystrix 会返回一个 Observable，它发射单个结果并产生 onCompleted 的结束通知;而在使用construct() 的情况下，Hystrix 会直接返回该方法产生的observable对象。
 
-2.1.7 计算断路器的健康度
+### 2.1.7 计算断路器的健康度
 
 Hystrix会将“成功”、“失败”、“拒绝”、“超时”等信息报告给断路器，而断路器会维护一组计数器来统计这些数据。
 
 断路器会使用这些统计数据来决定是否要将断路器打开，来对某个依赖服务的请求进行“熔断/短路”，直到恢复期结束。若在恢复期结束后，根据统计数据判断如果还是未达到健康指标，就再次“熔断/短路”。
 
-2.1.8 fallback 处理
+### 2.1.8 fallback 处理
+
 当命令执行失败的时候，Hystrix 会进入 fallback 尝试回退处理，我们通常也称该操作为“`服务降级`”。而能够引起服务降级处理的情况有下面几种:
 
 * 第4步，当前命令处于“熔断/短路”状态，断路器是打开的时候。
@@ -282,7 +283,7 @@ Hystrix会将“成功”、“失败”、“拒绝”、“超时”等信息�
 
 * toObservable ( ):正常返回observable对象，当订阅它的时候，将通过调用订阅者的onError方法来通知中止请求。
 
-2.1.9 返回成功的响应
+### 2.1.9 返回成功的响应
 
 当Hystrix命令执行成功之后，它会将处理结果直接返回或是以observable的形式返回。而具体以哪种方式返回取决于之前第2步中我们所提到的对命令的4种不同执行方式，下图中总结了这4种调用方式之间的依赖关系。我们可以将此图与在第2步中对前两者源码的分析联系起来，并且从源头toObservable ()来开始分析。
 
@@ -296,7 +297,7 @@ Hystrix会将“成功”、“失败”、“拒绝”、“超时”等信息�
 
 * execute():在 queue ( )产生异步结果Future对象之后，通过调用get()方法阻塞并等待结果的返回。
 
-2.2 断路器原理
+## 2.2 断路器原理
 
 断路器在 HystrixCommand 和 HystrixObservableCommand 执行过程中起到了举足轻重的作用，它是Hystrix的核心部件。那么断路器是如何决策熔断和记录信息的呢?
 
@@ -430,24 +431,175 @@ public void markSuccess() {
 
 ![image-20210112154002749](Sping Cloud Hystrix.assets/circuit-breaker-1280.png)
 
-2.3 属性详解
+## 2.3 属性详解
 
 ```yml
+# 4个不同优先级别的配置
+# 全局默认配置
+# 全局配置属性：通过在配置文件中定义全局属性值，在应用启动时或在与Spring Cloud Config和Spring Cloud Bus实现的动态刷新配置功能配合下，可以实现对“全局默认值”的覆盖以及在运行期对“全局默认值"的动态调整。
+# 实例默认值
+# 实例配置属性
 hystrix:
+	# Command属性主要用来控制 HystrixCommand 命令的行为，它主要有下面5种不同类型的属性配置。
   command:
-  	 # 默认超时时间
+  	 # 全局默认配置
     default:
+      # execution 配置控制的是 HystrixCommand.run() 执行
       execution:
         isolation:
           thread:
+            # 配置 HystrixCommand 执行的超时时间，单位毫秒，默认1000毫秒
             timeoutInMilliseconds: 1000
+          # 配置执行的隔离策略，THREAD 通过线程池隔离的策略，SEMAPHORE 通过信号量隔离的策略
+          strategry: THREAD
+      	# 是否启用超时时间
+      	timeout:
+      		enabled: true
+      # 设置服务降级策略是否启用，如果设置false那么当请求失败或者拒绝发生时，将不调用getFallback()
+      fallback:
+      	enable: true
+      circuitBreaker:
+      	# 当服务请求命令失败时，是否使用断路器来跟踪其健康指标和熔断请求
+      	enable: true
+      	# 设置在滚动时间窗中，断路器熔断的最小请求数（即在滚动时间窗（默认10秒）内收到19个请求，即使19个请求都失败，断路器也不打开）
+      	requestVolumeThreshold: 20
+      	# 断路器打开的错误百分比条件，在滚动时间窗中，在请求数量超过 ciruitBreaker.requestVolumeThreshold阈值的前提下，如果错误请求数的百分比超过50，就将断路器打开
+      	errorThresholdPercentage: 50
+      	# 当断路器打开之后的休眠时间窗。休眠时间窗结束后，会将断路器置为半开状态，尝试熔断的请求命令，如果依然失败就将断路器继续设置为打开，如果成功置为关闭
+      	sleepWindowInMilliseconds: 5000
+      	# 强制打开断路器
+      	forceOpen: false
+      	# 断路器强制进入关闭状态
+      	forceClosed: false
+      metrics:
+      	rollingStats:
+      		# 滚动时间窗的长度
+      		timeInMilliseconds: 10000
     # 单个方法自定义超时时间，名称为controller方法名
     getProductInfoList:
       execution:
-              isolation:
-                thread:
-                  timeoutInMilliseconds: 3000
+         isolation:
+             thread:
+                timeoutInMilliseconds: 3000
 ```
+
+## 2.4 Hystrix 仪表盘
+
+`Hystrix Dashboard` 主要用来实时监控 Hystrix的各项指标信息。通过Hystrix Dashboard反馈的实时信息，可以帮助我们快速发现系统中存在的问题，从而及时地采取应对措施。
+
+创建标准的 Spring Boot 工程，命名为 hystrix-dashboard。
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-hystrix</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-hystrix-dashboard</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
+
+```java
+// 修改启动类
+@EnableHystrixDashboard
+```
+
+```yml
+server:
+  port: 2001
+spring:
+  application:
+    name: hystrix-dashboard
+```
+
+到这里我们已经完成了基本配置，接下来可以启动该应用，并访问 http://localhost:2001/hystrix 可以看到如下页面:
+
+![image-20210112225424712](Sping Cloud Hystrix.assets/image-20210112225424712.png)
+
+这是 Hystrix Dashboard 的监控首页，该页面中并没有具体的监控信息。从页面的文字内容中我们可以知道，Hystrix Dashboard共支持三种不同的监控方式，如下所示。
+
+* `默认的集群监控` 通过URL http://turbine-hostname:port/turbine.stream 开启，实现对默认集群的监控。
+
+* `指定的集群监控` 通过URL http://turbine-hostname:port/turbine.stream?cluster=[clusterName] 开启，实现对clusterName集群的监控。
+
+* `单体应用的监控` 通过URL http://hystrix-app:port/hystrix.stream 开启，实现对具体某个服务实例的监控。
+
+前两者都是对集群的监控，需要整合`Turbine`才能实现。
+
+既然Hystrix Dashboard监控单实例节点需要通过访问实例的 /hystrix.stream 接口来实现，我们自然需要为服务实例添加这个端点，而添加该功能的步骤也同样简单，只需要下面三步。
+
+在服务实例 pom. xml 中的 dependencies 节点中新增 spring-boot-starter-actuator 监控模块以开启监控相关的端点，并确保已经引入断路器的依赖 spring-cloud-starter-hystrix:
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
+
+```java
+// springboot 版本如果是2.0则需要添加 ServletRegistrationBean 因为springboot的默认路径不是 "/hystrix.stream"，只要在自己的项目里配置上下面的servlet就可以了
+@Bean
+public ServletRegistrationBean getServlet() {
+    HystrixMetricsStreamServlet streamServlet = new HystrixMetricsStreamServlet();
+    ServletRegistrationBean registrationBean = new ServletRegistrationBean(streamServlet);
+    registrationBean.setLoadOnStartup(1);
+    registrationBean.addUrlMappings("/hystrix.stream");
+    registrationBean.setName("HystrixMetricsStreamServlet");
+    return registrationBean;
+}
+```
+
+确保在服务实例的主类中已经使用@EnableCircuitBreaker注解，开启了断路器功能。
+
+在为RIBBON-CONSUMER加入上面的配置之后，重启它的实例，此时我们可以在控制台中看到打印了大量的监控端点，其中/hystrix. stream就是用于Hystrix Dashboard来展现监控信息的接口。
+
+```
+Servlet HystrixMetricsStreamServlet mapped to [/hystrix.stream]
+```
+
+到这里已经完成了所有的配置，`在Hystrix Dashboard的首页`输入http://localhost:9000/hystrix.stream，可以看到已启动对RIBBON-CONSUMER的监控，`单击 Monitor Stream 按钮`，可以看到如下页面。
+
+![image-20210112231658270](Sping Cloud Hystrix.assets/image-20210112231658270.png) 
+
+在对该页面进行介绍之前，先看看在首页中我们还没有介绍的另外两个参数。
+
+* `Delay` 该参数用来控制服务器上轮询监控信息的延迟时间，默认为2000毫秒，可以通过配置该属性来降低客户端的网络和CPU消耗。
+
+* `Title` 该参数对应了上图头部标题 Hystrix Stream 之后的内容，默认会使用具体监控实例的URL，可以通过配置该信息来展示更合适的标题。
+
+回到监控页面，我们来详细说说其中各元素的具体含义。
+
+可以在监控信息的左上部找到两个重要的图形信息：一个实心圆和一条曲线。
+
+`实心圆` 其有两种含义。通过颜色的变化代表了实例的健康程度,如下图所示，它的健康度从绿色、黄色、橙色、红色递减。该实心圆除了颜色的变化之外，它的大小也会根据实例的请求流量发生变化，流量越大该实心圆就越大。所以通过该实心圆的展示，我们可以在大量的实例中快速发现故障实例和高压力实例。
+
+`曲线` 用来记录2分钟内流量的相对变化，可以通过它来观察流量的上升和下降趋势。
+
+其他一些数量指标如下图所示。
+
+
+
+使用 Hystrix Dashboard 来对单个实例做信息监控了，但是在分布式系统中，往往有非常多的实例需要去维护和监控。到目前为止，我们能做的就是通过开启多个窗口来监控多个实例，很显然这样的做法并不合理。可利用 Turbine 和 Hystrix Dashboard 配合实现对集群的监控。
+
+> 注意：当使用Hystrix Board来监控Spring Cloud Zuul构建的API网关时，ThreadPool信息会一直 处于Loading状态。这是由于Zuul默认会使用信号量来实现隔离，只有通过Hystrix配置把隔离机制改为线程池的方式才能够得以展示。
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -516,52 +668,3 @@ Circuit Breaker:断路器
 ```
 
 circuitBreaker.sleepWindowInMilliseconds：休眠时间窗（10000毫秒），休眠时间结束之后，会将断路器设置为half open，尝试熔断请求命令，如果失败，会重新进入熔断状态，休眠时间窗重新计时。如果成功，则关闭熔断器。 circuitBreaker.requestVolumeThreshold：滚动时间窗口中，断路器的最小请求数（10次） circuitBreaker.errorThresholdPercentage：滚动时间窗口中请求超过这个比例，会进入熔断状态（60%，也就是10次中的7次）
-
-## Hystrix Dashboard
-
-1.引入依赖
-
-```java
-<dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-netflix-hystrix-dashboard</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-```
-
-2.修改启动类
-
-```java
-@EnableHystrixDashboard
-```
-
-如果出现Failed opening connection to  [http://localhost:8091/hystrix.stream?delay=100](http://localhost:8091/hystrix.stream?delay=100) : 404 : HTTP/1.1 404 错误，需要在主类添加方法：
-
-```java
-@Bean
-	public ServletRegistrationBean getServlet() {
-		HystrixMetricsStreamServlet streamServlet = new HystrixMetricsStreamServlet();
-		ServletRegistrationBean registrationBean = new ServletRegistrationBean(streamServlet);
-		registrationBean.setLoadOnStartup(1);
-		registrationBean.addUrlMappings("/actuator/hystrix.stream");
-		registrationBean.setName("HystrixMetricsStreamServlet");
-		return registrationBean;
-	}
-```
-
-3.其他版本SpringBoot可能需要配置yml文件，如果不配置会出现上诉404错误
-
-```java
-management:
-	context-path: /
-```
-
-
-
-
-![img](https://img-blog.csdnimg.cn/20181122135031669.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) ![img](https://img-blog.csdnimg.cn/20181122135023266.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) ![img](https://img-blog.csdnimg.cn/20181122135536371.png)
-
