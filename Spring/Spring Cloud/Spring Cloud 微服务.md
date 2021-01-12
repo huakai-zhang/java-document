@@ -321,6 +321,14 @@ DynamicServerListLoadBalancer for client HELLO-SERVICE initialized: DynamicServe
 **服务注册**
 服务提供者在启动的时候会通过发送 REST 请求的方式将自己注册到 EurekaServer 上，同时带上了自身服务的一些元数据信息。Eureka Server 接收到这个 REST 请求之后，将元数据信息存储在一个双层结构 Map 中，其中第一层的 key 是服务名，第二层的 key 是具体服务的实例名。(我们可以回想一下之前在实现Ribbon负载均衡的例子中，Eureka 信息面板中一个服务有多个实例的情况，这些内容就是以这样的双层Map形式存储的。)
 
+```java
+// 存储服务元数据信息的双层结构 Map
+ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>> registry
+            = new ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>>();
+```
+
+![image-20210112115145466](Spring Cloud 微服务.assets/image-20210112115145466.png)
+
 在服务注册时，需要确认一下 `eureka.client.register-with-eureka=true` 参数是否正确，该值默认为 true。若设置为 false 将不会启动注册操作。
 
 **服务同步**
@@ -340,6 +348,47 @@ eureka.instance.lease-renewal-interval-in-seconds=30
 eureka.instance.lease-expiration-duration-in-seconds=90
 ```
 
+```java
+// @EnableDiscoveryClient，主要用于开启 DiscoveryClient 实例
+// DiscoverClient.java
+private final ScheduledExecutorService scheduler;
+// 两个定时任务，分别是服务获取和服务续约
+private void initScheduledTasks() {
+    if (clientConfig.shouldFetchRegistry()) {
+        // registry cache refresh timer
+        int registryFetchIntervalSeconds = clientConfig.getRegistryFetchIntervalSeconds();
+        int expBackOffBound = clientConfig.getCacheRefreshExecutorExponentialBackOffBound();
+        scheduler.schedule(
+                new TimedSupervisorTask(
+                        "cacheRefresh",
+                        scheduler,
+                        cacheRefreshExecutor,
+                        registryFetchIntervalSeconds,
+                        TimeUnit.SECONDS,
+                        expBackOffBound,
+                        new CacheRefreshThread()
+                ),
+                registryFetchIntervalSeconds, TimeUnit.SECONDS);
+    }
+    if (clientConfig.shouldRegisterWithEureka()) {
+        int renewalIntervalInSecs = instanceInfo.getLeaseInfo().getRenewalIntervalInSecs();
+        int expBackOffBound = clientConfig.getHeartbeatExecutorExponentialBackOffBound();
+        // Heartbeat timer
+        scheduler.schedule(
+                new TimedSupervisorTask(
+                        "heartbeat",
+                        scheduler,
+                        heartbeatExecutor,
+                        renewalIntervalInSecs,
+                        TimeUnit.SECONDS,
+                        expBackOffBound,
+                        new HeartbeatThread()
+                ),
+                renewalIntervalInSecs, TimeUnit.SECONDS);
+    }
+}
+```
+
 ### 服务消费者
 
 **获取服务**
@@ -354,9 +403,61 @@ eureka.instance.lease-expiration-duration-in-seconds=90
 
 对于访问实例的选择，Eureka中有 Region 和 Zone 的概念，一个 Region 中可以包含多个 Zone，每个服务客户端需要被注册到一个 Zone 中，所以每个客户端对应一个 Region 和 一个 Zone。在进行服务调用的时候，优先访问同处一个Zone中的服务提供方，若访问不到，就访问其他的Zone。
 
+```java
+public static List<String> getServiceUrlsFromConfig(EurekaClientConfig clientConfig, String instanceZone, boolean preferSameZone) {
+    List<String> orderedUrls = new ArrayList<String>();
+    // 获取 Region
+    String region = getRegion(clientConfig);
+    // 获取 Region 的 Zone
+    String[] availZones = clientConfig.getAvailabilityZones(clientConfig.getRegion());
+    if (availZones == null || availZones.length == 0) {
+        availZones = new String[1];
+        availZones[0] = DEFAULT_ZONE;
+    }
+    // 根据传入的参数按一定算法确定位于哪一个zone配置的serviceUrls
+    int myZoneOffset = getZoneOffset(instanceZone, preferSameZone, availZones);
+    // 通过zone获取serviceUrls
+    List<String> serviceUrls = clientConfig.getEurekaServerServiceUrls(availZones[myZoneOffset]);
+    if (serviceUrls != null) {
+    	orderedUrls.addAll(serviceUrls);
+	}
+    ...
+	// 返回给客户端，做负载均衡
+    return orderedUrls;
+}
+// Region 默认为 defalut
+public static String getRegion(EurekaClientConfig clientConfig) {
+    String region = clientConfig.getRegion();
+    if (region == null) {
+        region = DEFAULT_REGION;
+    }
+    region = region.trim().toLowerCase();
+    return region;
+}
+// eureka.client.serviceUrl.defaultZone 在没有特别为 Region 配置 Zone时候，默认采用defaultZone
+// Zone 可设置多个，并且通过逗号分隔开，Region 与 Zone 是一对多的关系
+public String[] getAvailabilityZones(String region) {
+    String value = (String)this.availabilityZones.get(region);
+    if (value == null) {
+        value = "defaultZone";
+    }
+    return value.split(",");
+}
+```
+
 **服务下线**
 
 在系统运行过程中必然会面临关闭或重启服务的某个实例的情况，在服务关闭期间，我们自然不希望客户端会继续调用关闭了的实例。所以在客户端程序中，当服务实例进行正常的关闭操作时，它会触发一个服务下线的 REST 请求给 Eureka Server，告诉服务注册中心:“我要下线了”。服务端在接收到请求之后，将该服务状态置为下线(DOWN)，并把该下线事件传播出去。
+
+**健康检测**
+
+默认情况下，Eureka 中各个服务实例的健康检测并不是通过 `spring-boot-actuator` 模块的 /health 端点来实现的，而是依靠客户端心跳的方式来保持服务实例的存活。在 Eureka 的服务续约与剔除机制下，客户端的健康状态从注册到注册中心开始都会处于 `UP 状态`，除非心跳终止一段时间之后，服务注册中心将其剔除。默认的心跳实现方式可以有效检查客户端进程是否正常运作，但却无法保证客户端应用能够正常提供服务。由于大多数微服务应用都会有一些其他的外部资源依赖，比如数据库、缓存、消息代理等，如果我们的应用与这些外部资源无法联通的时候，实际上已经不能提供正常的对外服务了，但是因为客户端心跳依然在运行，所以它还是会被服务消费者调用，而这样的调用实际上并不能获得预期的结果。
+
+在 Spring Cloud Eureka 中，我们可以通过简单的配置，把 Eureka 客户端的健康检测交给 spring-boot-actuator模块的 /health 端点(状态页和健康检查默认使用 actuator  提供的 /info 和 /health 端点，可通过配置进行自定义)，以实现更加全面的健康状态维护。详细的配置步骤如下所示:
+
+* 在pom. xml中引入 spring-boot-starter-actuator 模块的依赖。
+* 在 application.properties 中增加参数配置 `eureka.client.healthcheck.enabled=true`。
+* 如果客户端的 /health 端点路径做了一些特殊处理，请参考前文介绍端点配置时的方法进行配置，让服务注册中心可以正确访问到健康检测端点。
 
 ### 服务注册中心
 
@@ -383,4 +484,6 @@ THE SELF PRESERVATION MODE IS TURNED OFF.THIS MAY NOT PROTECT INSTANCE EXPIRY IN
 ```
 
 意思是：自保模式已经被你关闭，这可能无法保护网络/其他问题的情况下失效。
+
+------
 
