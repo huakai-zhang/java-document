@@ -421,6 +421,7 @@ public class ThrowExceptionFilter extends ZuulFilter {
 ```
 
 **禁用过滤器**
+
 不论是核心过滤器还是自定义过滤器，只要在API网关应用中为它们创建了实例，那么默认情况下，它们都是启用状态的。那么如果有些过滤器我们不想使用了，如何禁用它们呢?大多情况下初识Zuul的使用者第一反应就是通过重写shouldFilter逻辑，让它返回false，这样该过滤器对于任何请求都不会被执行，基本实现了对过滤器的禁用。但是，对于自定义过滤器来说似乎是实现了过滤器不生效的功能，但是这样的做法缺乏灵活性。由于直接要修改过滤器逻辑，我们不得不重新编译程序，并且如果该过滤器在未来一段时间还有可能被启用的时候，那么就又得修改代码并编译程序。同时，对于核心过滤器来说，就更为麻烦，我们不得不获取源码来进行修改和编译。
 实际上，在Zuul中特别提供了一个参数来禁用指定的过滤器，该参数的配置格式如下:zuul.<SimpleclassName>.<filterType>.disable=true
 其中，<SimpleclassName>代表过滤器的类名，比如快速入门示例中的AccessFilter;<filterType>代表过滤器类型，比如快速入门示例中 AccessFilter 的过滤器类型pre。所以，如果我们想要禁用快速入门示例中的 AccessFilter过滤器，只需要在application.properties配置文件中增加如下配置即可:
