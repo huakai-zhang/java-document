@@ -1,4 +1,16 @@
-# 1 快速入门
+# 服务容错保护 Spring Cloud Hystrix
+
+## 1 快速入门
+
+防雪崩利器，基于Netflix对应的Hystrix 具备的功能： 
+
+1. 服务降级 
+
+2. 依赖隔离 
+
+3. 服务熔断 
+
+4. 监控（Hystrix Dashboard）
 
 前面 ribbon-consume 实例中，在未加入断路器之前，关闭 8081 的实例，发送 GET 请求，会得到以下输出：
 
@@ -102,13 +114,13 @@ public String index() throws InterruptedException {
 
 当 sleepTime 大于 2000 的时候，就会返回 error，即服务消费者因调用的服务超时从而触发熔断请求，并调用回调逻辑返回结果。
 
-# 2 原理分析
+## 2 原理分析
 
-## 2.1 工作流程
+### 2.1 工作流程
 
 ![image-20210112154002749](Sping Cloud Hystrix.assets/hystrix-command-flow-chart.png)
 
-### 2.1.1 创建 HystrixCommand 或 HystrixObservableCommand 对象
+**1 创建 HystrixCommand 或 HystrixObservableCommand 对象**
 
 首先，构建一个HystrixCommand 或是 HystrixObservableCommand对象，用来表示对依赖服务的操作请求，同时传递所有需要的参数。从其命名中我们就能知道它采用了“命令模式”来实现对服务调用操作的封装。而这两个Command 对象分别针对不同的应用场景。
 
@@ -176,7 +188,7 @@ public class Client{
 
 从上面的示例中我们也可以发现，Invoker和Receiver的关系非常类似于“请求-响应”模式，所以它比较适用于实现记录日志、撤销操作、队列请求等。
 
-### 2.1.2 命令执行
+**2 命令执行**
 
 从图中我们可以看到一共存在4种命令的执行方式，而Hystrix在执行时会根据创建的 Command 对象以及具体的情况来选择一个执行。其中 HystrixCommand 实现了下面两个执行方式。
 
@@ -211,11 +223,11 @@ Observable<R> ocvalue = command.toObservable();
 
 * 每一个 Observable的执行,最后一定会通过调用subscriber.onCompleted ( )或者subscriber.onError ()来结束该事件的操作流。
 
-### 2.1.3 结果是否被缓存
+**3 结果是否被缓存**
 
 若当前命令的请求缓存功能是被启用的，并且该命令缓存命中，那么缓存的结果会立即以 observable 对象的形式返回。
 
-### 2.1.4 断路器是否打开
+**4 断路器是否打开**
 
 在命令结果没有缓存命中的时候，Hystrix在执行命令前需要检查断路器是否为打开状态:
 
@@ -223,7 +235,9 @@ Observable<R> ocvalue = command.toObservable();
 
 * 如果断路器是关闭的，那么Hystrix跳到第5步，检查是否有可用资源来执行命令。关于断路器的具体实现细节，后续会做更加详细的分析。
 
-### 2.1.5 线程池/请求队列/信号量是否占满
+**5 线程池/请求队列/信号量是否占满**
+
+#### 依赖隔离
 
 如果与命令相关的线程池和请求队列，或者信号量（不使用线程池的时候）已经被占满，那么Hystrix也不会执行命令，而是转接到 fallback处理逻辑（对应下面第8步)。
 
@@ -233,7 +247,7 @@ Observable<R> ocvalue = command.toObservable();
 
 线程池隔离：会为每个 HystrixCommand 设置一个独立的线程池，这样在一个 HystrixCommand 包装下的依赖服务出现延迟过高的情况，也只是对该依赖服务的调用产生影响，并不会拖慢其他服务。 Hystric自动实现了依赖隔离。
 
-### 2.1.6 HystrixObservableCommand.construct() 或 HystrixCommand.run()
+**6 HystrixObservableCommand.construct() 或 HystrixCommand.run()**
 
 Hystrix 会根据我们编写的方法来决定采取什么样的方式去请求依赖服务。
 
@@ -245,15 +259,17 @@ Hystrix 会根据我们编写的方法来决定采取什么样的方式去请求
 
 如果命令没有抛出异常并返回了结果，那么 Hystrix 在记录一些日志并采集监控报告之后将该结果返回。在使用run() 的情况下，Hystrix 会返回一个 Observable，它发射单个结果并产生 onCompleted 的结束通知;而在使用construct() 的情况下，Hystrix 会直接返回该方法产生的observable对象。
 
-### 2.1.7 计算断路器的健康度
+**7 计算断路器的健康度**
 
 Hystrix会将“成功”、“失败”、“拒绝”、“超时”等信息报告给断路器，而断路器会维护一组计数器来统计这些数据。
 
 断路器会使用这些统计数据来决定是否要将断路器打开，来对某个依赖服务的请求进行“熔断/短路”，直到恢复期结束。若在恢复期结束后，根据统计数据判断如果还是未达到健康指标，就再次“熔断/短路”。
 
-### 2.1.8 fallback 处理
+**8 fallback 处理**
 
-当命令执行失败的时候，Hystrix 会进入 fallback 尝试回退处理，我们通常也称该操作为“`服务降级`”。而能够引起服务降级处理的情况有下面几种:
+#### 服务降级
+
+当命令执行失败的时候，Hystrix 会通过 HystrixCommand 注解指定 fallbackMethod（回退函数）中具体实现降级逻辑，我们通常也称该操作为“`服务降级`”。而能够引起服务降级处理的情况有下面几种:
 
 * 第4步，当前命令处于“熔断/短路”状态，断路器是打开的时候。
 
@@ -283,7 +299,7 @@ Hystrix会将“成功”、“失败”、“拒绝”、“超时”等信息�
 
 * toObservable ( ):正常返回observable对象，当订阅它的时候，将通过调用订阅者的onError方法来通知中止请求。
 
-### 2.1.9 返回成功的响应
+**9 返回成功的响应**
 
 当Hystrix命令执行成功之后，它会将处理结果直接返回或是以observable的形式返回。而具体以哪种方式返回取决于之前第2步中我们所提到的对命令的4种不同执行方式，下图中总结了这4种调用方式之间的依赖关系。我们可以将此图与在第2步中对前两者源码的分析联系起来，并且从源头toObservable ()来开始分析。
 
@@ -297,9 +313,33 @@ Hystrix会将“成功”、“失败”、“拒绝”、“超时”等信息�
 
 * execute():在 queue ( )产生异步结果Future对象之后，通过调用get()方法阻塞并等待结果的返回。
 
-## 2.2 断路器原理
+### 2.2 断路器原理
 
 断路器在 HystrixCommand 和 HystrixObservableCommand 执行过程中起到了举足轻重的作用，它是Hystrix的核心部件。那么断路器是如何决策熔断和记录信息的呢?
+
+#### 服务熔断
+
+
+![img](Sping Cloud Hystrix.assets/20181121172550455.png)
+
+`断路器(Circuit Breaker)模式`设计状态机：3种模式 closed，open，half open
+
+调用失败累计达到一定的阈值或者一定的比例就会启动熔断机制，open 是容器打开状态，此时对服务都直接返回错误，但是会设置一个时钟选项，默认的到达这个时间之后，就会进入半熔断状态，允许定量的服务请求。如果调用都成功，或者达到一定的比例，则会关闭熔断器，否则再次进入 open。
+
+```java
+@HystrixCommand(commandProperties = {
+    @HystrixProperty(name = "circuitBreaker.enabled", value = "true"), // 设置熔断
+    @HystrixProperty(name = "circuitBreaker.requestVolumeThreshold", value = "10"),
+    @HystrixProperty(name = "circuitBreaker.sleepWindowInMilliseconds", value = "10000"),
+    @HystrixProperty(name = "circuitBreaker.errorThresholdPercentage", value = "60")
+})
+```
+
+`circuitBreaker.sleepWindowInMilliseconds` 休眠时间窗（10000毫秒），断路器打开后休眠时间窗开始计时，休眠时间结束之后，会将断路器设置为 half open，尝试熔断请求命令，如果失败，会重新进入熔断状态，休眠时间窗重新计时。如果成功，则关闭熔断器。
+
+`circuitBreaker.requestVolumeThreshold` 滚动时间窗口中，断路器的最小请求数（10次） 
+
+`circuitBreaker.errorThresholdPercentage` 滚动时间窗口中请求超过最小请求数的前提下超过这个比例，会进入熔断状态（60%，也就是10次中的7次）
 
 我们先来看看断路器 HystrixCircuitBreaker 的定义:
 
@@ -431,7 +471,7 @@ public void markSuccess() {
 
 ![image-20210112154002749](Sping Cloud Hystrix.assets/circuit-breaker-1280.png)
 
-## 2.3 属性详解
+### 2.3 属性详解
 
 ```yml
 # 4个不同优先级别的配置
@@ -483,7 +523,7 @@ hystrix:
                 timeoutInMilliseconds: 3000
 ```
 
-## 2.4 Hystrix 仪表盘
+### 2.4 Hystrix 仪表盘
 
 `Hystrix Dashboard` 主要用来实时监控 Hystrix的各项指标信息。通过Hystrix Dashboard反馈的实时信息，可以帮助我们快速发现系统中存在的问题，从而及时地采取应对措施。
 
@@ -583,88 +623,12 @@ Servlet HystrixMetricsStreamServlet mapped to [/hystrix.stream]
 
 其他一些数量指标如下图所示。
 
-
+![image-20210112231658270](Sping Cloud Hystrix.assets/a8d9a278e0cf3eee49e192bfc5eccd8.png)
 
 使用 Hystrix Dashboard 来对单个实例做信息监控了，但是在分布式系统中，往往有非常多的实例需要去维护和监控。到目前为止，我们能做的就是通过开启多个窗口来监控多个实例，很显然这样的做法并不合理。可利用 Turbine 和 Hystrix Dashboard 配合实现对集群的监控。
 
 > 注意：当使用Hystrix Board来监控Spring Cloud Zuul构建的API网关时，ThreadPool信息会一直 处于Loading状态。这是由于Zuul默认会使用信号量来实现隔离，只有通过Hystrix配置把隔离机制改为线程池的方式才能够得以展示。
 
+------
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-#### Feign-Hystric
-
-1.配置：
-
-```java
-feign:
-  hystrix:
-    enabled: true
-```
-
-2.服务端
-
-```java
-@FeignClient(name = "product", fallback = ProductClient.ProductClientFallback.class)
-public interface ProductClient {
-
-    @PostMapping("/product/listForOrder")
-    List<ProductInfoOutput> listForOrder(@RequestBody List<String> productIdList);
-
-    @Component
-    static class ProductClientFallback implements ProductClient {
-
-        @Override
-        public List<ProductInfoOutput> listForOrder(List<String> productIdList) {
-            return null;
-        }
-    }
-}
-```
-
-3.调用方启动类配置
-
-```java
-@ComponentScan(basePackages =  "com.imooc")
-```
-
-防雪崩利器 基于Netflix对应的Hystrix 具备的功能： 1.服务降级 2.依赖隔离 3.服务熔断 4.监控（Hystrix Dashboard）
-
-服务降级
-
-优先核心服务，非核心服务不可用或弱可用 通过HystrixCommand注解指定 fallbackMethod（回退函数）中具体实现降级逻辑
-
-使用RestTemplate的简单实例：
-
-1.引入依赖
-
-## 服务熔断
-
-
-![img](https://img-blog.csdnimg.cn/20181121172550455.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
-
-Circuit Breaker:断路器
-
-断路器模式设计状态机：3种模式closed，open，half open 调用失败累计达到一定的阈值或者一定的比例就会启动熔断机制，open是容器打开状态，此时对服务都直接返回错误，但是会设置一个时钟选项，默认的到达这个时间之后，就会进入半熔断状态，允许定量的服务请求。如果调用都成功，或者达到一定的比例，则会关闭熔断器，否则再次进入open。
-
-```java
-@HystrixCommand(commandProperties = {
-    @HystrixProperty(name = "circuitBreaker.enabled", value = "true"), // 设置熔断
-    @HystrixProperty(name = "circuitBreaker.requestVolumeThreshold", value = "10"),
-    @HystrixProperty(name = "circuitBreaker.sleepWindowInMilliseconds", value = "10000"),
-    @HystrixProperty(name = "circuitBreaker.errorThresholdPercentage", value = "60")
-})
-```
-
-circuitBreaker.sleepWindowInMilliseconds：休眠时间窗（10000毫秒），休眠时间结束之后，会将断路器设置为half open，尝试熔断请求命令，如果失败，会重新进入熔断状态，休眠时间窗重新计时。如果成功，则关闭熔断器。 circuitBreaker.requestVolumeThreshold：滚动时间窗口中，断路器的最小请求数（10次） circuitBreaker.errorThresholdPercentage：滚动时间窗口中请求超过这个比例，会进入熔断状态（60%，也就是10次中的7次）

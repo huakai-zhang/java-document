@@ -1,4 +1,4 @@
-# 1 客户端负载均衡器 Spring Cloud Ribbon
+# 客户端负载均衡器 Spring Cloud Ribbon
 
 Spring Cloud Ribbon 是一个基于 HTTP 和 TCP 的客户端负载均衡工具。
 
@@ -13,9 +13,9 @@ RestTemplate，Feign，Zuul 服务发现 服务选择规则 服务监听 ServerL
 
 这样，我们就可以将服务提供者的高可用以及服务消费者的负载均衡调用一起实现了。
 
-## 1.1 RestTemplate 详解
+## 1 RestTemplate 详解
 
-### 1.1.1 GET 请求
+### 1.1 GET 请求
 
 在 RestTemplate中，对GET 请求可以通过如下两个方法进行调用实现。
 
@@ -36,7 +36,7 @@ string result = restTemplate.getFor0bject(uri, String.class);
 
 当不需要关注请求响应除 body 外的其他内容时，该函数就非常好用，可以少一个从Response中获取 body 的步骤。
 
-### 1.1.2 POST 请求
+### 1.2 POST 请求
 
 在RestTemplate 中，对POST请求时可以通过如下三个方法进行调用实现。
 第一种: `postForEntity函数`。该方法同GET 请求中的getForEntity类似，会在调用后返回ResponseEntity<T>对象，其中T为请求响应的 body类型。比如下面这个例子，使用 postForEntity 提交POST请求到 USER-SERVICE 服务的 /user 接口，提交的 body 内容为user对象，请求响应返回的body类型为String。
@@ -63,7 +63,7 @@ User user = new User("didi",40);
 URI responseURI = restTemplate.postForLocation("http://USER-SERVICE/user", user);
 ```
 
-### 1.1.3 PUT请求
+### 1.3 PUT请求
 
 在 RestTemplate 中，对PUT 请求可以通过put方法进行调用实现，比如:
 
@@ -76,7 +76,7 @@ restTemplate.put("http://USER-SERVICE/user/{1}",user,id);
 
 put函数为void类型，所以没有返回内容，也就没有其他函数定义的responseType参数，除此之外的其他传入参数定义与用法与 postForobject 基本一致。
 
-### 1.1.4 DELETE请求
+### 1.4 DELETE请求
 
 在RestTemplate 中，对DELETE请求可以通过delete方法进行调用实现，比如:
 
@@ -90,7 +90,7 @@ restTemplate.delete("http://USER-SERVICE/user/{1}",id);
 
 GET、POST、PUT、DELETE 的几个方法均有三个重载方法。
 
-## 1.2 RestTemplate 的三种使用方式
+## 2 RestTemplate 的三种使用方式
 
 1.第一种方式(直接使用restTemplate，url写死)
 
@@ -131,7 +131,7 @@ private RestTemplate restTemplate;
 String response = restTemplate.getForObject("http://PRODUCT/msg", String.class);
 ```
 
-## 1.3 源码分析
+## 3 源码分析
 
 **LoadBalanced **
 
@@ -344,7 +344,7 @@ public interface ServiceInstance{
 
 **ZoneAwareLoadBalancer**
 
-![image-20210112154002749](Spring Cloud 应用间通信.assets/image-20210112154002749.png)
+![image-20210112154002749](Spring Cloud Ribbon.assets/image-20210112154002749.png)
 
 ZoneAwareLoadBalancer 负载均衡器是对 `DynamicServerListLoadBalancer` 的扩展。在 DynamicserverListLoadBalancer 中，我们可以看到它并没有重写选择具体服务实例的 chooseserver 函数，所以它依然会采用在 BaseLoadBalancer中实现的算法。使用 `RoundRobinRule` 规则，以`线性轮询`的方式来选择调用的服务实例，该算法实现简单并没有区域(Zone)的概念，所以它会把所有实例视为一个Zone下的节点来看待，这样就会周期性地产生跨区域(Zone）访问的情况，由于跨区域会产生更高的延迟，这些实例主要以防止区域性故障实现高可用为目的而不能作为常规访问的实例，所以在多区域部署的情况下会有一定的性能问题，而该负载均衡器则可以避免这样的问题。那么它是如何实现的呢?
 
@@ -445,7 +445,7 @@ public Server chooseServer(Object key) {
 * 当获得的可用Zone区域集合不为空，并且个数小于Zone区域总数，就随机选择一个Zone区域。
 * 在确定了某个Zone区域后，则获取了对应Zone 区域的服务均衡器，并调用chooseServer来选择具体的服务实例，而在 chooseServer 中将使用 IRule接口的 choose函数来选择具体的服务实例。在这里，IRule接口的实现会使用ZoneAvoidanceRule来挑选出具体的服务实例。
 
-## 1.4 负载均衡策略
+## 4 负载均衡策略
 
 RestTemplate默认负载均衡策略为轮询：
 
@@ -468,68 +468,5 @@ ribbon 有 7 种负载均衡策略可供选择：
 | WeightedResponseTimeRule  | 响应时间加权重策略 | 根据server的响应时间分配权重，响应时间越长，权重越低，被选择到的概率也就越低。响应时间越短，权重越高，被选中的概率越高，这个策略很贴切，综合了各种因素，比如：网络，磁盘，io等，都直接影响响应时间 |
 | ZoneAvoidanceRule         | 区域权重策略       | 综合判断server所在区域的性能，和server的可用性，轮询选择server并且判断一个AWS Zone的运行性能是否可用，剔除不可用的Zone中的所有server |
 
-
-
-
-
-
-
-
-
- Feign的使用
-
-声明式REST客户端（伪RPC） 采用了基于接口的注解 1.引入依赖
-
-```java
-<dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-openfeign</artifactId>
-        </dependency>
-```
-
-2.在启动类上加注解@EnableFeignClients 3.定义好需要调用的接口
-
-```java
-@FeignClient(name = "product")
-public interface ProductClient {
-
-    @PostMapping("/product/listForOrder")
-    List<ProductInfoOutput> listForOrder(@RequestBody List<String> productIdList);
-
-    @PostMapping("/product/decreaseStock")
-    void decreaseStock(@RequestBody List<DecreaseStockInput> decreaseStockInputList);
-}
-```
-
-4.调用
-
-```java
-@Autowired
-    private ProductClient productClient;
-
-       //查询商品信息(调用商品服务)
-        List<ProductInfoOutput> productInfoList = productClient.listForOrder(productIdList);
-```
-
-消息队列
-
-消息中间件的选择
-
-RabbitMQ，Kafka，ActiveMQ
-
-RabbitMQ
-
-安装
-
-1.进入 [RabbitMQ](http://www.rabbitmq.com/download.html)下载页面 2.使用Docker镜像 ![img](https://img-blog.csdnimg.cn/20181101170334361.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
-
-```java
-docker run -d --hostname my-rabbit -p 5672:5672 -p 15672:15672 rabbitmq:3.7.3-management
-```
-
-默认帐号：guest，密码：guest
-
- 微服务和容器
-
-从系统环境开始，自底至上打包应用 轻量级，对资源的有效隔离和管理 可复用，版本化
+------
 

@@ -64,7 +64,7 @@ Eureka客户端，主要处理服务的注册与发现。客户端服务通过�
 
 ## 3.1 搭建服务注册中心
 
-![img](Spring Cloud 微服务.assets/20180821164104446) ![img](Spring Cloud 微服务.assets/20180821164233985)
+![img](Spring Cloud 微服务简介与 Eureka.assets/20180821164104446.png) ![img](Spring Cloud 微服务简介与 Eureka.assets/20180821164233985.png)
 
 **核心依赖**
 
@@ -72,7 +72,7 @@ Eureka客户端，主要处理服务的注册与发现。客户端服务通过�
 <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>2.4.1</version>
+    <version>2.0.9.RELEASE</version>
     <relativePath/> <!-- lookup parent from repository -->
 </parent>
 <dependencies>
@@ -83,7 +83,7 @@ Eureka客户端，主要处理服务的注册与发现。客户端服务通过�
 </dependencies>
 <properties>
 	<java.version>1.8</java.version>
-	<spring-cloud.version>Greenwich.SR3</spring-cloud.version>
+	<spring-cloud.version>Finchley.SR2</spring-cloud.version>
 </properties>
 
 <dependencyManagement>
@@ -130,12 +130,12 @@ eureka:
 ```
 
 
-![img](Spring Cloud 微服务.assets/20180821165002896)
+![img](Spring Cloud 微服务简介与 Eureka.assets/20180821165002896.png)
 
 ## 3.2 注册服务提供者
 
 
-![img](Spring Cloud 微服务.assets/2018082215393054)
+![img](Spring Cloud 微服务简介与 Eureka.assets/2018082215393054.png)
 
 **核心依赖**
 
@@ -213,7 +213,7 @@ c.s.h.HelloServiceApplication            : Started HelloServiceApplication in 6.
 c.n.e.registry.AbstractInstanceRegistry  : Registered instance HELLO-SERVICE/localhost:hello-service with status UP (replication=false)
 ```
 
-![image-20210111172904718](Spring Cloud 微服务.assets/image-20210111172904718.png)
+![image-20210111172904718](Spring Cloud 微服务简介与 Eureka.assets/image-20210111172904718.png)
 
 ## 3.3 Eureka Server 高可用
 
@@ -246,7 +246,7 @@ eureka:
 
 会发现三个服务端都注册上了client
 
-![image-20210111182351884](Spring Cloud 微服务.assets/image-20210111182351884.png)
+![image-20210111182351884](Spring Cloud 微服务简介与 Eureka.assets/image-20210111182351884.png)
 
 ## 3.4 服务发现与消费
 
@@ -314,7 +314,7 @@ DynamicServerListLoadBalancer for client HELLO-SERVICE initialized: DynamicServe
 * **服务提供者** 启动了两个实例，一个注册到服务注册中心-1，另一个注册到服务注册中心-2
 * 两个 **服务消费者**，它们也分别指向一个注册中心
 
-![image-20210111221826075](Spring Cloud 微服务.assets/image-20210111221826075.png)
+![image-20210111221826075](Spring Cloud 微服务简介与 Eureka.assets/image-20210111221826075.png)
 
 ### 服务提供者
 
@@ -327,7 +327,7 @@ ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>> registry
             = new ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>>();
 ```
 
-![image-20210112115145466](Spring Cloud 微服务.assets/image-20210112115145466.png)
+![image-20210112115145466](Spring Cloud 微服务简介与 Eureka.assets/image-20210112115145466.png)
 
 在服务注册时，需要确认一下 `eureka.client.register-with-eureka=true` 参数是否正确，该值默认为 true。若设置为 false 将不会启动注册操作。
 
