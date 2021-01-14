@@ -443,24 +443,284 @@ zuul.AccessFilter.pre.disable=true
 
 **动态路由**
 
+如何实现Zuul的动态路由，我们很自然地会将它与Spring Cloud Config的动态刷新机制联系到一起。只需将API网关服务的配置文件通过Spring Cloud Config 连接的Git仓库存储和管理，我们就能轻松实现动态刷新路由规则的功能。
 
+创建一个基础的 Spring Boot 工程，命名为 api-gateway-dynamic-route。
 
+在pom.xml中引入对zuul、eureka和 config 的依赖，具体内容如下:
 
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-zuul</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-config</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
 
+```yml
+# *************** bootstrap.yml ***************
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    config:
+      uri: http://localhost:7001/
+server:
+  port: 5566
+eureka:
+  client:
+    service-url:
+      defaultZone: http://192.168.25.128:8761/eureka/
+management:
+  endpoints:
+    web:
+      exposure:
+      	# 端点全部开放，可以只开放refresh和route
+        include: '*'
+```
 
+```java
+@EnableZuulProxy
+@SpringCloudApplication
+public class DynamicRouteApplication {
 
+    public static void main(String[] args) {
+        SpringApplication.run(DynamicRouteApplication.class, args);
+    }
 
+    @Primary
+    @Bean
+    // 需要使用@Refreshscope注解来将Zuul的配置内容动态化
+    @RefreshScope
+    @ConfigurationProperties("zuul")
+    public ZuulProperties zuulProperties() {
+        return new ZuulProperties();
+    }
+}
+```
 
+Git 仓库创建 config-repo/api-gateway.properties：
 
+```properties
+zuul.routes.service-a.path=/service-a/**
+zuul.routes.service-a.serviceId=hello-service
+zuul.routes.service-b.path=/service-b/**
+zuul.routes.service-b.url=http://localhost:8001
+```
 
+启动 config-server、eureka-server、api-gateway-dynamic-route、hello-service。
 
+可通过对 API 网关服务调用 http://localhost:5566/actuator/routes 接口来获取当前网关上的路由规则。
 
+```json
+{
+  "/service-a/**": "hello-service",
+  "/service-b/**": "http://localhost:8001",
+  "/api-gateway/**": "api-gateway",
+  "/config-server/**": "config-server",
+  "/hello-service/**": "hello-service"
+}
+```
 
+修改 Git 仓库 config-repo/api-gateway.properties：
 
- Zuul限流
+```properties
+zuul.routes.service-b.serviceId=hello-service
+```
 
+![image-20210114180253244](Spring Cloud Zuul.assets/image-20210114180253244.png)
 
-时机：请求被转发之前调用 使用令牌桶：（谷歌插件RateLimiterFilter） ![img](https://img-blog.csdnimg.cn/20181119132604419.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
+![image-20210114180310430](Spring Cloud Zuul.assets/image-20210114180310430.png)
+
+**动态过滤器**
+
+对于实现请求过滤器的动态加载，我们需要借助基于JVM实现的动态语言的帮助，比如Groovy。
+
+创建一个基础的Spring Boot工程，命名为 api-gateway-dynamic-filter。
+
+在pom.xml中引入对zuul、eureka和 groovy的依赖，具体内容如下:
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-zuul</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.codehaus.groovy</groupId>
+    <artifactId>groovy-all</artifactId>
+</dependency>
+```
+
+```yml
+spring:
+  application:
+    name: api-gateway
+server:
+  port: 5555
+eureka:
+  client:
+    service-url:
+      defaultZone: http://192.168.25.128:8761/eureka/
+zuul:
+  routes:
+    hello:
+      path: /hello-service/**
+      serviceId: hello-service
+  filter:
+    # zuul.filter.root用来指定动态加载的过滤器存储路径
+    # zuul.filter.interval用来配置动态加载的间隔时间，以秒为单位
+    root: api-gateway-dynamic-filter\src\main\java\com\spring\filter
+    interval: 5
+```
+
+```java
+// 创建用来加载自定义属性的配置类，命名为 FilterConfiguration
+@ConfigurationProperties("zuul.filter")
+public class FilterConfiguration {
+
+    private String root;
+    private Integer interval;
+
+    public String getRoot() {
+        return root;
+    }
+
+    public void setRoot(String root) {
+        this.root = root;
+    }
+
+    public Integer getInterval() {
+        return interval;
+    }
+
+    public void setInterval(Integer interval) {
+        this.interval = interval;
+    }
+}
+//创建应用启动主类，并在该类中引入上面定义的FilterConfiguration配置
+@EnableZuulProxy
+@EnableConfigurationProperties({FilterConfiguration.class})
+@SpringCloudApplication
+public class DynamicFilterApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(DynamicFilterApplication.class, args);
+    }
+
+    // 创建动态加载过滤器的实例
+    @Bean
+    public FilterLoader filterLoader(FilterConfiguration filterConfiguration) {
+        FilterLoader filterLoader = FilterLoader.getInstance();
+        filterLoader.setCompiler(new GroovyCompiler());
+        try {
+            FilterFileManager.setFilenameFilter(new GroovyFileFilter());
+            FilterFileManager.init(
+                    filterConfiguration.getInterval(),
+                    filterConfiguration.getRoot() + "/pre",
+                    filterConfiguration.getRoot() + "/post"
+            );
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return filterLoader;
+    }
+}
+```
+
+至此，我们就已经完成了为基础的API网关服务增加动态加载过滤器的能力。根据上面的定义，API网关应用会每隔5秒，从 API 网关服务所在位置的 filter/pre和filter/post目录下获取Groovy定义的过滤器，并对其进行编译和动态加载使用。对于动态加载的时间间隔，可通过 zuul.filter.interval 参数来修改。而加载过滤器实现类的根目录可通过 zuul.filter.root 调整根目录的位置来修改。
+
+访问 http://localhost:5555/hello-service/hello，可以正确输出 Hello World。
+
+在filter/pre目录下创建一个 pre 类型的过滤器，命名为PreFilter.groovy。
+
+```groovy
+class PreFilter extends ZuulFilter {
+
+    Logger log = LoggerFactory.getLogger(PreFilter.class)
+
+    @Override
+    String filterType() {
+        return "pre"
+    }
+
+    @Override
+    int filterOrder() {
+        return 1000
+    }
+
+    @Override
+    boolean shouldFilter() {
+        return true
+    }
+
+    @Override
+    Object run() {
+        HttpServletRequest request = RequestContext.getCurrentContext().getRequest()
+        log.info("this is a pre filter: Send {} request to {}", request.getMethod(), request.getRequestURL().toString())
+        return null
+    }
+}
+```
+
+在加入了该过滤器之后，不需要重启API网关服务，只需要稍等几秒就会生效。继续向 API 网关服务发起请求，此时在控制台中可以看到 PreFilter.groovy 过滤器中定义的日志信息，具体如下:
+
+```
+com.spring.filter.pre.PreFilter          : this is a pre filter: Send GET request to http://localhost:5555/hello-service/hello
+```
+
+在filter/post目录下创建一个 post 类型的过滤器，命名为PostFilter.groovy。
+
+```groovy
+class PostFilter extends ZuulFilter {
+
+    Logger log = LoggerFactory.getLogger(PostFilter.class)
+
+    @Override
+    String filterType() {
+        return "post"
+    }
+
+    @Override
+    int filterOrder() {
+        return 2000
+    }
+
+    @Override
+    boolean shouldFilter() {
+        return true
+    }
+
+    @Override
+    Object run() {
+        log.info("this is a post filter: Receive response")
+        HttpServletResponse response = RequestContext.getCurrentContext().getResponse()
+        response.getOutputStream().print(", I love Xiaoxiao")
+        response.flushBuffer()
+    }
+}
+```
+
+在加入了该过滤器之后，我们也不需要重启API网关服务，稍等几秒后就可以尝试向API网关服务发起请求。此时不仅可以在控制台中看到 PostFilter.groovy 过滤器中定义的日志输出信息，也可以从请求返回的内容发现过滤器的效果，该接口返回的内容不再是Hello world，而是经过加工处理后的Hello world, I love Xiaoxiao。
+
+## 3 Zuul限流
+
+时机：请求被转发之前调用 使用令牌桶：（谷歌插件RateLimiterFilter） 
+
+![img](Spring Cloud Zuul.assets/20181119132604419.png)
 
 ```java
 @Component
@@ -493,9 +753,11 @@ public class RateLimiterFilter extends ZuulFilter {
 }
 ```
 
-Zuul跨域
+## 4 Zuul跨域
 
-1.通常Spring的处理方式：在被调用的类或方法上增加@CrossOrigin注解 2.在Zuul里增加CorsFilter过滤器
+1. 通常Spring的处理方式：在被调用的类或方法上增加@CrossOrigin注解 
+
+2. 在Zuul里增加CorsFilter过滤器
 
 ```java
 import org.springframework.context.annotation.Bean;
@@ -530,4 +792,6 @@ public class CorsConfig {
 
 }
 ```
+
+------
 
