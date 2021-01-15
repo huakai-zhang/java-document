@@ -485,5 +485,38 @@ THE SELF PRESERVATION MODE IS TURNED OFF.THIS MAY NOT PROTECT INSTANCE EXPIRY IN
 
 意思是：自保模式已经被你关闭，这可能无法保护网络/其他问题的情况下失效。
 
+3.6 配置详解
+
+3.6.2 服务实例类配置
+
+**实例名配置**
+
+```java
+public class InstanceInfo {
+    // The (fixed) instanceId for this instanceInfo. This should be unique within the scope of the appName.
+    private volatile String instanceId;
+	...
+}
+```
+
+实例名，即 InstanceInfo中的 instanceId 参数，它是区分同一服务中不同实例的唯一标识。
+
+在Spring Cloud Eureka的配置中，针对同一主机中启动多实例的情况，对实例名的默认命名做了更为合理的扩展，它采用了如下默认规则:
+
+```
+${spring.cloud.client.hostname}:${spring.application.name}:${spring.application.instance_id:${server.port}}
+```
+
+对于实例名的命名规则，我们可以通过 `eureka.instance.instanceId` 参数来进行配置。比如，在本地进行客户端负载均衡调试时，需要启动同一服务的多个实例，如果我们直接启动同一个应用必然会产生端口冲突。虽然可以在命令行中指定不同的 server.port 来启动，但是这样还是略显麻烦。实际上，我们可以直接通过设置 `server.port=0` 或者使用随机数 `server.port=${random.int[10000,19999]}` 来让Tomcat启动的时候采用随机端口。但是这个时候我们会发现注册到Eureka Server的实例名都是相同的，这会使得只有一个服务实例能够正常提供服务。对于这个问题，我们就可以通过设置实例名规则来轻松解决:
+
+```properties
+server.port=${random.int[1000,9999]}
+eureka.instance.instance-id=${spring.application.name}:${random.int}
+```
+
+通过上面的配置，利用应用名加随机数的方式来区分不同的实例，从而实现在同一主机上，不指定端口就能轻松启动多个实例的效果。
+
+![image-20210115134812202](Spring Cloud 微服务简介与 Eureka.assets/image-20210115134812202.png)
+
 ------
 
