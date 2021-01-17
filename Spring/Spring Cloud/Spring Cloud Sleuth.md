@@ -1,25 +1,31 @@
----
-layout:  post
-title:   Spring Cloud 链路监控
-date:   2018-11-23 11:42:50
-author:  'zhangtao'
-header-img: 'img/post-bg-2015.jpg'
-catalog:   false
-tags:
--# 分布式
+# 分布式服务跟踪 Spring Cloud Sleuth
 
----
+随着系统规模也会变得越来越大，各微服务间的调用关系也变得越来越错综复杂。一个由客户端发起的请求在后端系统中会经过多个不同的微服务调用来协同产生最后的请求结果，会形成一条复杂的分布式服务调用链路，在每条链路中任何一个依赖服务出现延迟过高或错误的时候都有可能引起请求最后的失败。
+
+通过实现对请求调用的跟踪可以帮助我们快速发现错误根源以及监控分析每条请求链路上的性能瓶颈等。Spring Cloud Sleuth 提供了一套完整的解决方案。
+
+## 1 快速入门
+
+构建基础设施和应用，微服务应用: trace-1， 实现一个REST接口/trace-1，使用 Ribbon RestTemplate 调用该接口后将触发对 trace-2 应用的调用。
 
 
 
-## Spring Cloud Sleuth
-
-```java
+```xml
 <dependency>
     <groupId>org.springframework.cloud</groupId>
     <artifactId>spring-cloud-starter-sleuth</artifactId>
 </dependency>
 ```
+
+
+
+
+
+
+
+
+
+
 
 ```java
 DEBUG [order,1fd82ebf55698e67,99904c1fe1a0165e,false]
