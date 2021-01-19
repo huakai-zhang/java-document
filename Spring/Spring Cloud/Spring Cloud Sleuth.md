@@ -249,36 +249,37 @@ java -jar zipkin-server-2.16.1-exec.jar --zipkin.collector.rabbitmq.addresses=lo
 
 ![image-20210118163144029](Spring Cloud Sleuth.assets/image-20210118163144029.png)
 
-4.3 收集原理
+### 4.3 收集原理
 
-4.3.1 数据模型
+#### 4.3.1 数据模型
 
-由于Zipkin的实现借鉴了Google的 Dapper，所以它们有着类似的核心术语，主要有下面几项内容。
+由于 Zipkin 的实现借鉴了 Google 的 Dapper，所以它们有着类似的核心术语，主要有下面几项内容。
 
-`Span` 它代表了一个基础的工作单元。我们以HTTP请求为例，一次完整的请求过程在客户端和服务端都会产生多个不同的事件状态（比如下面所说的4个核心Annotation所标识的不同阶段)。对于同一个请求来说，它们属于一个工作单元，所以同一HTTP请求过程中的 4 个 Annotation 同属于一个 Span。每一个不同的工作单元都通过一个64位的ID来唯一标识，称为Span ID。另外，在工作单元中还存储了一个用来串联其他工作单元的 ID，它也通过一个64位的ID来唯一标识，称为Trace ID。
+`Span` 它代表了一个基础的工作单元。我们以 HTTP 请求为例，一次完整的请求过程在客户端和服务端都会产生多个不同的事件状态（比如下面所说的 4 个核心 Annotation 所标识的不同阶段)。对于同一个请求来说，它们属于一个工作单元，所以同一 HTTP 请求过程中的 4 个 Annotation 同属于一个 Span。每一个不同的工作单元都通过一个64位的ID来唯一标识，称为 `Span ID`。另外，在工作单元中还存储了一个用来串联其他工作单元的 ID，它也通过一个64位的ID来唯一标识，称为 `Trace ID`。
 
-`Trace` 它是由一系列具有相同Trace ID的Span串联形成的一个树状结构。在复杂的分布式系统中，每一个外部请求通常都会产生一个复杂的树状结构的Trace。
+`Trace` 它是由一系列具有相同 Trace ID 的 Span 串联形成的一个树状结构。在复杂的分布式系统中，每一个外部请求通常都会产生一个复杂的树状结构的 Trace。
 
-`Annotation` 它用来及时地记录一个事件的存在。我们可以把Annotation理解为一个包含有时间戳的事件标签，对于一个HTTP请求来说，在Sleuth中定义了下面4个核心Annotation来标识一个请求的开始和结束。
+`Annotation` 它用来及时地记录一个事件的存在。我们可以把 Annotation 理解为一个包含有时间戳的事件标签，对于一个 HTTP 请求来说，在 Sleuth 中定义了下面 4 个核心 Annotation 来标识一个请求的开始和结束。
 
-* cs (Client Start) 该Annotation用来记录客户端发起了一个请求，同时它也标识了这个HTTP请求的开始。
-* sr (Server Finish) 该Annotation用来记录服务端接收到了请求，并准备开始处理它。通过计算sr与cs两个Annotation的时间戳之差，我们可以得到当前HTTP请求的网络延迟。
-* ss ( Server Start) 该Annotation用来记录服务端处理完请求后准备发送请求响应信息。通过计算ss 与sr两个Annotation的时间戳之差，我们可以得到当前服务端处理请求的时间消耗。
-* cr (Client Finish) 该Annotation用来记录客户端接收到服务端的回复，同时它也标识了这个HTTP请求的结束。通过计算cr 与cs两个Annotation的时间戳之差，我们可以得到该 HTTP请求从客户端发起到接收服务端响应的总时间消耗。
+* cs (Client Send) 该Annotation用来记录客户端发起了一个请求，同时它也标识了这个HTTP请求的开始。
+* sr (Server Receive) 该Annotation用来记录服务端接收到了请求，并准备开始处理它。通过计算sr与cs两个Annotation的时间戳之差，我们可以得到当前HTTP请求的网络延迟。
+* ss ( Server Send) 该Annotation用来记录服务端处理完请求后准备发送请求响应信息。通过计算ss 与sr两个Annotation的时间戳之差，我们可以得到当前服务端处理请求的时间消耗。
+* cr (Client Receive) 该Annotation用来记录客户端接收到服务端的回复，同时它也标识了这个HTTP请求的结束。通过计算cr 与cs两个Annotation的时间戳之差，我们可以得到该 HTTP请求从客户端发起到接收服务端响应的总时间消耗。
 
 `BinaryAnnotation` 它用来对跟踪信息添加一些额外的补充说明，一般以键值对的方式出现。比如，在记录 HTTP请求接收后执行具体业务逻辑时，此时并没有默认的Annotation来标识该事件状态，但是有BinaryAnnotation 信息对其进行补充。
 
-4.3.2 收集机制
+#### 4.3.2 收集机制
 
 ![image-20210118180848559](Spring Cloud Sleuth.assets/image-20210118180848559.png)
 
-在上图的请求过程中，为整个调用过程标记了10个标签，它们分别代表了该请求链路运行过程中记录的几个重要事件状态。根据事件发生的时间顺序我们为这些标签做了从小到大的编号，1代表请求的开始、10代表请求的结束。每个标签中记录了一些上面提到过的核心元素:Trace ID、Span ID 以及 Annotation。由于这些标签都源自一个请求，所以它们的Trace ID相同，而标签1和标签10是起始和结束节点，它们的Trace ID 与Span ID是相同的。
-根据Span ID，我们可以发现在这些标签中一共产生了4个不同ID的Span，这4个Span分别代表了这样4个工作单元。
+在上图的请求过程中，为整个调用过程标记了 10 个标签，它们分别代表了该请求链路运行过程中记录的几个重要事件状态。根据事件发生的时间顺序我们为这些标签做了从小到大的编号，1代表请求的开始、10代表请求的结束。每个标签中记录了一些上面提到过的核心元素：Trace ID、Span ID 以及 Annotation。由于这些标签都源自一个请求，所以它们的 Trace ID 相同，而标签 1 和标签 10 是起始和结束节点，它们的 Trace ID 与 Span ID 是相同的。
 
-* Span T 记录了客户端请求到达trace-1和 trace-1发送请求响应的两个事件，它可以计算出`客户端请求响应过程的总延迟时间`(5.184ms)。
-* Span A 记录了trace-1应用在接收到客户端请求之后调用处理方法的开始和结束两个事件，它可以计算出 trace-1应用用于处理客户端请求时，内部逻辑花费的时间延迟。
-* Span B 记录了trace-1应用发送请求给trace-2应用、trace-2应用接收请求，trace-2应用发送响应、trace-1 应用接收响应4个事件，它可以计算出`trace-1 调用trace-2的总体依赖时间(cr - cs)`(3.476ms)，也可以计算出 trace-1 到 trace-2的网络延迟( sr-cs)，还可以计算出trace-2应用用于处理客户端请求的内部逻辑花费的时间延迟(ss - sr)。
-* Span C 记录了trace-2应用在接收到trace-1的请求之后调用处理方法的开始和结束两个事件，它可以计算出 trace-2应用处理来自trace-1的请求时，内部逻辑花费的时间延迟。
+根据 Span ID，我们可以发现在这些标签中一共产生了 4 个不同 ID 的 Span，这 4 个 Span 分别代表了这样 4 个工作单元。
+
+* Span T 记录了客户端请求到达 trace-1 和 trace-1 发送请求响应的两个事件，它可以计算出`客户端请求响应过程的总延迟时间`(5.184ms)。
+* Span A 记录了 trace-1 应用在接收到客户端请求之后调用处理方法的开始和结束两个事件，它可以计算出  trace-1 应用用于处理客户端请求时，内部逻辑花费的时间延迟。
+* Span B 记录了 trace-1 应用发送请求给 trace-2 应用、trace-2 应用接收请求，trace-2 应用发送响应、trace-1 应用接收响应4个事件，它可以计算出 `trace-1 调用trace-2的总体依赖时间(cr - cs)` (3.476ms)，也可以计算出 trace-1 到 trace-2 的网络延迟(sr-cs)，还可以计算出 trace-2 应用用于处理客户端请求的内部逻辑花费的时间延迟(ss - sr)。
+* Span C 记录了 trace-2 应用在接收到 trace-1 的请求之后调用处理方法的开始和结束两个事件，它可以计算出  trace-2 应用处理来自 trace-1 的请求时，内部逻辑花费的时间延迟。
 
 ![image-20210118190055845](Spring Cloud Sleuth.assets/image-20210118190055845.png)
 
@@ -286,7 +287,112 @@ java -jar zipkin-server-2.16.1-exec.jar --zipkin.collector.rabbitmq.addresses=lo
 
 ![image-20210118190153342](Spring Cloud Sleuth.assets/image-20210118190153342.png)
 
-4.4 数据存储
+在 Zipkin 服务端查询跟踪信息时（如下图所示)，在查询结果页面中显示的 spans 是 3，而单击进入跟踪明细页面时，显示的 TotalSpans 又是 2，为什么会出现span数量不一致的情况呢?
+
+![image-20210118190153342](Spring Cloud Sleuth.assets/span-span.png)
+
+实际上这两边的 span 数量内容有不同的含义，查询结果页面中的 3 spans 代表了总共接收的 Span 数量，而在详细页面中的 Total spans 则是对接收 Span 进行合并后的结果，也就是 2个不同 ID 的 Span 内容。
+
+由于版本差异，旧版本中会监控到 Total spans = 5 和 4 个不同 ID 的 Span 内容。
+
+为了更直观地观察 Zipkin 服务端的收集过程，我们可以对之前实现的消息中间件方式收集跟踪信息的程序进行调试，这里使用 maven 引入依赖的 zipkin-server 项目(构建于 Spring Cloud Brixton.SR7)。
+
+消息通道监听的实现类: `org.springframework.cloud.sleuth.zipkin. stream.ZipkinMessageListener`。它的具体实现如下所示，其中 `Sleuthsink.INPUT` 定义了监听的输入通道，默认会使用名为 sleuth 的主题，我们也可以通过 Spring Cloud Stream 的配置对其进行修改：
+
+```java
+@MessageEndpoint
+@Conditional(NotSleuthStreamClient.class)
+public class ZipkinMessageListener {
+   final Collector collector;
+
+   /**
+   	* 两个不同的Span定义
+   */
+   @StreamListener(SleuthSink.INPUT)
+   // 消息通道的输入对象 org.springframework.cloud.sleuth.stream.Spans，它是 Sleuth 中定义的用于消息通道传输的 org.springframework.cloud.sleuth.Span 对象
+   public void sink(Spans input) {
+      // 真正在Zipkin 服务端使用的并非这个Span对象，而是Zipkin自己的zipkin.Span对象
+      // 在消息通道监听处理方法中，对Sleuth 的Span 做了处理，每次接收到Sleuth 的Span之后就将其转换成Zipkin 的 Span
+      List<zipkin.Span> converted = ConvertToZipkinSpanList.convert(input);
+      this.collector.accept(converted, Callback.NOOP);
+   }
+}
+```
+
+![image-20210119160929027](Spring Cloud Sleuth.assets/image-20210119160929027.png)
+
+![image-20210119155702636](Spring Cloud Sleuth.assets/image-20210119155702636.png)
+
+点开一个具体的 Span 内容，它记录了 Sleuth 中定义的 Span 详细信息，包括该 Span 的开始时间、结束时间、Span 的名称、Trace ID、Span ID、Tags(对应Zipkin中的 BinaryAnnotation)、Logs （对应Zipkin 中的Annotation) 等之前提到过的核心跟踪信息。
+
+![image-20210119160957444](Spring Cloud Sleuth.assets/image-20210119160957444.png)
+
+TraceID 和 Span ID 都是使用 long 类型存储的，但是在查看 Span 对象的时候，在输出 Trace ID 和 Span ID 时都调用了 `idToHex 函数`将 long 类型的值转换成了十六进制的字符串值。
+
+```java
+public String toString() {
+    return "[Trace: " + this.traceIdString() + ", Span: " + idToHex(this.spanId) + ", Parent: " + this.getParentIdIfPresent() + ", exportable:" + this.exportable + "]";
+}
+public static String idToHex(long id) {
+    char[] data = new char[16];
+    writeHexLong(data, 0, id);
+    return new String(data);
+}
+```
+
+在接收到 Sleuth 之后可以看到经过转换后的 Zipkin 的 Span 内容，它们保存在一个名为 converted 的列表中，具体内容如下所示:
+
+![image-20210119160844758](Spring Cloud Sleuth.assets/image-20210119160844758.png)
+
+![image-20210119161109532](Spring Cloud Sleuth.assets/image-20210119161109532.png)
+
+`annotations` 中存储了当前 Span 包含的各种事件状态以及对应事件状态的时间戳，而 `binaryAnnotations` 则存储了对事件的补充信息。
+
+可以发现每个 Span 中都包含有3个 ID 信息，其中除了标识 Span 自身的 ID 以及用来标识整条链路的 traceId 之外，还有一个之前没有提过的 parentId，它是用来标识各 Span 父子关系的 ID（它的值来自与上一步执行单元Span的ID） ，通过 parentId 的定义我们可以为每个 Span 找到它的前置节点，从而定位每个 Span 在请求调用链中的确切位置。在每条调用链路中都有一个特殊的 Span，它的 parentId 为null，这类 Span 我们称它为`Root Span`，也就是这条请求调用链的根节点。
+
+| Host(name)       | Span ID          | Parent Span ID   | Annotation | Binary Annotation                                    |
+| ---------------- | ---------------- | ---------------- | ---------- | ---------------------------------------------------- |
+| track-1          | d02977fbe55214a3 | null             | 【sr，ss】 |                                                      |
+| track-1(track)   | dac306d81c007d6b | d02977fbe55214a3 |            | unknown，Track1Application，track                    |
+| track-1(track-2) | 2875f0d4f5b32566 | dac306d81c007d6b | 【cs，cr】 | track-2，GET，/track-2，http://track-2/track-2，true |
+| track-2          | 2875f0d4f5b32566 | dac306d81c007d6b | 【sr，ss】 |                                                      |
+| track-2(track)   | 901ac48bae118062 | 2875f0d4f5b32566 |            | unknown，Track2Application，track                    |
+
+* `Host` 代表了该Span是从哪个应用发送过来的
+
+* `Span ID` 是当前Span的唯一标识
+
+* `Parent Span ID` 代表了上一执行单元的Span ID
+
+* `Annotation` 代表了该Span中记录的事件
+
+* `BinaryAnnotation` 代表了事件的补充信息，在上表中我们只记录了服务名、类名、方法名，省略了一些其他信息，比如：时间戳、IP地址、端口号等信息
+
+通过收集到的 Zipkin Span 详细信息，我们很容易将它们与本节开始时介绍的一次调用链路中的 10 个标签内容联系起来。
+
+* Span ID = T 的标签有 2 个，分别是序号 1 和 10，它们分别表示这次请求的开始和结束。它们对应了上表中 ID 为  d02977fbe55214a3 的 Span，该 Span 的内容在标签 10 执行结束后，由 trace-1 将标签 1 和 10 合并成一个 Span(d02977fbe55214a3 ) 发送给 Zipkin Server。
+
+* Span ID = A 的标签有 2 个，分别是序号 2 和 9，它们分别表示了 trace-1 请求接收后，具体处理方法调用的开始和结束。该 Span 的内容在标签 9 执行结束后，由 trace-1 将标签 2 和 9 合并成一个 Span(dac306d81c007d6b) 发送给 Zipkin Server。
+
+* Span ID = B 的标签有 4 个，分别是序号 3、4、7、8，该 Span 比较特殊，它的产生跨越了两个实例，其中标签 3 和 8 是由 trace-1 生成的，而标签 4 和 7 则是由 trace-2 生成的，所以该标签会拆分成两个 Span(2875f0d4f5b32566) 内容发送给 Zipkin Server。trace-1 会在标签 8 结束的时候将标签 3 和 8 合并成一个 Span 发送给 Zipkin Server，而 trace-2 会在标签7结束的时候将标签 4 和 7 合并成一个 Span 发送给ZipkinServer。
+
+* Span ID = C 的标签有 2 个，分别是序号 5 和 6 ，它们分别表示了 trace-2 请求接收后，具体处理方法调用的开始和结束。该 Span 的内容在标签 6 执行结束后，由 trace-2 将标签 5 和 6 合并成一个 Span(901ac48bae118062) 发送给 Zipkin Server。
+
+虽然，Zipkin服务端接收到了 5 个Span，但就如前文中分析的那样，其中有两个`Span ID = B`的标签，由于它们来自于同一个HTTP请求（`trace-1`对`trace-2`的服务调用），概念上它们属于同一个工作单元，因此 Zipkin 服务端在前端展现分析详情时会将这两个 Span 合并了来显示，而合并后的Span数量就是在请求链路详情页面中`Total Spans`的数量。
+
+下图是一个请求链路详情页面，在页面中显示了各个 Span 的延迟统计，其中第三条 Span 信息就是 `trace-1 `对 `trace-2 `的HTTP请求调用，通过点击它可以查看该 Span 的详细信息，点击后会以模态框的方式弹出 Span 详细信息，在弹出框中详细展示了 Span 的 Annotation 和 BinaryAnnotation 信息，在 Annotation 区域我们可以看到它同时包含了 `trace-1` 和 `trace-2` 发送的Span信息，而在 BinaryAnnotation 区域则展示了该HTTP请求的详细信息。
+
+> 第二张图片为新版本 zipkin 对数据的处理，从直观上看，新版本取消了 Annotation 为空的展示。
+
+![image-20210119164937150](Spring Cloud Sleuth.assets/image-20210119164937150.png)
+
+![image-20210118190055845](Spring Cloud Sleuth.assets/image-20210118190055845.png)
+
+![image-20210119164631341](Spring Cloud Sleuth.assets/image-20210119164631341.png)
+
+![image-20210119164614750](Spring Cloud Sleuth.assets/image-20210119164614750.png)
+
+### 4.4 数据存储
 
 默认情况下，Zipkin Server 会将跟踪信息存储在内存中，每次重启Zipkin Server都会使之前收集的跟踪信息丢失，并且当有大量跟踪信息时我们的内存存储也会成为瓶颈，所以通常情况下我们都需要将跟踪信息对接到外部存储组件中去，比如使用MySQL存储。
 
@@ -362,3 +468,24 @@ CREATE TABLE IF NOT EXISTS zipkin_dependencies (
 从zipkin_spans表中，我们可以看到一次请求调用链路的跟踪信息产生了2条 span 数据，也就是说，在入 zipkin_spans表的时候，已经对收集的span信息进行了合并，所以在查询详细信息时，不需要每次都来计算合并span。而在zipkin_annotations表中，通过span_id字段可以关联到每个具体工作单元的详细信息，同时根据endpoint_service_name和 span_id字段还可以计算出一次请求调用链路中总共接收到的span数量。
 
 Zipkin在存储方面除了对MySQL有扩展组件之外，还实现了对Cassandra和ElasticSearch 的支持扩展。具体的整合方式与MySQL 的整合类似，读者可自行查阅Zipkin的官方文档做进一步的了解。
+
+### 4.5 API 接口
+
+Zipkin 还提供了丰富的RESTful API接口供用户在第三方系统中调用来定制自己的跟踪信息展示或监控。
+
+可以看到 Zipkin Serve r提供的API接口都以 /api/v2 路径作为前缀,它们的具体功能整理如下:
+
+| 接口路径         | 请求方式 | 接口描述                                   |
+| ---------------- | -------- | ------------------------------------------ |
+| /dependencies    | GET      | 用来获取通过收集到的 Span 分析出的依赖关系 |
+| /services        | GET      | 用来获取服务列表                           |
+| /spans           | GET      | 根据服务名来获取所有的 Span 名             |
+| /spans           | POST     | 向Zipkin Server 上传 Span                  |
+| /trace/{traceId} | GET      | 根据 Trace ID 获取指定跟踪信息的 Span 列表 |
+| /traces          | GET      | 根据指定条件查询并返回符合条件的trace清单  |
+
+
+更多关于接口的请求参数和请求返回格式等细节说明，可以通过访问 Zipkin 官方的API页面 http://zipkin.io/zipkin-api/ 来查看，帮助我们根据自身系统架构来访问 Zipkin Server 以定制自己的 Dashboard 或监控系统。实际上，Zipkin 的 UI 模块也是基于 RESTful API 接口来实现的。
+
+------
+
