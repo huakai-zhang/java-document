@@ -112,7 +112,7 @@ ApplicationEvent 事件监听，spring容器启动后会发一个事件通知知
 
 这个是一个异步事件发送器。被重写的方法为 setApplicationEventPublisher,简单来说，在 spring 里面提供了类似于消息队列 的异步事件解耦功能。（典型的观察者模式的应用）
 
-spring 事件发送监听由 3 个部分组成 
+Spring 事件发送监听由 3 个部分组成 
 
 1. ApplicationEvent：表示事件本身，自定义事件需要继承该类 
 
@@ -267,12 +267,14 @@ private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> r
         //发布远程服务
         if (!SCOPE_LOCAL.equalsIgnoreCase(scope)) {
             for (URL registryURL : registryURLs) {
-    			...
-    			Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
-    			DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
-    			Exporter<?> exporter = protocol.export(wrapperInvoker);
-    			exporters.add(exporter);
-			}
+    					...
+              // invoker -> 代理类
+              // 此处传递的是 registryURL
+    					Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
+    					DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+    					Exporter<?> exporter = protocol.export(wrapperInvoker);
+    					exporters.add(exporter);
+					 }
         }
     }
 }
@@ -304,6 +306,25 @@ Protocol protocol = ExtensionLoader.getExtensionLoader(Protocol.class).getAdapti
 这个动态代理类，会根据 url 中配置的 protocol name 来实现对应协议的适配。
 
 那么在当前的场景中，protocol 会是调用谁呢？目前发布的 invoker(URL)，实际上是一个 registry://协议，所以 Protocol$Adaptive，会通过 getExtension(extName) 得到一个 RegistryProtocol。
+
+**Protocol$Adaptive.export**
+
+```java
+public org.apache.dubbo.rpc.Exporter export(org.apache.dubbo.rpc.Invoker arg0) throws org.apache.dubbo.rpc.RpcException {
+        if (arg0 == null) throw new IllegalArgumentException("org.apache.dubbo.rpc.Invoker argument == null");
+        if (arg0.getUrl() == null)
+            throw new IllegalArgumentException("org.apache.dubbo.rpc.Invoker argument getUrl() == null");
+  			// wrapperInvoker 传递的是 registryURL
+        org.apache.dubbo.common.URL url = arg0.getUrl();
+  			// extName == Registry
+        String extName = (url.getProtocol() == null ? "dubbo" : url.getProtocol());
+        if (extName == null)
+            throw new IllegalStateException("Failed to get extension (org.apache.dubbo.rpc.Protocol) name from url (" + url.toString() + ") use keys([protocol])");
+  			// 生成一个RegistryProtocol静态扩展点
+        org.apache.dubbo.rpc.Protocol extension = (org.apache.dubbo.rpc.Protocol) ExtensionLoader.getExtensionLoader(org.apache.dubbo.rpc.Protocol.class).getExtension(extName);
+        return extension.export(arg0);
+}
+```
 
 **RegistryProtocol.export**
 
@@ -362,12 +383,18 @@ key: 从 originInvoker 中获得发布协议的 url: dubbo://ip:port/...
 bounds: 一个 prviderUrl 服务 export 之后，缓存到 bounds 中，所以一个 providerUrl 只会对应一个 exporter 
 
 ```java
+private Protocol protocol;
+public void setProtocol(Protocol protocol) {
+    this.protocol = protocol;
+}
+
 private <T> ExporterChangeableWrapper<T> doLocalExport(final Invoker<T> originInvoker, URL providerUrl) {
     String key = getCacheKey(originInvoker);
     return (ExporterChangeableWrapper<T>) bounds.computeIfAbsent(key, s -> {
         //对原有的 invoker,委托给了 InvokerDelegate
         Invoker<?> invokerDelegate = new InvokerDelegate<>(originInvoker, providerUrl);
         //将 invoker 转换为 exporter 并启动 netty 服务
+      	// protocol 是通过 set 方法依赖注入进来的
         return new ExporterChangeableWrapper<>((Exporter<T>) protocol.export(invokerDelegate), originInvoker);
     });
 }
@@ -392,6 +419,8 @@ if(bounds.get(key)==null){
 在 ExtensionLoader.loadClass 这个方法中，有一段这样的判断，如果当前这个类是一个 wrapper 包装类，也就是这个 wrapper 中有构造方法，参数是当前被加载的扩展点的类型，则把这个 wrapper 类加入到 cacheWrapperClass 缓存中。
 
 ```java
+private Set<Class<?>> cachedWrapperClasses;
+
 else if (isWrapperClass(clazz)) {
     cacheWrapperClass(clazz);
 }
@@ -402,6 +431,12 @@ private boolean isWrapperClass(Class<?> clazz) {
     } catch (NoSuchMethodException e) {
         return false;
     }
+}
+private void cacheWrapperClass(Class<?> clazz) {
+    if (cachedWrapperClasses == null) {
+        cachedWrapperClasses = new ConcurrentHashSet<>();
+    }
+    cachedWrapperClasses.add(clazz);
 }
 ```
 
@@ -532,6 +567,7 @@ private ExchangeServer createServer(URL url) {
             .addParameterIfAbsent(HEARTBEAT_KEY, String.valueOf(DEFAULT_HEARTBEAT))
             .addParameter(CODEC_KEY, DubboCodec.NAME)
             .build();
+  	// 获取采用什么样的方式来发布服务
     String str = url.getParameter(SERVER_KEY, DEFAULT_REMOTING_SERVER);
     //通过 SPI 检测是否存在 server 参数所代表的 Transporter 拓展，不存在则抛出异常
     if (str != null && str.length() > 0 && !ExtensionLoader.getExtensionLoader(Transporter.class).hasExtension(str)) {
@@ -570,6 +606,16 @@ public static ExchangeServer bind(URL url, ExchangeHandler handler) throws Remot
     url = url.addParameterIfAbsent(Constants.CODEC_KEY, "exchange");
     return getExchanger(url).bind(url, handler);
 }
+public static Exchanger getExchanger(URL url) {
+    String type = url.getParameter(Constants.EXCHANGER_KEY, Constants.DEFAULT_EXCHANGER);
+    return getExchanger(type);
+}
+public static Exchanger getExchanger(String type) {
+  	// 扩展点 exchange 只有一个实现 HeaderExchanger
+    return ExtensionLoader.getExtensionLoader(Exchanger.class).getExtension(type);
+}
+// /META-INF/dubbo/internal/org.apache.dubbo.remoting.exchange.Exchanger
+// header=org.apache.dubbo.remoting.exchange.support.header.HeaderExchanger
 ```
 
 **headerExchanger.bind**
@@ -606,7 +652,11 @@ public static Server bind(URL url, ChannelHandler... handlers) throws RemotingEx
 
 **getTransporter**
 
-getTransporter 是一个自适应扩展点，它针对 bind 方法添加了自适应注解，意味着，bing 方法的具体实现，会基于 Transporter$Adaptive 方法进行适配，那么在这里面默认的通信协议是 netty，所以它会采用 netty4 的实现，也就是 org.apache.dubbo.remoting.transport.netty4.NettyTransporter
+getTransporter 是一个自适应扩展点，它针对 bind 方法添加了自适应注解，意味着，bing 方法的具体实现，会基于 `Transporter$Adaptive` 方法进行适配。
+
+// TODO Transporter$Adaptive
+
+那么在这里面默认的通信协议是 netty，所以它会采用 netty4 的实现，也就是 org.apache.dubbo.remoting.transport.netty4.NettyTransporter
 
 ```java
 public static Transporter getTransporter() {
