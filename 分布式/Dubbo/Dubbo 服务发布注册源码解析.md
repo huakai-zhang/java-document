@@ -122,17 +122,19 @@ Spring 事件发送监听由 3 个部分组成
 
 # 2 ServiceBean 中服务暴露过程
 
+## 2.1 Spring 容器启动
+
 在 ServiceBean 中，我们暂且只需要关注两个方法，分别是: 
 
 在初始化 bean 的时候会执行该方法 afterPropertiesSet
 
 Spring 容器启动后会发一个事件通知 onApplicationEvent
 
-## 2.1 afterPropertiesSet
+### 2.1.1 afterPropertiesSet
 
 我们发现这个方法里面，就是把 dubbo 中配置的 application、registry、service、protocol 等信息，加载到对应的 config 实体中，便于后续的使用。
 
-## 2.2 onApplicationEvent
+### 2.1.2 onApplicationEvent
 
 spring 容器启动之后，会收到一个这样的事件通知，这里面做了两个事情
 
@@ -151,7 +153,7 @@ public void onApplicationEvent(ContextRefreshedEvent event) {
 }
 ```
 
-## 2.3 export
+### 2.1.3 export
 
 ServiceBean 中，重写了 export 方法，实现了一个事件的发布。并且调用了 super.export() ，也就是会调用父类的 export 方法：
 
@@ -164,7 +166,7 @@ public void export() {
 }
 ```
 
-# 3 ServiceConfig 配置类
+## 2.2 ServiceConfig 配置类
 
 先整体来看一下这个类的作用，从名字来看，它应该和其他所有 config 类一样去实现对配置文件中 service 的配置信息的存储。 实际上这个类并不单纯，所有的配置它都放在了一个 AbstractServiceConfig 的抽象类，自己实现了很多对于服务发布之前要做的操作逻辑。
 
@@ -187,7 +189,7 @@ public synchronized void export() {
 }
 ```
 
-## 3.1 doExport
+### 2.2.1 doExport
 
 这里仍然还是在实现发布前的各种判断，比如判断
 
@@ -210,7 +212,7 @@ protected synchronized void doExport() {
 }
 ```
 
-## 3.2 doExportUrls 
+### 2.2.2 doExportUrls
 
 1. 记载所有配置的注册中心地址
 2. 遍历所有配置的协议，protocols 
@@ -232,7 +234,7 @@ private void doExportUrls() {
 }
 ```
 
-## 3.3 doExportUrlsFor1Protocol
+### 2.2.3 doExportUrlsFor1Protocol
 
 发布指定协议的服务，我们以 Dubbo 服务为例，由于代码太多，就不全部贴出来 
 
@@ -293,9 +295,9 @@ private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> r
 3. 调用 protocol.export(invoker)来发布这个代理 
 4. 添加到 exporters 集合
 
-# 4 protocol 发布服务
+## 2.3 自适应 Protocol 发布服务
 
-**protocol.export**
+### 2.3.1 protocol.export
 
 这个 protocol 是什么呢？找到定义处发现它是一个自适应扩展点，打开 Protocol 这个扩展点，又可以看到它是一个在方法层面上的自适应扩展，意味着它实现了对于 export 这个方法的适配。也就意味着这个 Protocol 是一个动态代理类， Protocol$Adaptive 
 
@@ -307,7 +309,7 @@ Protocol protocol = ExtensionLoader.getExtensionLoader(Protocol.class).getAdapti
 
 那么在当前的场景中，protocol 会是调用谁呢？目前发布的 invoker(URL)，实际上是一个 registry://协议，所以 Protocol$Adaptive，会通过 getExtension(extName) 得到一个 RegistryProtocol。
 
-**Protocol$Adaptive.export**
+### 2.3.2 Protocol$Adaptive
 
 ```java
 public org.apache.dubbo.rpc.Exporter export(org.apache.dubbo.rpc.Invoker arg0) throws org.apache.dubbo.rpc.RpcException {
@@ -326,7 +328,7 @@ public org.apache.dubbo.rpc.Exporter export(org.apache.dubbo.rpc.Invoker arg0) t
 }
 ```
 
-**RegistryProtocol.export**
+### 2.3.3 RegistryProtocol
 
 很明显，这个 RegistryProtocol 是用来实现服务注册的，这里面会有很多处理逻辑：
 
@@ -374,7 +376,7 @@ public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcExceptio
 }
 ```
 
-**doLocalExport**
+### 2.3.4 doLocalExport
 
 先通过 doLocalExport 来暴露一个服务，本质上应该是启动一个通信服务，主要的步骤是将本地 ip 和 20880 端口打开，进行监听 originInvoker：应该是 registry://ip:port/com.alibaba.dubbo.registry.RegistryService
 
@@ -406,7 +408,7 @@ if(bounds.get(key)==null){
 
 `InvokerDelegete` 是 RegistryProtocol 的一个静态内部类，该类是一个 originInvoker 的委托类，该类存储了 originInvoker，其 父类 InvokerWrapper 还会存储 providerUrl，InvokerWrapper 会调用 originInvoker 的 invoke 方法，也会销毁 invoker。可以管理 invoker 的生命周期。
 
-**DubboProtocol.export**
+### 2.3.5 DubboProtocol
 
 基于动态代理的适配，很自然的就过渡到了 DubboProtocol 这个协议类中，但是实际上是 DubboProtocol 吗？ 
 
@@ -414,7 +416,7 @@ if(bounds.get(key)==null){
 
 为什么是这样？我们再来看看 spi 的代码
 
-## 4.1 Wrapper 包装
+## 2.4 Wrapper 包装
 
 在 ExtensionLoader.loadClass 这个方法中，有一段这样的判断，如果当前这个类是一个 wrapper 包装类，也就是这个 wrapper 中有构造方法，参数是当前被加载的扩展点的类型，则把这个 wrapper 类加入到 cacheWrapperClass 缓存中。
 
@@ -465,7 +467,7 @@ if (CollectionUtils.isNotEmpty(wrapperClasses)) {
 }
 ```
 
-**ProtocolFilterWrapper**
+### 2.4.1 ProtocolFilterWrapper
 
 这个是一个过滤器的包装，使用责任链模式，对 invoker 进行了包装
 
@@ -490,7 +492,7 @@ private static <T> Invoker<T> buildInvokerChain(final Invoker<T> invoker, String
 
 默认提供了非常多的过滤器。 然后基于条件激活扩展点，来对 invoker 进行包装，从而在实现远程调用的时候，会经过这些 filter 进行过滤。
 
-## 4.2 DubboProtocol
+## 2.5 DubboProtocol
 
 ```java
 public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
@@ -524,7 +526,7 @@ public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
 }
 ```
 
-**openServer**
+### 2.5.1 openServer
 
 去开启一个服务，并且放入到缓存中 -> 在同一台机器上（单网卡），同一个端口上仅允许启动一个服务器实例
 
@@ -553,7 +555,7 @@ private void openServer(URL url) {
 }
 ```
 
-**createServer**
+### 2.5.2 createServer
 
 创建服务，开启心跳检测，默认使用 netty。组装 url
 
@@ -590,6 +592,8 @@ private ExchangeServer createServer(URL url) {
     return server;
 }
 ```
+
+## 2.6 Exchangers
 
 **Exchangers.bind**
 
@@ -650,11 +654,39 @@ public static Server bind(URL url, ChannelHandler... handlers) throws RemotingEx
 }
 ```
 
+## 2.7 Transporter
+
 **getTransporter**
 
 getTransporter 是一个自适应扩展点，它针对 bind 方法添加了自适应注解，意味着，bing 方法的具体实现，会基于 `Transporter$Adaptive` 方法进行适配。
 
-// TODO Transporter$Adaptive
+```java
+package org.apache.dubbo.remoting;
+import org.apache.dubbo.common.extension.ExtensionLoader;
+
+public class Transporter$Adaptive implements org.apache.dubbo.remoting.Transporter {
+    public org.apache.dubbo.remoting.Client connect(org.apache.dubbo.common.URL arg0, org.apache.dubbo.remoting.ChannelHandler arg1) throws org.apache.dubbo.remoting.RemotingException {
+        if (arg0 == null) throw new IllegalArgumentException("url == null");
+        org.apache.dubbo.common.URL url = arg0;
+        String extName = url.getParameter("client", url.getParameter("transporter", "netty"));
+        if (extName == null)
+            throw new IllegalStateException("Failed to get extension (org.apache.dubbo.remoting.Transporter) name from url (" + url.toString() + ") use keys([client, transporter])");
+        org.apache.dubbo.remoting.Transporter extension = (org.apache.dubbo.remoting.Transporter) ExtensionLoader.getExtensionLoader(org.apache.dubbo.remoting.Transporter.class).getExtension(extName);
+        return extension.connect(arg0, arg1);
+    }
+
+    public org.apache.dubbo.remoting.Server bind(org.apache.dubbo.common.URL arg0, org.apache.dubbo.remoting.ChannelHandler arg1) throws org.apache.dubbo.remoting.RemotingException {
+        if (arg0 == null) throw new IllegalArgumentException("url == null");
+        org.apache.dubbo.common.URL url = arg0;
+        String extName = url.getParameter("server", url.getParameter("transporter", "netty"));
+        if (extName == null)
+            throw new IllegalStateException("Failed to get extension (org.apache.dubbo.remoting.Transporter) name from url (" + url.toString() + ") use keys([server, transporter])");
+        // extName == netty
+        org.apache.dubbo.remoting.Transporter extension = (org.apache.dubbo.remoting.Transporter) ExtensionLoader.getExtensionLoader(org.apache.dubbo.remoting.Transporter.class).getExtension(extName);
+        return extension.bind(arg0, arg1);
+    }
+}
+```
 
 那么在这里面默认的通信协议是 netty，所以它会采用 netty4 的实现，也就是 org.apache.dubbo.remoting.transport.netty4.NettyTransporter
 
@@ -674,7 +706,7 @@ public Server bind(URL url, ChannelHandler listener) throws RemotingException {
 }
 ```
 
-## 4.3 NettyServer
+## 2.8 NettyServer
 
 初始化一个 nettyserver，并且从 url 中获得相应的 ip/ port，然后调用 doOpen()。
 
@@ -710,7 +742,7 @@ public AbstractServer(URL url, ChannelHandler handler) throws RemotingException 
 }
 ```
 
-**doOpen**
+### 2.8.1 doOpen
 
 开启 netty 服务，这个又是大家熟悉的内容了
 
@@ -755,7 +787,9 @@ NettyServerHandler nettyServerHandler = new NettyServerHandler(getUrl(), this);
 
 这个 handler 是一个链路，它的正确组成应该是 MultiMessageHandler(heartbeatHandler(AllChannelHandler(DecodeHandler(HeaderExchangeHeadler(dubboProtocol 后续接收到的请求，会一层一层的处理，比较繁琐。
 
-# 5 Invoker 是什么
+![img](Dubbo 服务发布注册源码解析.assets/dubbo-server-export.png)
+
+# 3 Invoker 是什么
 
 从前面的分析来看，服务的发布分三个阶段
 
@@ -916,7 +950,7 @@ return new AbstractProxyInvoker<T>(proxy, type, url) {
 InvokerDelegate(DelegateProviderMetaDataInvoker(AbstractProxyInvoker()))
 ```
 
-# 6 服务注册
+# 4 服务注册
 
 关于服务发布这一条线分析完成之后，再来了解一下服务注册的过程，希望大家还记得我们之所以走到这一步，是因为我们在 RegistryProtocol 这个类中，看到了服务发布的流程。
 
@@ -1046,7 +1080,7 @@ public Registry getRegistry(URL url) {
 }
 ```
 
-createRegistry
+**createRegistry**
 
 创建一个 zookeeperRegistry，把 url 和 zookeepertransporter 作为参数传入。
 
