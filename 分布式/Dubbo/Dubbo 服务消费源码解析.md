@@ -296,7 +296,7 @@ public class Cluster$Adaptive implements org.apache.dubbo.rpc.cluster.Cluster {
 
 所以再回到 doRefer 方法，下面这段代码, 实际是调用 MockClusterWrapper.join。
 
-所以这里返回的invoker，应该是 MockClusterInvoker(directory, FailOverCluster(directory))
+所以这里返回的invoker，应该是 MockClusterInvoker(directory, FailoverClusterInvoker(directory))
 
 ```java
 // MockClusterWrapper
@@ -329,6 +329,7 @@ return (T) proxyFactory.getProxy(invoker);
 通过这个方法生成了一个动态代理类，并且对invoker再做了一层处理，InvokerInvocationHandler。 意味着后续发起服务调用的时候，会由 InvokerInvocationHandler 来进行处理。
 
 ```java
+// InvokerInvocationHandler(MockClusterInvoker(FailoverClusterInvoker(directory)))
 public <T> T getProxy(Invoker<T> invoker, Class<?>[] interfaces) {
     return (T) Proxy.getProxy(interfaces).newInstance(new InvokerInvocationHandler(invoker));
 }
@@ -336,7 +337,7 @@ public <T> T getProxy(Invoker<T> invoker, Class<?>[] interfaces) {
 
 **proxy.getProxy**
 
-在 proxy.getProxy 这个方法中会生成一个动态代理类，通过 debug 的形式可以看到动态代理类的原貌 在 getProxy 这个方法位置加一个断点。
+在 proxy.getProxy 这个方法中会生成一个动态代理类，通过 debug 的形式可以看到动态代理类的原貌在 getProxy 这个方法位置加一个断点。
 
 ```java
 public static Proxy getProxy(Class<?>... ics) {
@@ -685,6 +686,16 @@ private Map<String, Invoker<T>> toInvokers(List<URL> urls) {
 在构建DubboInvoker时，会构建一个ExchangeClient，通过getClients(url)方法，这里基本可以猜到到是服务的通信建立。
 
 ```java
+// ProtocolListenerWrapper
+public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
+    if (REGISTRY_PROTOCOL.equals(url.getProtocol())) {
+        return protocol.refer(type, url);
+    }
+    return new ListenerInvokerWrapper<T>(protocol.refer(type, url),
+            Collections.unmodifiableList(
+                    ExtensionLoader.getExtensionLoader(InvokerListener.class)
+                            .getActivateExtension(url, INVOKER_LISTENER_KEY)));
+}
 // 父类 AbstractProtocol
 public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
     return new AsyncToSyncInvoker<>(protocolBindingRefer(type, url));
@@ -697,6 +708,8 @@ public <T> Invoker<T> protocolBindingRefer(Class<T> serviceType, URL url) throws
     invokers.add(invoker);
     return invoker;
 }
+//ProtocolFilterWrapper$CallbackRegistrationInvoker???
+//InvokerDelegate(ListenerInvokerWrapper(ProtocolFilterWrapper(DubboInvoker())))
 ```
 
 **getClients**
@@ -804,6 +817,7 @@ private List<ReferenceCountExchangeClient> buildReferenceCountExchangeClientList
 private ReferenceCountExchangeClient buildReferenceCountExchangeClient(URL url) {
     ExchangeClient exchangeClient = initClient(url);
     return new ReferenceCountExchangeClient(exchangeClient);
+    // client = ReferenceCountExchangeClient(HeaderExchangeClient(NettyClient))
 }
 ```
 
@@ -862,6 +876,7 @@ public static ExchangeClient connect(URL url, ExchangeHandler handler) throws Re
 ```java
 public ExchangeClient connect(URL url, ExchangeHandler handler) throws RemotingException {
     return new HeaderExchangeClient(Transporters.connect(url, new DecodeHandler(new HeaderExchangeHandler(handler))), true);
+    // client = HeaderExchangeClient(NettyClient)
 }
 ```
 

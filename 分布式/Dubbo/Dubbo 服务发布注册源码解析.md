@@ -269,14 +269,15 @@ private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> r
         //发布远程服务
         if (!SCOPE_LOCAL.equalsIgnoreCase(scope)) {
             for (URL registryURL : registryURLs) {
-    					...
-              // invoker -> 代理类
-              // 此处传递的是 registryURL
-    					Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
-    					DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
-    					Exporter<?> exporter = protocol.export(wrapperInvoker);
-    					exporters.add(exporter);
-					 }
+    		    // ...
+               // invoker -> 代理类
+               // 此处传递的是 registryURL
+    		   Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
+    		   DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+               // wrapperInvoker = DelegateProviderMetaDataInvoker(invoker)
+    		   Exporter<?> exporter = protocol.export(wrapperInvoker = );
+    		   exporters.add(exporter);
+		    }
         }
     }
 }
@@ -395,6 +396,7 @@ private <T> ExporterChangeableWrapper<T> doLocalExport(final Invoker<T> originIn
     return (ExporterChangeableWrapper<T>) bounds.computeIfAbsent(key, s -> {
         //对原有的 invoker,委托给了 InvokerDelegate
         Invoker<?> invokerDelegate = new InvokerDelegate<>(originInvoker, providerUrl);
+        // invokerDelegate = InvokerDelegate(DelegateProviderMetaDataInvoker(invoker))
         //将 invoker 转换为 exporter 并启动 netty 服务
       	// protocol 是通过 set 方法依赖注入进来的
         return new ExporterChangeableWrapper<>((Exporter<T>) protocol.export(invokerDelegate), originInvoker);
@@ -413,6 +415,69 @@ if(bounds.get(key)==null){
 基于动态代理的适配，很自然的就过渡到了 DubboProtocol 这个协议类中，但是实际上是 DubboProtocol 吗？ 
 
 这里并不是获得一个单纯的 DubboProtocol 扩展点，而是会通过 Wrapper 对 Protocol 进行装饰，装饰器分别为: QosProtocolWrapper/ProtocolListenerWrapper/ProtocolFilterWrapper/DubboProtocol 
+
+```java
+// ProtocolFilterWrapper
+public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
+    if (REGISTRY_PROTOCOL.equals(invoker.getUrl().getProtocol())) {
+        return protocol.export(invoker);
+    }
+    return protocol.export(buildInvokerChain(invoker, SERVICE_FILTER_KEY, CommonConstants.PROVIDER));
+    // buildInvokerChain 返回
+    // invoker = ProtocolFilterWrapper$CallbackRegistrationInvoker(ProtocolFilterWrapper$1(InvokerDelegate(DelegateProviderMetaDataInvoker(invoker))))
+}
+private static <T> Invoker<T> buildInvokerChain(final Invoker<T> invoker, String key, String group) {
+    Invoker<T> last = invoker;
+    List<Filter> filters = ExtensionLoader.getExtensionLoader(Filter.class).getActivateExtension(invoker.getUrl(), key, group);
+    if (!filters.isEmpty()) {
+        for (int i = filters.size() - 1; i >= 0; i--) {
+            final Filter filter = filters.get(i);
+            final Invoker<T> next = last;
+            // last = ProtocolFilterWrapper$1(InvokerDelegate(DelegateProviderMetaDataInvoker(invoker)))
+            last = new Invoker<T>() {
+                @Override
+                public Class<T> getInterface() {
+                    return invoker.getInterface();
+                }
+                @Override
+                public URL getUrl() {
+                    return invoker.getUrl();
+                }
+                @Override
+                public boolean isAvailable() {
+                    return invoker.isAvailable();
+                }
+                @Override
+                public Result invoke(Invocation invocation) throws RpcException {
+                    Result asyncResult;
+                    try {
+                        asyncResult = filter.invoke(next, invocation);
+                    } catch (Exception e) {
+                        // onError callback
+                        if (filter instanceof ListenableFilter) {
+                            Filter.Listener listener = ((ListenableFilter) filter).listener();
+                            if (listener != null) {
+                                listener.onError(e, invoker, invocation);
+                            }
+                        }
+                        throw e;
+                    }
+                    return asyncResult;
+                }
+                @Override
+                public void destroy() {
+                    invoker.destroy();
+                }
+                @Override
+                public String toString() {
+                    return invoker.toString();
+                }
+            };
+        }
+    }
+    return new CallbackRegistrationInvoker<>(last, filters);
+}
+```
 
 为什么是这样？我们再来看看 spi 的代码
 
@@ -495,6 +560,9 @@ private static <T> Invoker<T> buildInvokerChain(final Invoker<T> invoker, String
 ## 2.5 DubboProtocol
 
 ```java
+// 经历过一系列处理的 invoker（各种包装），在 DubboProtocol 中保存到 exporterMap 中
+protected final Map<String, Exporter<?>> exporterMap = new ConcurrentHashMap<String, Exporter<?>>();
+
 public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
     URL url = invoker.getUrl();
     //获取服务标识，理解成服务坐标也行。由服务组名，服务名，服务版本号以及端口组成。比如
@@ -608,6 +676,7 @@ public static ExchangeServer bind(URL url, ExchangeHandler handler) throws Remot
     // 获取 Exchanger，默认为 HeaderExchanger。
  	// 调用 HeaderExchanger 的 bind 方法创建 ExchangeServer 实例
     url = url.addParameterIfAbsent(Constants.CODEC_KEY, "exchange");
+    // handler = DubboProtocol$requestHandler
     return getExchanger(url).bind(url, handler);
 }
 public static Exchanger getExchanger(URL url) {
@@ -623,6 +692,13 @@ public static Exchanger getExchanger(String type) {
 ```
 
 **headerExchanger.bind**
+
+```java
+public ExchangeServer bind(URL url, ExchangeHandler handler) throws RemotingException {
+    return new HeaderExchangeServer(Transporters.bind(url, new DecodeHandler(new HeaderExchangeHandler(handler))));
+    // handler = DecodeHandler(HeaderExchangeHandler(DubboProtocol$requestHandler))
+}
+```
 
 这里面包含多个逻辑
 
@@ -894,6 +970,7 @@ url: 协议地址 registry://192.168.25.129:2181/org.apache.dubbo.registry.Regis
 ```java
 public <T> Invoker<T> getInvoker(T proxy, Class<T> type, URL url) {
     // TODO Wrapper cannot handle this scenario correctly: the classname contains '$'
+    // Wrapper.getWrapper(interface com.spring.service.ISayHelloService)
     final Wrapper wrapper = Wrapper.getWrapper(proxy.getClass().getName().indexOf('$') < 0 ? proxy.getClass() : type);
     return new AbstractProxyInvoker<T>(proxy, type, url) {
         @Override
@@ -921,7 +998,11 @@ public Object invokeMethod(Object o, String n, Class[] p, Object[] v) throws jav
     try{ 
         if( "sayHello".equals( $2 )  &&  $3.length == 0 ) {  
             return ($w)w.sayHello(); 
-        } 
+        }
+        // 如果有多个方法
+        /*if ("sayBey".equals($2) && $3.length == 0) {
+                return ($w) w.sayBey();
+        }*/
     } catch(Throwable e) {      
         throw new java.lang.reflect.InvocationTargetException(e);  
     } 
