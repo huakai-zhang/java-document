@@ -102,7 +102,7 @@ bean被销毁的时候，spring容器会自动执行 destory 方法，比如释�
 
 **ApplicationListener**
 
-ApplicationEvent 事件监听，spring容器启动后会发一个事件通知知。被重写的方法为: onApplicationEvent,onApplicationEvent 方法传入的对象是 ContextRefreshedEvent。这个对象是当 Spring 的上下文被刷新或者加载完毕的时候触发的。因此服务就是在 Spring 的上下文刷新后进行导出操作的
+ApplicationEvent 事件监听，Spring 容器启动后会发一个事件通知。被重写的方法为: onApplicationEvent,onApplicationEvent 方法传入的对象是 ContextRefreshedEvent。这个对象是当 Spring 的上下文被刷新或者加载完毕的时候触发的。因此服务就是在 Spring 的上下文刷新后进行导出操作的
 
 **BeanNameAware**
 
@@ -383,7 +383,7 @@ public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcExceptio
 
 key: 从 originInvoker 中获得发布协议的 url: dubbo://ip:port/... 
 
-bounds: 一个 prviderUrl 服务 export 之后，缓存到 bounds 中，所以一个 providerUrl 只会对应一个 exporter 
+bounds: 一个 providerUrl 服务 export 之后，缓存到 bounds 中，所以一个 providerUrl 只会对应一个 exporter 
 
 ```java
 private Protocol protocol;
@@ -1010,7 +1010,7 @@ public Object invokeMethod(Object o, String n, Class[] p, Object[] v) throws jav
 }
 ```
 
-构建好了代理类之后，返回一个 AbstractproxyInvoker，并且它实现了 doInvoke 方法，这个地方似乎看到了 dubbo 消费者调用过来的时候触发的影子，因为 wrapper.invokeMethod 本质上就是触发上面动态代理类的方法 invokeMethod。
+构建好了代理类之后，返回一个 AbstractProxyInvoker，并且它实现了 doInvoke 方法，这个地方似乎看到了 dubbo 消费者调用过来的时候触发的影子，因为 wrapper.invokeMethod 本质上就是触发上面动态代理类的方法 invokeMethod。
 
 ```java
 return new AbstractProxyInvoker<T>(proxy, type, url) {
