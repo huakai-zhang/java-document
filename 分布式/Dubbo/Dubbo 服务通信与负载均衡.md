@@ -79,7 +79,8 @@ public Result invoke(Invocation invocation) throws RpcException {
 ```java
 public Result invoke(final Invocation invocation) throws RpcException {
     checkWhetherDestroyed();
-    // binding attachments into invocation.
+    // binding attachments into invocation. 隐式传参
+    // RpcContext.getContext().setAttachments(key, value)
     Map<String, String> contextAttachments = RpcContext.getContext().getAttachments();
     if (contextAttachments != null && contextAttachments.size() != 0) {
         ((RpcInvocation) invocation).addAttachments(contextAttachments);
@@ -687,22 +688,4 @@ return new AbstractProxyInvoker<T>(proxy, type, url) {
 6. execute limit（参数executes）是方法级别的并发限制，原理与actives类似，只是少了等待的过 程，即受限后立即失败
 
 ------
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
