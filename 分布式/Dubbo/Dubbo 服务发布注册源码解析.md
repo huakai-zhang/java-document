@@ -1078,7 +1078,7 @@ public void setRegistryFactory(RegistryFactory registryFactory) {
 }
 ```
 
-按照扩展点的加载规则，我们可以先看看 /META-INF/dubbo/internal 路径下找到 RegistryFactory 的配置文件,这个 factory 有多 个扩展点的实现。
+按照扩展点的加载规则，我们可以先看看 /META-INF/dubbo/internal 路径下找到 RegistryFactory 的配置文件，这个 factory 有多个扩展点的实现。
 
 ```
 dubbo=org.apache.dubbo.registry.dubbo.DubboRegistryFactory
@@ -1210,7 +1210,7 @@ public ZookeeperRegistry(URL url, ZookeeperTransporter zookeeperTransporter) {
 
 这个方法会调用 FailbackRegistry 类中的 register，为什么呢？
 
-因为 ZookeeperRegistry 这个类中并没有 register 这个方法，但是它的父类 FailbackRegistry 中存在 register 方法，而这个类又重写了 AbstractRegistry 类中的 register 方法。所以我们可以直接定位大 FailbackRegistry 这个类中的 register 方法中。
+因为 ZookeeperRegistry 这个类中并没有 register 这个方法，但是它的父类 FailbackRegistry 中存在 register 方法，而这个类又重写了 AbstractRegistry 类中的 register 方法。所以我们可以直接定位到 FailbackRegistry 这个类中的 register 方法中。
 
 ```java
 public void register(URL registryUrl, URL registeredProviderUrl) {

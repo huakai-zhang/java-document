@@ -228,6 +228,7 @@ private T createExtension(String name) {
         Set<Class<?>> wrapperClasses = cachedWrapperClasses;
         if (CollectionUtils.isNotEmpty(wrapperClasses)) {
             for (Class<?> wrapperClass : wrapperClasses) {
+                // wrapper 层层包装
                 instance = injectExtension((T) wrapperClass.getConstructor(type).newInstance(instance));
             }
         }

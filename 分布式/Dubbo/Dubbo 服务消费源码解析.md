@@ -286,6 +286,7 @@ public class Cluster$Adaptive implements org.apache.dubbo.rpc.cluster.Cluster {
         String extName = url.getParameter("cluster", "failover");
         if (extName == null)
             throw new IllegalStateException("Failed to get extension (org.apache.dubbo.rpc.cluster.Cluster) name from url (" + url.toString() + ") use keys([cluster])");
+        // getExtension 中会进行 wrapper 包装
         org.apache.dubbo.rpc.cluster.Cluster extension = (org.apache.dubbo.rpc.cluster.Cluster) ExtensionLoader.getExtensionLoader(org.apache.dubbo.rpc.cluster.Cluster.class).getExtension(extName);
         return extension.join(arg0);
     }
