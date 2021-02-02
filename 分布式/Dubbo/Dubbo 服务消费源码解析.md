@@ -234,10 +234,11 @@ private <T> Invoker<T> doRefer(Cluster cluster, Registry registry, Class<T> type
         registry.register(directory.getRegisteredConsumerUrl());
     }
     directory.buildRouterChain(subscribeUrl);
-    //订阅事件监听
+    // 订阅事件监听
+    // 产生与实际代理 service 的 invoker
     directory.subscribe(subscribeUrl.addParameter(CATEGORY_KEY,
             PROVIDERS_CATEGORY + "," + CONFIGURATORS_CATEGORY + "," + ROUTERS_CATEGORY));
-    //构建invoker
+    //构建 invoker(非实际代理 service 的 invoker，实际代理 service 的 invoker 封装在了directory 的 map 中)
     Invoker invoker = cluster.join(directory);
     ProviderConsumerRegTable.registerConsumer(invoker, url, subscribeUrl, directory);
     return invoker;
@@ -655,6 +656,11 @@ private Map<String, Invoker<T>> toInvokers(List<URL> urls) {
                     enabled = url.getParameter(ENABLED_KEY, true);
                 }
                 if (enabled) {
+                    // 初始化 invoker
+                    // 此处 invoker 非项目开发中注入的 invoker，此 invoker 会放入到 RegistryDirectory 的 Map 中，实际注入的 invoker 是包含 RegistryDirectory 对象再次封装的 invoker
+                    // 调用过程 ProtocolListenerWrapper -> ProtocolFilterWrapper -> QosProtocolWrapper -> AbstractProtocol -> DubboProtocol
+                    // 返回 invoker = new InvokerDelegate(new ListenerExporterWrapper(new ProtocolFilterWrapper$CallbackRegistrationInvoker(3 层 filter, next = new AsyncToSyncInvoker(new DubboInvoker()))))
+                    // ProtocolFilterWrapper$CallbackRegistrationInvoker 内部类
                     invoker = new InvokerDelegate<>(protocol.refer(serviceType, url), url, providerUrl);
                 }
             } catch (Throwable t) {
@@ -709,8 +715,6 @@ public <T> Invoker<T> protocolBindingRefer(Class<T> serviceType, URL url) throws
     invokers.add(invoker);
     return invoker;
 }
-//ProtocolFilterWrapper$CallbackRegistrationInvoker???
-//InvokerDelegate(ListenerInvokerWrapper(ProtocolFilterWrapper(DubboInvoker())))
 ```
 
 **getClients**
@@ -888,6 +892,11 @@ public ExchangeClient connect(URL url, ExchangeHandler handler) throws RemotingE
 ```java
 public Client connect(URL url, ChannelHandler listener) throws RemotingException {
     return new NettyClient(url, listener);
+}
+// NettyClient.java
+// handler 处理和服务端一样，wrapChannelHandler 方法会调用 ChannelHandlers.wrap(handler, url)
+public NettyClient(final URL url, final ChannelHandler handler) throws RemotingException {
+    super(url, wrapChannelHandler(url, handler));
 }
 ```
 

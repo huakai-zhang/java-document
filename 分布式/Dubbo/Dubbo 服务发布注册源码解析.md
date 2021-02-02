@@ -788,6 +788,8 @@ public Server bind(URL url, ChannelHandler listener) throws RemotingException {
 
 ```java
 public NettyServer(URL url, ChannelHandler handler) throws RemotingException {
+    // handler 经过 ChannelHandlers.wrap 处理后
+    // handler = new MultiMessageHandler(new HeartbeatHandler(new DecodeHandler(new HeaderExchangeHandler(DubboProtocol$requestHandler))))
     super(url, ChannelHandlers.wrap(handler, ExecutorUtil.setThreadName(url, SERVER_THREAD_POOL_NAME)));
 }
 public AbstractServer(URL url, ChannelHandler handler) throws RemotingException {

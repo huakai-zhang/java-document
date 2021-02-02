@@ -94,7 +94,7 @@ public Result invoke(final Invocation invocation) throws RpcException {
 
 **initLoadBalance**
 
-从 url 中获得当前的负载均衡算法，然后使用 spi 机制来获得负载 均衡的扩展点，然后返回一个具体的实现。
+从 url 中获得当前的负载均衡算法，然后使用 spi 机制来获得负载均衡的扩展点，然后返回一个具体的实现。
 
 ```java
 protected LoadBalance initLoadBalance(List<Invoker<T>> invokers, Invocation invocation) {
@@ -446,7 +446,7 @@ public static ChannelHandler wrap(ChannelHandler handler, URL url) {
 protected ChannelHandler wrapInternal(ChannelHandler handler, URL url) {
     return new MultiMessageHandler(new HeartbeatHandler(ExtensionLoader.getExtensionLoader(Dispatcher.class)
             .getAdaptiveExtension().dispatch(handler, url)));
-    // // handler = MultiMessageHandler(HeartbeatHandler(AllChannelHandler(DecodeHandler(HeaderExchangeHandler(DubboProtocol$requestHandler)))))
+    // handler = MultiMessageHandler(HeartbeatHandler(AllChannelHandler(DecodeHandler(HeaderExchangeHandler(DubboProtocol$requestHandler)))))
 }
 @SPI(AllDispatcher.NAME)
 public interface Dispatcher {
