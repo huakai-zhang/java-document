@@ -6,13 +6,73 @@ JVM 是运行在操作系统之上的，它与硬件没有直接的交互。
 
 ![image-20200903204633755](JVM 基础.assets/image-20200903204633755.png)
 
-# 1 类文件到虚拟机(类加载机制)
+# 1 源码到类文件
+
+## 1.1 The relation of JDK/JRE/JVM
+
+Reference -> Developer Guides -> 定位到 https://docs.oracle.com/javase/8/docs/index.html
+
+![image-20210206130931886](JVM 基础.assets/image-20210206130931886.png)
+
+## 1.2 编译过程
+
+> .java -> javac -> .class
+>
+> Person.java -> 词法分析器 -> tokens流 -> 语法分析器 -> 语法树/抽象语法树 -> 语义分析器 -> 注解抽象语法树 -> 字节码生成器 -> Person.class文件
+
+## 1.3 类文件(Class文件)
+
+官网 The class File Format https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-4.html
+
+```java
+ClassFile {
+    u4             magic;   // 魔数与class文件版本
+    u2             minor_version;
+    u2             major_version;
+    u2             constant_pool_count;  // 常量池
+    cp_info        constant_pool[constant_pool_count-1];
+    u2             access_flags;		// 访问标志
+    u2             this_class;		// 类索引、父类索引、接口索引
+    u2             super_class;
+    u2             interfaces_count;
+    u2             interfaces[interfaces_count];
+    u2             fields_count;		// 字段表集合
+    field_info     fields[fields_count];
+    u2             methods_count;		// 方法表集合
+    method_info    methods[methods_count];
+    u2             attributes_count;		// 属性表集合
+    attribute_info attributes[attributes_count];
+}
+```
+
+```markdown
+# vi -b Test.class
+# :%!xxd
+# magic(魔数) 标识类文件格式的幻数，它的值为 0xCAFEBABE
+	cafe babe
+# minor_version, major_version 
+	0000 0034 对应10进制的52，代表JDK 8中的一个版本
+# constant_pool_count
+	001d 对应十进制29，代表常量池中29个常量
+00000000: cafe babe 0000 0034 001d 0a00 0600 0f09  .......4........
+00000010: 0010 0011 0800 120a 0013 0014 0700 1507  ................
+00000020: 0016 0100 063c 696e 6974 3e01 0003 2829  .....<init>...()
+00000030: 5601 0004 436f 6465 0100 0f4c 696e 654e  V...Code...LineN
+00000040: 756d 6265 7254 6162 6c65 0100 046d 6169  umberTable...mai
+...
+```
+
+<img src="JVM 基础.assets/image-20210206132402676.png" alt="image-20210206132402676" style="zoom:50%;" />
+
+# 2 类文件到虚拟机(类加载机制)
 
 > 使用和卸载不算是类加载过程中的阶段，只是画完整了一下
 
 ![image-20210204190027334](JVM 基础.assets/image-20210204190027334.png)
 
-`装载(Load)` 查找和导入 Class 文件
+## 2.1 装载(Load)
+
+查找和导入 Class 文件
 
 > (1)通过一个类的全限定名获取定义此类的`二进制字节流 `
 >
@@ -20,9 +80,19 @@ JVM 是运行在操作系统之上的，它与硬件没有直接的交互。
 >
 > (3)在 Java 堆中生成一个代表这个类的 java.lang.Class 对象，作为对方法区中这些数据的访问入口
 
-`初始化(Initialize)` 对类的静态变量，静态代码块执行初始化操作
+## 2.2 链接(Link)
 
-# 2 类加载器 ClassLoader
+> 验证(Verify) 保证被加载类的正确性
+>
+> 准备(Prepare) 为类的静态变量分配内存，并将其初始化为默认值
+>
+> 解析(Resolve) 把类中的符号引用转换为直接引用，String str  = XXX符号 --> String str = 真实的引用地址
+
+## 2.3 初始化(Initialize)
+
+ 对类的静态变量，静态代码块执行初始化操作
+
+# 3 类加载器 ClassLoader
 
 > 在装载(Load)阶段，其中第(1)步：通过类的全限定名获取其定义的二进制字节流，需要借助类装载器完成，顾名思义，就是用来装载 Class 文件的。 
 
@@ -32,7 +102,7 @@ JVM 是运行在操作系统之上的，它与硬件没有直接的交互。
 
 ![image-20200903211224015](JVM 基础.assets/image-20200903211224015.png)
 
-## 2.1 虚拟机自带的加载器
+## 3.1 虚拟机自带的加载器
 
 ``启动类加载器（Bootstrap）`` C++
 
@@ -66,7 +136,7 @@ public class MyObject {
 
 > sun.misc.Launcher 它是一个java虚拟机的入口应用
 
-## 2.2 双亲委派机制
+## 3.2 双亲委派机制
 
 ```java
 package java.lang;
@@ -88,25 +158,13 @@ public class String {
 
 它防止了恶意代码去干涉善意的代码，这是通过为不同的类加载器装入的类提供了不同的命名空间来实现的，命名空间互相独立。
 
-# 3 运行时数据区(Run-Time Data Areas)
+# 4 运行时数据区(Run-Time Data Areas)
 
 > 在装载阶段的第(2)(3)步可以发现有运行时数据，堆，方法区等名词。
 >
 > 类文件被类装载器装载进来之后，类中的内容(比如变量，常量，方法，对象等这些数据得要有个去处，也就是要存储起来，存储的位置肯定是在 JVM 中有对应的空间)。
 
-.class 字节码文件
-
-```
-魔数与class文件版本
-常量池
-访问标志
-类索引、父类索引、接口索引
-字段表集合
-方法表集合
-属性表集合
-```
-
-## 3.1 Method Area 方法区
+## 4.1 方法区 Method Area
 
 各线程共享的运行时内存区域，在虚拟机启动时创建。
 
@@ -121,7 +179,7 @@ public class String {
 > But
 > 实例变量存在堆内存中，和方法区无关
 
-## 3.2 堆 Heap
+## 4.2 堆 Heap
 
 ![1599194756798](JVM 基础.assets/1599194756798.png)
 
@@ -147,11 +205,13 @@ Java堆是Java虚拟机所管理内存中最大的一块，在虚拟机启动时
 
 幸存区有两个： 0区（Survivor 0 space）和1区（Survivor 1 space）。
 
-一般情况下，新创建的对象都会被分配到 Eden 区，一些特殊的大的对象会直接分配到 Old 区。
+> 一般情况下，新创建的对象都会被分配到 Eden 区，一些特殊的大的对象会直接分配到 Old 区。
+>
+> HotSpot 虚拟机提供了 `-XX:PretenureSizeThreshold` 参数，指定大于该设置值的对象直接在老年代分配，PretenureSizeThreshold 参数只对 Serial 和 ParNew 两款收集器有效，默认 PretenureSizeThreshold=  4m。
 
 当伊甸园的空间用完时，程序又需要创建对象，JVM的垃圾回收器将对伊甸园区进行``垃圾回收(Minor GC)``，将伊甸园区中的不再被其他对象所引用的对象进行销毁。然后将伊甸园中的剩余对象移动到幸存 0区。若幸存 0区也满了，再对该区进行垃圾回收，然后移动到 1 区。那如果1 区也满了呢？再移动到养老区。若养老区也满了，那么这个时候将产生``MajorGC（FullGC）``，进行养老区的内存清理。
 
-### 3.2.1 Minor GC 过程
+### 4.2.1 Minor GC 过程
 
 复制->清空->互换
 
@@ -171,7 +231,7 @@ Java 堆从 GC 的角度还可以细分为：新生代（Eden区、From Survivor
 
 最后，SurvivorTo和SurvivorFrom互换，原SurvivorTo成为下一次GC时的SurvivorFrom区。部分对象会在From和To区域中复制来复制去,如此交换15次(由JVM参数``MaxTenuringThreshold``决定,这个参数默认是15),最终如果还是存活,就存入到老年代
 
-### 3.2.2 永久代
+### 4.2.2 永久代
 
 实际而言，方法区（Method Area）和堆一样，是各个线程共享的内存区域，它用于存储虚拟机加载的：类信息+普通常量+静态常量+编译器编译后的代码等等，虽然JVM规范将方法区描述为堆的一个逻辑部分，但它却还有一个别名叫做Non-Heap(非堆)，目的就是要和堆分开。
 
@@ -181,7 +241,7 @@ Java 堆从 GC 的角度还可以细分为：新生代（Eden区、From Survivor
 
 永久区(java7之前有)，永久存储区是一个常驻内存区域( 元空间与永久代不同其内存空间直接使用的是本地内存 )，用于存放JDK自身所携带的 Class,Interface 的元数据，也就是说它存储的是运行环境必须的类信息，被装载进此区域的数据是不会被垃圾回收器回收掉的，关闭 JVM 才会释放此区域所占用的内存。
 
-## 3.3 栈 Stack
+## 4.3 栈 Stack
 
 > 栈管运行，堆管存储
 >
@@ -193,7 +253,7 @@ Java 堆从 GC 的角度还可以细分为：新生代（Eden区、From Survivor
 
 ``8种基本类型的变量 + 对象的引用变量 + 实例方法``都是在函数的栈内存中分配。
 
-### 3.3.1 栈运行原理
+### 4.3.1 栈运行原理
 
 栈中的数据都是以`栈帧（Stack Frame）`的格式存在，栈帧是一个内存区块，是一个数据集，是一个有关方法(Method)和运行期数据的数据集。每一个被线程执行的方法，为该栈中的栈帧，即每个方法对应一个栈帧。
 
@@ -209,7 +269,7 @@ B 方法又调用了 C 方法，于是产生栈帧 F3 也被压入栈
 
 遵循 “先进后出/后进先出” 原则。
 
-``每个方法执行的同时都会创建一个栈帧，用于存储局部变量表、操作数栈、动态链接、方法出口等信息``，每一个方法从调用直至执行完毕的过程，就对应着一个栈帧在虚拟机中入栈到出栈的过程。``栈的大小和具体JVM的实现有关，通常在256K~756K之间,与等于1Mb左右``。
+``每个方法执行的同时都会创建一个栈帧，用于存储局部变量表、操作数栈、动态链接、方法出口等信息``，每一个方法从调用直至执行完毕的过程，就对应着一个栈帧在虚拟机中入栈到出栈的过程。``栈的大小和具体JVM的实现有关，通常在256K~756K之间,约等于1Mb左右``。
 
 ![image-20200903232322908](JVM 基础.assets/image-20200903232322908.png)
 
@@ -219,7 +279,7 @@ B 方法又调用了 C 方法，于是产生栈帧 F3 也被压入栈
 
 每执行一个方法都会产生一个栈帧，保存到栈(后进先出)的顶部，顶部栈就是当前的方法，该方法执行完毕后会自动将此栈帧出栈。
 
-### 3.3.2 栈帧存储什么
+### 4.3.2 栈帧存储什么
 
 栈帧(Java 方法)中主要保存 3 类数据：
 
@@ -231,7 +291,7 @@ B 方法又调用了 C 方法，于是产生栈帧 F3 也被压入栈
 
 `方法返回地址(Return Address)` 当一个方法开始执行后,只有两种方式可以退出，一种是遇到方法返回的字节码指令；一种是遇见异常，并且 这个异常没有在方法体内得到处理
 
-### 3.3.3 堆+栈+方法区的交互关系
+### 4.3.3 堆+栈+方法区的交互关系
 
 ```java
 public class Test {
@@ -255,6 +315,23 @@ public class Test {
 // 5: iload_1
 // 6: istore_2
 // 7: return
+
+public class Test {
+    public static void main(String[] args) {
+        int i = 1;
+        int n = 2;
+        int result = i + n;
+    }
+}
+// 0: iconst_1				将 int 类型常量 1 压入【操作数栈】
+// 1: istore_1				将栈顶 int 类型值保存到【局部变量1】中
+// 2: iconst_2				将 int 类型常量 2 压入【操作数栈】
+// 3: istore_2				将栈顶 int 类型值保存到【局部变量2】中
+// 4: iload_1					从【局部变量1】中装载int类型值入【操作数栈】
+// 5: iload_2					从【局部变量2】中装载int类型值入【操作数栈】
+// 6: iadd						将【操作数栈】中前两个 int 类型的值弹出相加，再将其结果进行入栈
+// 7: istore_3				将栈顶 int 类型值保存到【局部变量3】中
+// 8: return
 ```
 
 ![image-20210205112535091](JVM 基础.assets/image-20210205112535091.png)
@@ -271,7 +348,7 @@ public class Test {
 private static Object obj = new Object();
 ```
 
-## 3.4 本地方法栈 Native Method Stack
+## 4.4 本地方法栈 Native Method Stack
 
 它的具体做法是Native Method Stack中登记native方法，在Execution Engine 执行时加载本地方法库。
 
@@ -300,18 +377,18 @@ public class Thread implements Runnable {
 本地接口的作用是融合不同的编程语言为 Java 所用，它的初衷是融合 C/C++程序，Java 诞生的时候是 C/C++横行的时候，要想立足，必须有调用 C/C++程序，于是就在内存中专门开辟了一块区域处理标记为native的代码，它的具体做法是 Native Method Stack中登记 native方法，在Execution Engine 执行时加载native libraies。
 目前该方法使用的越来越少了，除非是与硬件有关的应用，比如通过Java程序驱动打印机或者Java系统管理生产设备，在企业级应用中已经比较少见。因为现在的异构领域间的通信很发达，比如可以使用 Socket通信，也可以使用Web Service等等，不多做介绍。
 
-## 3.5 程序计数器 Program Counter Register
+## 4.5 程序计数器 Program Counter Register
 
 每个线程都有一个程序计数器(PC 寄存器)，是线程私有的,就是一个指针，指向方法区中的方法字节码（``用来存储指向下一条指令的地址,也即将要执行的指令代码``），由执行引擎读取下一条指令，是一个非常小的内存空间，几乎可以忽略不记。
 这块内存区域很小，``它是当前线程所执行的字节码的行号指示器``，字节码解释器通过改变这个计数器的值来选取下一条需要执行的字节码指令。
 如果执行的是一个Native方法，那这个计数器是空的。
 用以完成分支、循环、跳转、异常处理、线程恢复等基础功能。不会发生内存溢出(OutOfMemory=OOM)错误。
 
-# 4 SOFE和OOM
+# 5 SOFE和OOM
 
 ![1601429347879](JVM 基础.assets/1601429347879.png)
 
-## 4.1 StackOverflowError 栈溢出
+## 5.1 StackOverflowError 栈溢出
 
 ```java
 public class StackOverFlowErrorDemo {
@@ -327,7 +404,7 @@ public class StackOverFlowErrorDemo {
 // 是错误，不是异常
 ```
 
-## 4.2 OutOfMemoryError 内存溢出
+## 5.2 OutOfMemoryError 内存溢出
 
 若老年代执行了Full GC之后发现依然无法进行对象的保存，就会``产生OOM异常“OutOfMemoryError”``。
 
