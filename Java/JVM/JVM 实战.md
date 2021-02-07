@@ -379,3 +379,32 @@ JConsole工具是JDK自带的可视化监控工具。查看java应用程序的�
 	jconsole
 ```
 
+3.2 jvisualvm
+
+可以监控本地的 Java 进程的 CPU，类，线程等
+
+```markdown
+# 命令行中输入
+	jvisualvm
+```
+
+3.2.1 visualgc 插件
+
+`visualgc` 插件下载链接 https://visualvm.github.io/pluginscenters.html --> 选择对应版本链接 --> Tools --> Visual GC
+
+Java VisualVM --> 工具 --> 插件 --> 已下载 --> 添加插件 --> 选择下载的 Visual GC 安装包 --> 打开 --> 安装
+
+<img src="JVM 实战.assets/image-20210207111432479.png" alt="image-20210207111432479" style="zoom:80%;" />
+
+<img src="JVM 实战.assets/image-20210207122304798.png" alt="image-20210207122304798" style="zoom:80%;" />
+
+
+
+
+
+
+
+
+
+
+

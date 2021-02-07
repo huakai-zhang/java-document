@@ -18,7 +18,7 @@ Reference -> Developer Guides -> 定位到 https://docs.oracle.com/javase/8/docs
 
 > .java -> javac -> .class
 >
-> Person.java -> 词法分析器 -> tokens流 -> 语法分析器 -> 语法树/抽象语法树 -> 语义分析器 -> 注解抽象语法树 -> 字节码生成器 -> Person.class文件
+> Test.java -> 词法分析器 -> tokens流 -> 语法分析器 -> 语法树/抽象语法树 -> 语义分析器 -> 注解抽象语法树 -> 字节码生成器 -> Test.class文件
 
 ## 1.3 类文件(Class文件)
 
@@ -86,7 +86,7 @@ ClassFile {
 >
 > 准备(Prepare) 为类的静态变量分配内存，并将其初始化为默认值
 >
-> 解析(Resolve) 把类中的符号引用转换为直接引用，String str  = XXX符号 --> String str = 真实的引用地址
+> 解析(Resolve) 把类中的符号引用转换为直接引用，String str  = XXX符号引用 --> String str = 真实的引用地址
 
 ## 2.3 初始化(Initialize)
 
@@ -327,9 +327,9 @@ public class Test {
 // 1: istore_1				将栈顶 int 类型值保存到【局部变量1】中
 // 2: iconst_2				将 int 类型常量 2 压入【操作数栈】
 // 3: istore_2				将栈顶 int 类型值保存到【局部变量2】中
-// 4: iload_1					从【局部变量1】中装载int类型值入【操作数栈】
-// 5: iload_2					从【局部变量2】中装载int类型值入【操作数栈】
-// 6: iadd						将【操作数栈】中前两个 int 类型的值弹出相加，再将其结果进行入栈
+// 4: iload_1				从【局部变量1】中装载int类型值入【操作数栈】
+// 5: iload_2				从【局部变量2】中装载int类型值入【操作数栈】
+// 6: iadd					将【操作数栈】中前两个 int 类型的值弹出相加，再将其结果进行入栈
 // 7: istore_3				将栈顶 int 类型值保存到【局部变量3】中
 // 8: return
 ```
@@ -340,7 +340,7 @@ public class Test {
 
 > HotSpot 是使用``指针``的方式来访问对象：Java堆中会存放访问``类元数据``的地址，reference 存储的就直接是对象的地址
 
-**③ 方法区指向堆**
+**<font color=red>③ 方法区指向堆</font>**
 
 方法区中会存放静态变量，常量等数据。如果是下面这种情况，就是典型的方法区中元素指向堆中的对象。
 
