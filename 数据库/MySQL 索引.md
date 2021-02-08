@@ -225,7 +225,7 @@ B+Tree 的几个主要特点：
 
 而由于Btree索引对结构的利用率很高，定位高效。当1千万条数据时，Btree索引也是三层结构(依稀记得亿级数据才是3层与4层的分水岭)。定位记录仍只需要三次I/O，这便是开头所说的，100条数据和1千万条数据的定位，在btree索引中的花销是一样的。
 
-##### 平衡扩张
+### 平衡扩张
 
 除了利用率高、定位高效外，Btree的另一个特点是能够永远保持平衡，这与它的扩张方式有关。(unbalanced和hotspot是两类问题，之前我一直混在一起)，先描述下Btree索引的扩张方式：
 
@@ -249,7 +249,7 @@ B+Tree 的几个主要特点：
 
 在整个扩张过程中，Btree自身总能保持平衡，Leaf节点的深度能一直保持一致。
 
-##### 单一方向扩展引起的索引竞争(Index Contention)
+### 单一方向扩展引起的索引竞争(Index Contention)
 
  若索引列使用sequence或者timestamp这类只增不减的数据类型。这种情况下Btree索引的增长方向总是不变的，不断的向右边扩展，因为新插入的值永远是最大的。
 
@@ -257,7 +257,7 @@ B+Tree 的几个主要特点：
 
  如果并发插入多个最大值，则最右边索引数据块的的更新与拆分都会存在争抢，影响效率。在AWR报告中可以通过检测``enq: TX – index contention``事件的时间来评估争抢的影响。解决此类问题可以使用Reverse Index解决，不过会带来新的问题。
 
-##### Index Browning 索引枯萎
+### Index Browning 索引枯萎
 
 ``Index Browning 索引枯萎``(不知道该怎么翻译这个名词，就是指leaves节点”死”了，树枯萎了)，其实oracle针对这个问题有优化机制，但优化的不彻底，所以还是要拿出来的说。
 
@@ -289,7 +289,7 @@ B+Tree 的几个主要特点：
 
 2、不够平衡。
 
-2.6 索引方式：真的是用的 B+Tree 吗
+## 2.6 索引方式：真的是用的 B+Tree 吗 +++++++++++++++++++++++++++++++++
 
 # 3 B+Tree 落地形式
 
@@ -685,7 +685,7 @@ EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND pos = 'dev';
 
 如果索引了多例，要遵守最左前缀法则。指的是``查询从索引的最左前列开始并且不跳过索引中的列``。
 
-##### 3.索引列不要做任何操作
+### 3.索引列不要做任何操作
 
 ③ 索引列上无计算
 
@@ -697,7 +697,7 @@ EXPLAIN SELECT * FROM staffs WHERE left(name, 4) = 'July';
 
 ![image-20200924221255958](MySQL 索引.assets/image-20200924221255958.png)
 
-##### 4.存储引擎不能使用索引中范围条件右边的列
+### 4.存储引擎不能使用索引中范围条件右边的列
 
 ④ 范围之后全失效
 
@@ -707,7 +707,7 @@ EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND age > 11 AND pos = 'manager
 
 ![image-20200924222542927](MySQL 索引.assets/image-20200924222542927.png)
 
-##### 5.尽量使用覆盖索引
+### 5.尽量使用覆盖索引
 
 尽量使用覆盖索引（只访问索引的查询（索引列和查询列一致）），减少select *
 
@@ -725,7 +725,7 @@ EXPLAIN SELECT name, age, pos FROM staffs WHERE name = 'July' AND age > 11 AND p
 
 同时，如果只查询索引列的部分字段，同样可以使用 using index，但是如果查询索引列以外的字段，则不会用到 using index。
 
-##### 6.!=和<>
+### 6.!=和<>
 
 mysql在使用不等于（!=或者<>）的时候无法使用索引会导致全表扫描
 
@@ -735,7 +735,7 @@ EXPLAIN SELECT * FROM staffs WHERE name != 'July' AND age = 11 AND pos = 'manage
 
 ![image-20200924223935629](MySQL 索引.assets/image-20200924223935629.png)
 
-##### 7.is null 和 is not null
+### 7.is null 和 is not null
 
 is null,is not null 也无法使用索引
 
@@ -751,7 +751,7 @@ EXPLAIN SELECT * FROM staffs WHERE name is not null;
 
 ![image-20200924224641899](MySQL 索引.assets/image-20200924224641899.png)
 
-##### 8.like
+### 8.like
 
 ⑤ 百分like加右边 
 
@@ -807,7 +807,7 @@ explain select id, name, age, email from tb_user where name like '%aa%';
 2、使用覆盖索引，查询字段必须是建立覆盖索引字段
 3、当覆盖索引指向的字段是varchar(380)及380以上的字段时，覆盖索引会失效！
 
-##### 9.字符串不加单引号索引失效
+### 9.字符串不加单引号索引失效
 
 ⑥ 字符串里有引号
 
@@ -823,7 +823,7 @@ explain select * from staffs where name = '2000';
 
 ![1600997772120](MySQL 索引.assets/1600997772120.png)
 
-##### 10.少用or
+### 10.少用or
 
 用or连接时会索引失效
 
@@ -833,7 +833,7 @@ explain select * from staffs where name = 'July' or name = 'z3';
 
 ![1600998091903](MySQL 索引.assets/1600998091903.png)
 
-##### 小结
+### 小结
 
 ![1601001932267](MySQL 索引.assets/1601001932267.png)
 
@@ -845,7 +845,7 @@ LIKE百分写最右，覆盖索引不写星；
 不等空值还有or，索引失效要少用；
 VAR引号不可丢，SQL高级也不难！ 
 
-##### 一般性建议
+### 一般性建议
 
 对于单键索引，尽量选择针对当前query过滤性更好的索引；
 
@@ -891,23 +891,5 @@ VAR引号不可丢，SQL高级也不难！
 
 索引的选择性是指索引列中不同值的数目与表中记录数的比。如果一个表中有2000条记录，表索引列有1980个不同的值，那么这个索引的选择性就是1980/2000=0.99。一个索引的选择性越接近1，这个索引的效率就越高。
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+------
 

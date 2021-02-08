@@ -1,480 +1,275 @@
 
 
-## 2 查询截取优化
+## 6 MySQL 锁机制
 
-### 2.1 查询优化
+### 6.1 概述
 
-#### 2.1.1 永远小表驱动大表
-即小的数据集驱动大的数据集，类似嵌套循环Nested Loop
+锁是计算机协调多个进程或线程并发访问某一资源的机制。
+
+在数据库中，除传统的计算资源(如CPU、RAM、I/O等)的争用以外，数据也是一种供许多用户共享的资源，如何保证数据并发访问的一致性、有效性是所有数据库必须解决的一个问题，锁冲突也是影响数据库并发访问性能的一个重要因素。从这个角度来说，锁对数据库而言显得尤其重要，也更加复杂。
+
+#### 锁的分类
+
+从数据操作的类型（读、写）分：
+
+读锁（共享锁）：针对同一份数据，多个读操作可以同时进行而不互相影响。
+
+写锁（排它锁）：当前写操作没有完成前，它会阻断其他写锁和读锁。
+
+从对数据操作的颗粒度分：
+
+行锁、表锁
 
 ```mysql
-select * from A where id in (select id from B)
-# 等价于
-for select id from B
-for select * from A where A.id = B.id
+# 表级锁争用状态变量
+show status like 'table%'
+# 行级锁争用状态变量
+show status like 'innodb_row_lock%'
 ```
 
-当B表的数据集必须小于A表的数据集时，用in优于exists
+### 6.2 表锁（偏读）
+
+偏向MyISAM存储引擎，开销小，获取释放锁快，避免死锁，锁定粒度大，发生锁冲突的概率最高，并发最低。
 
 ```mysql
-select * from A where exists (select 1 from B where B.id = A.id)
-# 等价于
-for select * from A
-for select * from B where B.id = A.id
-```
-
-当A表的数据集小于B表的数据集时，用exists优于in
-
-##### EXISTS
-
-SELECT ... FROM table WHERE EXISTS(subquery)
-
-该语法可以理解为：将主查询的数据，放到子查询中做条件验证，根据验证结果来决定主查询的数据结果是否得以保留。
-
-1. EXISTS(subquery)只返回TRUE和FALSE，因此子查询中的SELECT * 也可以是SELECT 1 或者其他，官方说法是实际执行时会忽略SELECT清单，因此没有区别
-2. EXISTS子查询的实际执行过程可能经过了优化而不是我们理解上的逐条对比，如果担心效率问题，可以进行实际检验已确定是否有效率问题
-3. EXISTS子查询往往也可以用条件表达式、其他子查询或者JOIN替代，何种最优需要具体问题具体分析
-
-#### 2.1.2 order by 关键字优化
-
-ORDER BY子句，尽量使用Index方式排序，避免使用FileSort方式排序
-
-```mysql
-CREATE TABLE `tba` (
+CREATE TABLE `mylock` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `age` int(11) DEFAULT NULL,
-  `birth` timestamp NULL DEFAULT NULL,
+  `name` varchar(20) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8;
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 
-INSERT INTO tbA(age, birth) VALUES(22, NOW());
-INSERT INTO tbA(age, birth) VALUES(23, NOW());
-INSERT INTO tbA(age, birth) VALUES(24, NOW());
+insert into mylock(name) values('a');
+insert into mylock(name) values('b');
+insert into mylock(name) values('c');
+insert into mylock(name) values('d');
+insert into mylock(name) values('e');
 
-CREATE INDEX idx_A_ageBirth ON tbA(age, birth);
+# 手动增加表锁
+# 为mylock表添加读锁，为book添加写锁
+lock table mylock read, book write;
 
-# Using where; Using index
-explain select * from tbA where age > 20 order by age;
-explain select * from tbA where age > 20 order by age, birth;
-explain select * from tbA WHERE birth > '2020-09-25 00:00:00' order by age;
-# Using where; Using index; Using filesort
-explain select * from tbA where age > 20 order by birth;
-explain select * from tbA where age > 20 order by birth, age;
-explain select * from tbA WHERE birth > '2020-09-25 00:00:00' order by birth;
-#Using index; Using filesort
-explain select * from tbA order by birth;
-explain select * from tbA order by age ASC, birth DESC;
+# 查看表上加过的锁
+show open tables;
+
+# 释放表锁
+unlock tables;
 ```
 
-MySQL支持二种方式的排序，FileSort和Index，Index效率高。它指MySQL扫描索引本身完成排序。FileSort方式效率较低。
+![image-20200927214048725](mysql高级.assets/image-20200927214048725.png)
 
-ORDER BY满足两情况，会使用Index方式排序：
+#### 6.2.1 加读锁
 
-1. ORDER BY语句使用索引最左前列
+为mylock表加read锁（读阻塞写例子）
 
-2. 使用where子句与OrderBy子句条件列组合满足索引最左前列，尽可能在索引列上完成排序操作，遵照索引建的最佳左前缀
+| session_1                                                    | session_2                                                    |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 获得表mylock的READ锁定<br>lock table mylock read;            | 连接终端                                                     |
+| 当前session可以查询该表记录<br>select * from mylock;         | 其他session也可以查询该表记录<br>select * from mylock;       |
+| 当前session不能查询其他没有锁定的表<br>select * from book;<br/>ERROR 1100 (HY000): Table 'book' was not locked with LOCK TABLES | 其他session可以查询或更新未锁定的表<br>select * from book;<br>update book set card=20 where bookid = 25; |
+| 当前session中插入或更新锁定的表都会提示错误<br>update mylock set name='a2' where id = 1;<br/>ERROR 1099 (HY000): Table 'mylock' was locked with a READ lock and can't be updated | 其他session插入或更新锁定表会一直等待获得锁<br>update mylock set name='a2' where id = 1; |
+| 释放锁<br>unlock tables;                                     | session2 获得锁，插入操作完成<br>Query OK, 0 rows affected (40.17 sec) |
 
-##### filesort
+#### 6.2.2 加写锁
 
-![img](mysql高级.assets/20200328163111593.png)
+为mylock表加write锁（MyISAM存储引擎的写阻塞读例子）
 
-如果sort_buffer能够承载所有的字段的时候，mysql就会自动选择第二种，如果不够就会使用第一种，第一种速度略逊于第一种，因为要两次读取数据，两次IO。
+| session_1                                                    | session_2                                                    |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 获得锁mylock的write锁定                                      | session2再连接终端                                           |
+| 当前session对锁定表的查询更新插入操作都可以执行<br>select * from mylock;<br>update mylock set name='a2' where id = 1; | 其他session对锁定表的查询被阻塞，需要等待锁被释放<br>select * from mylock where id=1; |
+| 释放锁<br/>unlock tables;                                    | session2获得锁，查询返回<br>5 rows in set (29.73 sec)        |
 
-如果不在索引列上，filesort有两种算法，双路排序和单路排序：
+MySQL的表级锁有两种模式：
 
-``双路排序`` MySQL4.1之前是使用双路排序，字面意思是两次扫描磁盘，最终得到数据。读取行指针和orderby列，对他们进行排序，然后扫描已经排序好的列表，按照列表中的值重新从列表中读取对应的数据传输。
+表共享读锁（Table Read Lock）
 
-从磁盘取排序字段，在buffer进行排序，再从磁盘取其他字段。
+表独占写锁（Table Write Lock）
 
-取一批数据，要对磁盘进行两次扫描，众所周知，I\O是很耗时的，所以在mysql4.1之后，出现了第二张改进的算法，就是单路排序。
+1. 对MyISAM表的读操作（加读锁），不会阻塞其他进程对同一表的读请求，但会阻塞对同一表的写请求。只有当前读锁释放后，才会执行其他进程的写操作。
+2. 对MyISAM表的写操作（加写锁），会阻塞其他线程对同一表的读和写操作，只有当写锁释放后，才会执行其他进程的读写操作。
 
-``单路排序`` 从磁盘读取查询需要的所有列，按照orderby列在buffer对它们进行排序，然后扫描排序后的列表进行输出，它的效率更快一些，避免了第二次读取数据，并且把随机IO变成顺序IO，但是它会使用更多的空间，因为它把每一行都保存在内存中了。
+简而言之，就是读锁会阻塞写，但不会阻塞读。而写锁则会把读和写都阻塞。
 
-**单路排序引申出的问题**
-
-由于单路是后出来的，总体而言好过双路，但是用单路有问题：
-
-在sort_buffer中，单路排序比双路排序占用空间多，因为单路排序是把所有字段都取出，所有有可能去除的数据的总大小超出了sort_buffer的容量，导致每次只能取sort_buffer容量大小的数据，进行排序（创建tmp文件，多路合并），排再取sort_buffer容量大小，再排......从而多次I/O。
-
-**优化策略**
-
-增大sort_buffer_size参数的设置
-
-增大max_length_for_sort_data参数的设置
-
-##### 提高Order By的速度
-
-1. Order By时select * 是一个大忌，只query需要的字段，这点非常重要：
-
-   当query的字段大小总和小于max_length_for_sort_data而排序字段不是TEXT|BLOB类型时，会用单路排序，否则用多路排序
-
-   两种算法的数据都有可能超出sort_buffer的容量，超出之后，会创建tmp文件进行合并排序，导致多次I/O，但是用单路排序算法风险会更大，所以要提高sort_buffer_size
-
-2. 尝试提高 sort_buffer_size
-
-   不管用哪种算法，提高这个参数都会提高效率，当然，要根据系统的能力去提高，因为这个参数是针对每个进程的
-
-3. 尝试提高 max_length_for_sort_data
-
-   提高这个参数，会增加用改进算法的概率。但是如果设的太高，数据总容量超出sort_buffer_size的概率就增大，明显症状是高的磁盘I/O活动和低的处理器使用率
-
-##### 为排序使用索引
-
-MySQL两种排序方式：文件排序或扫描有序索引排序
-
-MySQL能为排序与查询使用相同的索引
-
-```markdown
-KEY a_b_c(a,b,c)
-# order by 能使用索引最左前缀
-	ORDER BY a
-	ORDER BY a, b
-	ORDER BY a, b, c
-	ORDER BY a DESC, b DESC, c DESC
-
-# 如果where使用索引的最左前缀定义为常量，则order by能使用索引
-	WHERE a = const ORDER BY b, c
-	WHERE a = const AND b = const ORDER BY c
-	WHERE a = const AND b > const ORDER BY b, c
-
-# 不能使用索引进行排序
-	ORDER BY a ASC, b DESC, c DESC /*排序不一致*/
-	WHERE g = const ORDER BY b, c  /*丢失a索引*/
-	WHERE a = const ORDER BY c     /*丢失b索引*/
-	WHERE a = const ORDER BY a, d  /*d不是索引的一部分*/
-	WHERE a in (...) ORDER BY b, c /*对于排序来说，多个相等条件也是范围查询*/
-```
-
-#### 2.1.3 group by 关键字优化
-
-groupby实质是先排序后进行分组，遵照索引建的最佳左前缀。
-
-当无法使用索引列，增大max_length_for_sort_data参数的设置 + 增大sort_buffer_size参数的设置。
-
-where高于having,能写在where限定的条件就不要去having限定了。
-
-### 2.2 慢查询日志
-
-MySQL的慢查询日志是MySQL提供的一种日志记录，它用来记录在MySQL中响应时间超过阙值的语句，具体指运行时间超过``long_query_time``值的SQL，则会被记录到慢查询日志中。
-
-long_query_time默认值为10，意思是运行10秒以上的语句。
-
-由慢查询日志来查看哪些SQL超出了我们最大忍耐时间值，比如一条SQL执行查过5秒，就算慢SQL，希望能收集超过5秒的SQL，结合之前explain进行全面分析。
-
-默认情况下，MySQL数据库没有开启慢查询日志，需要手动来设置这个参数。当然如果不是调优需要的话，一般不建议开启该参数，因为开启慢查询日志或多或少带来一定的性能影响，慢查询日志支持将日志记录写入文件。
-
-#### 2.2.1 开启慢查询日志
+#### 6.2.3 分析表锁定
 
 ```mysql
-# 查看是否开启
-SHOW VARIABLES LIKE '%slow_query_log%';
+show status like 'table%';
 ```
 
-![image-20200926152636280](mysql高级.assets/image-20200926152636280.png)
+![image-20200927222724030](mysql高级.assets/image-20200927222724030.png)
 
-默认情况下``slow_query_log``的值为OFF，表示慢查询日志是禁用的。
+可以通过检查table_locks_waited和table_locks_immediate状态变量来分析系统上的表锁定：
+
+``table_locks_immediate`` 产生表级锁的次数，表示可以立即获取锁的查询次数，每立即获取锁值加1；
+
+``table_locks_waited`` 出现表级锁争用而产生等待的次数（不能立即获取锁的次数，每等待一次锁值加1），此值高则说明存在着较严重的表级锁争用情况；
+
+此外，MyISAM的读写锁调度是写优先，这也是MyISAM不适合做写为主表的引擎。因为写锁后，其他线程不能做任何操作，大量的更新会是查询很难得到锁，从而造成阻塞。
+
+### 6.3 行锁（偏写）
+
+偏向InnoDB存储引擎，开销大，获取释放锁慢；会出现死锁；锁定粒度最小，发生锁冲突的概率最低，并发度也最高。
+
+InnoDB与MyISAM的最大不同有两点：一是支持事务（TRANSACTION）;二是采用了行级锁
+
+#### 6.3.1事务（Transation）及其ACID属性
+
+参考 Spring 事务原理详解
+
+#### 6.3.2 并发事务处理带来的问题
+
+``更新丢失(Lost Update)`` 当两个或多个事务选择同一行，然后基于最初选定的值更新该行时，由于每个事务都不知道其他事务的存在，就会发生丢失更新问题，最后的更新覆盖了由其他事务所做的更新。
+
+``脏读(Dirty Reads)`` 一个事务对数据进行了增删改，但未提交，这条记录就处于不一致状态，另一个事务可以读取到未提交的数据。如果第一个事务这时候回滚，那么第二个事务读到了脏数据，不符合一致性要求。
+
+事务A读取到了事务B已修改但尚未提交的数据。 
+
+``不可重复读(Non-Reoeatable Reads)`` 一个事务中发生了两次读操作，第一次读操作和第二次读操作之间，另一个事务对数据进行了修改，这时候两次读取的数据是不一致的。 
+
+事务A读取到了事务B已经提交的修改数据，不符合隔离性。
+
+``幻读(Phantom Reads)`` 一个事物按相同的查询条件重新读取检索过的数据，却发现其他事务插入了满足其查询条件的新数据。
+
+事务A读取到了事务B已提交的新增数据，不符合隔离性。
+
+幻读和不可重复读有点类似，不可重复读是事务B修改了数据，幻读是事务B新增了数据。
+
+#### 6.3.3 数据库事务隔离级别
+
+| 隔离级别                  | 隔离级别的值                     | 导致的问题                                                   |
+| ------------------------- | -------------------------------- | ------------------------------------------------------------ |
+| 未提交读 Read-Uncommitted | 0 只能保证不读取物理上损坏的数据 | 允许读取还未提交的改变了的数据，导致脏读，幻，不可重复读     |
+| 已提交读 Read-Committed   | 1 语句级                         | 允许在并发事务已经提交后读取，避免脏读，允许不可重复读和幻读（默认） |
+| 可重复读Repeatable-Read   | 2 事务级                         | 对相同字段的多次读取是一致的，除非数据被事务本身改变，避免脏读，不可重复读，允许幻读（有增删改操作，不允许读取） |
+| 可串行化 Serializable     | 3 最高级别，事务级               | 串行化读，事务只能一个一个执行，避免了脏读，不可重复读，幻读。执行效率慢，使用时谨慎 |
+
+总结： 隔离级别越高，越能保证数据的完整性和一致性，但是对并发性能的影响也越大。 
+
+大多数的数据库默认隔离级别为Read Commited,比如SqlServer、 Oracle 
+
+少数数据库默认隔离级别为: Repeatable Read比如: MySQL InnoDB
 
 ```mysql
-# 使用下面语句开启慢查询日志只对当前数据库生效，如果MySQL重启后则会失效
-set global slow_query_log = 1;
+# 查看当前数据库的事务隔离级别
+show variables like 'tx_isolation';
 ```
 
-如果要永久生效，就必须修改配置文件m y.cnf，在[mysqld]下增加或修改参数，然后重启MySQL服务器：
-
-```markdown
-slow_query_log=1
-slow_query_log_file=/usr/local/mysql/data/spring-slow.log
-long_query_time=3
-log_output=FILE
-```
-
-关于慢查询的参数slow_query_log_file，它指定慢查询日志的存放路径，系统默认会给一个缺省的文件host_name-slow.log(如果没有指定参数slow_query_log_file的话)。
+#### 6.3.4 行锁演示
 
 ```mysql
-# 开启慢查询日志后，什么样的SQL参会记录到慢查询里面？
-SHOW VARIABLES LIKE 'long_query_time%';
-show global variables like 'long_query_time';
+create table innodb_lock(a int(11), b varchar(16)) engine=innodb;
 
-# 设置慢查询SQL的阙值时间，也可以在my.cnf参数里面修改
-# 需要重新连接或者新开一个回话才能看到修改值
-set global long_query_time=3;
+insert into innodb_lock values(1, 'b2');
+insert into innodb_lock values(3, '3');
+insert into innodb_lock values(4, '4000');
+insert into innodb_lock values(5, '5000');
+insert into innodb_lock values(6, '6000');
+insert into innodb_lock values(7, '7000');
+
+create index innodb_a_ind on innodb_lock(a);
+create index innodb_b_ind on innodb_lock(b);
 ```
 
-假如运行时间正好等于long_query_time的情况，并不会被记录下来。也就是说，在MySQL源码里是``判断大雨long_query_time，并非大不等于``。
+| session1                                                     | session2                                                     |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| set autocommit=0;                                            | set autocommit=0;                                            |
+| 更新但不提交，没有手动commit<br>update innodb_lock set b='4001' where a=4; | session更新同一行数据，只能阻塞等待<br>update innodb_lock set b='4002' where a=4; |
+| 提交更新<br>commit;                                          | 解除阻塞，更新正常进行<br>Query OK, 1 row affected (15.42 sec) |
+|                                                              | commit执行提交                                               |
+| 更新但不提交，没有手动commit<br/>update innodb_lock set b='4002' where a=4;<br>session1自己可以查询到更新 | session2查询不到session1的更改<br>select  * from innodb_lock; |
+| 提交更新<br/>commit;                                         | 依然查询不到，需要session2也执行commit;<br>才能查询到session1的更新，保证可重复读 |
+| session1更新a=4;                                             | session更新a=5;<br>不会阻塞                                  |
 
-#### 2.2.2 记录慢SQL
+##### 无索引行锁升级为表锁
+
+varchar  不用 ' '  导致系统自动转换类型, 行锁变表锁
 
 ```mysql
-SELECT SLEEP(4);
+# session1做如下更新（b使用int类型变表锁），session2会阻塞(有索引未加‘’)
+update innodb_lock set a=8 where b=4001;
+
+# 删除 b 字段的索引后，session1使用 b 字段做更新（无索引变表锁），session2会阻塞
+update innodb_lock set a=8 where b='4001';
 ```
 
-查看对应的slow_query_log_file：
-
-```
-D:\Mysql5.5\bin\mysqld, Version: 5.5.28 (MySQL Community Server (GPL)). started with:
-TCP Port: 3306, Named Pipe: MySQL
-Time                 Id Command    Argument
-# Time: 200926 15:50:58
-# User@Host: root[root] @ localhost [127.0.0.1]
-# Query_time: 4.000666  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 0
-use test;
-SET timestamp=1601106658;
-#SHOW VARIABLES LIKE 'long_query_time%';
-#SHOW VARIABLES LIKE '%slow_query_log%';
-SELECT SLEEP(4);
-```
-
-#### 2.2.3 查看当前系统有多少条慢查询记录
+##### 如何锁定一行
 
 ```mysql
-show global status like '%Slow_queries%';
-
-# Variable_name		Value
-# Slow_queries		1
+# select ... for update;锁定某一行后，其他操作会被阻塞，直到锁定行的会话commit
+begin;
+select * from innodb_lock where a=8 for update;
+...
+commit;
 ```
 
-#### 2.2.4 日志分析工具mysqldumpshow
+##### 行锁总结
 
-在生产环境中，如果要手工分析日志，查找、分析SQL，显然是一个体力活，MySQL提供了日志分析工具mysqldumpshow。
+Innodb存储引擎由于实现了行级锁定，虽然在锁定机制的实现方面所带来的性能损耗可能比表级锁定会更高一些，但是在整体并发处理能力方面要远远优于MyISAM的表级锁定的。当系统并发量较高的时候，Innodb的整体性能和MyISAM相比就会有比较明显的优势了。
 
-```shell
-mysqldumpslow --help
-```
+但是Innodb的行级锁定同样也有脆弱的一面，当我们使用不当的时候，可能会让InnoDB的整体性能表现不仅不能比MyISAM高甚至会更差。
 
-![image-20200926161015073](mysql高级.assets/image-20200926161015073.png)
-
-s:是表示按何种方式排序
-
-c:访问次数
-
-l:锁定时间
-
-r:返回记录
-
-t:查询时间
-
-al:平均锁定时间
-
-ar:平均返回记录数
-
-at:平均查询时间
-
-t:即为返回前面多少条的数据
-
-g:后边搭配一个正则匹配模式，大小写不敏感的
-
-```shell
-# 得到返回记录集最多的10个SQL
-mysqldumpslow -s r -t 10 /var/lib/mysql/spring-slow.log
-# 得到访问次数最多的10个SQL
-mysqldumpslow -s c -t 10 /var/lib/mysql/spring-slow.log
-# 得到按照时间排序的前10条里面含有左连接的查询语句
-mysqldumpslow -s t -t 10 -g "left join" /var/lib/mysql/spring-slow.log
-# 另外建议在使用这些命令时结合 ｜ 和 more 使用，否则可能出现爆屏情况
-mysqldumpslow -s r -t 10 /var/lib/mysql/spring-slow.log ｜ more
-```
-
-### 2.3 批量数据脚本
-
-往表里插入1000W数据
+##### 行锁分析
 
 ```mysql
-# 建表
-CREATE TABLE `dept` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `deptno` mediumint(9) DEFAULT NULL,
-  `dname` varchar(20) DEFAULT NULL,
-  `loc` varchar(13) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
-CREATE TABLE `emp` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `empno` mediumint(9) DEFAULT NULL COMMENT '编号',
-  `ename` varchar(20) DEFAULT NULL COMMENT '名字',
-  `job` varchar(9) DEFAULT NULL COMMENT '工作',
-  `mgr` mediumint(9) DEFAULT '0' COMMENT '上级编号',
-  `hiredate` date DEFAULT NULL COMMENT '入职时间',
-  `sal` decimal(7,2) DEFAULT NULL COMMENT '薪水',
-  `comn` decimal(7,2) DEFAULT NULL COMMENT '红利',
-  `deptno` mediumint(9) DEFAULT NULL COMMENT '部门编号',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+show status like 'innodb_row_lock%';
 ```
 
-#### 3.3.1 设置参数log_trust_function_createors
+![1601261501682](mysql高级.assets/1601261501682.png)
 
-创建函数，假如报错：This function has none of DETERMINISTIC......
+各个状态量的说明如下：
 
-由于开启过慢查询日志，因为我们开启了bin-log，就必须为function指定一个参数。
+``Innodb_row_lock_current_waits`` 当前正在等待锁定的数量
 
-```mysql
-SHOW VARIABLES LIKE 'log_bin_trust_function_creators';
-set global log_bin_trust_function_creators=1;
-```
+``Innodb_row_lock_time`` 从系统启动到现在锁定总时间长度
 
-#### 2.3.2 创建函数
+``Innodb_row_lock_time_avg `` 每次等待所花平均时间
 
-```mysql
-# 创建函数保证每条数据都不同
-# 随机参数指定长度的字符串
-DELIMITER $$
-CREATE FUNCTION rand_string(n INT) RETURNS VARCHAR(255)
-BEGIN
-	DECLARE chars_str VARCHAR(100) DEFAULT 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-	DECLARE return_str VARCHAR(255) DEFAULT '';
-	DECLARE i INT DEFAULT 0;
-	WHILE i < n DO
-	SET return_str = CONCAT(return_str,SUBSTRING(chars_str, FLOOR(1+RAND()*52), 1));
-	SET i = i + 1;
-	END WHILE;
-	RETURN return_str;
-END $$
+``Innodb_row_lock_time_max`` 从系统启动到现在等待最长的一次所花的时间
 
-# 随机产生100~110之间的整数
-DELIMITER $$
-CREATE FUNCTION rand_num() RETURNS INT(5)
-BEGIN
-	DECLARE i INT DEFAULT 0;
-	SET i = FLOOR(100+RAND()*10);
-	RETURN i;
-END $$
+``Innodb_row_lock_waits`` 系统启动后到现在总共能带的次数
 
-SELECT rand_string(10);
-SELECT rand_num();
+比较重要的主要是：
 
-# 删除函数
-DROP FUNCTION rand_num;
-```
+``Innodb_row_lock_time_avg `` 等待平均时长
 
-#### 2.3.3 创建存储过程
+``Innodb_row_lock_waits`` 等待总次数
 
-```mysql
-# 创建往emp表中插入数据的存储过程
-DELIMITER $$
-CREATE PROCEDURE insert_emp(IN START INT(10), IN max_num INT(10))
-BEGIN
-	DECLARE i INT DEFAULT 0;
-	# set autocommit = 0 把autocommit设置成0
-	SET autocommit = 0;
-	REPEAT
-	SET i = i + 1;
-	INSERT INTO emp(empno, ename, job, mgr, hiredate, sal, comn, deptno) VALUES ((START+i), rand_string(6), 'SALESMAN', 0001, CURDATE(), 2000, 400, rand_num());
-	UNTIL i = max_num
-	END REPEAT;
-	COMMIT;
-END $$
+``Innodb_row_lock_time`` 等待总时长
 
-# 创建往dept表中插入数据的存储过程
-DELIMITER $$
-CREATE PROCEDURE insert_dept(IN START INT(10), IN max_num INT(10))
-BEGIN
-	DECLARE i INT DEFAULT 0;
-	SET autocommit = 0;
-	REPEAT
-	SET i = i + 1;
-	INSERT INTO dept(deptno, dname, loc) VALUES ((START+i), rand_string(10), rand_string(8));
-	UNTIL i = max_num
-	END REPEAT;
-	COMMIT;
-END $$
-```
+尤其等等待次数很高，而且每次等待时长也不小的时候，我们就需要分析系统中为什么如此多的等待，然后根据分析结果着手指定优化计划（show profile）。
 
-#### 2.3.4 调用存储过程
+#### 6.3.5 优化建议
 
-```mysql
-CALL insert_dept(100, 10);
-CALL insert_emp(100001, 500000);
-```
+尽可能让所有数据检索都通过索引来完成，避免无索引行锁升级为表锁
 
-### 2.4 Show profiles
+合理设计索引，尽量缩小锁的范围
 
-``Show profiles`` 是mysql提供可以用来分析当前会话中语句执行的资源消耗情况。可以用于SQL的调优测量。
+尽可能较少检索条件，避免间隙锁
 
-官网：https://dev.mysql.com/doc/refman/8.0/en/show-profile.html
+尽量控制事务大小，减少锁定资源量和时间长度
 
-默认情况下，参数处于``关闭状态，并保存最近15次``的运行结果。
+尽可能低级别事务隔离
 
-```mysql
-# 是否支持，看看当前的SQL版本是否支持
-show variables like 'profiling';
-# 开启功能，默认是关闭，使用前需要开启
-set profiling=on;
+### 6.4 间隙锁
 
-# 运行SQL
-SELECT * from tb_emp e INNER JOIN tb_dept d on e.deptId = d.id;
-select * from emp group by id%10 limit 150000;
-select * from emp group by id%20 order by 5;
+当我们用范围条件而不是相等条件检索数据，并请求共享或排它锁时，InnoDB会给符合条件的已有数据记录的索引项加锁；对于键值在条件范围但不存在的记录，叫做“间隙（GAP）”；
 
-# 查看结果
-show profiles;
-```
+InnoDB也会对这个“间隙”加锁，这种锁机制就是所谓的``间隙锁（Next-Key锁）``。
 
-![1601199549766](mysql高级.assets/1601199549766.png)
+**危害**
 
-```mysql
-# 诊断SQL，show profile cpu,block io for query 上一步前面的问题SQL数字号码;
-show profile cpu,block io for query 3;
-```
+因为Query执行过程中通过范围查找的话，它会锁定整个范围内所有的索引键值，即使这个键值并不存在。
 
-![1601199661301](mysql高级.assets/1601199661301.png)
+间隙锁有一个比较致命的弱点，就是当锁定一个范围键值之后，即使某些不存在的键值也会被无辜的锁定，而造成在锁定的时候无法插入锁定范围的任何数据。在某些场景下这可能会对性能造成很大的危害。
 
-参数备注：
+| session1                                           | session2                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------ |
+| update innodb_lock set b='0928' where a>1 and a<6; | 阻塞产生，暂时不能插入<br>insert into innodb_lock values(2, '2000'); |
+| commit;                                            | 阻塞解除，完成插入<br>Query OK, 1 row affected (4.47 sec)    |
 
-``ALL`` 显示所有的开销信息
+### 6.5 页锁
 
-``BLOCK IO`` 显示块IO相关开销
-
-``CONTEXT SWITCHES`` 上下文切换相关开销
-
-``CPU`` 显示CPU相关开销信息
-
-``IPC`` 显示发送和接收相关开销信息
-
-``MEMORY`` 显示内存相关开销信息
-
-``PAGE FAULTS`` 显示页面错误相关开销信息
-
-``SOURCE`` 显示和Source_function，Source_file，Source_line相关的开销信息
-
-``SWAPS`` 显示交换次数相关开销信息
-
-**日常开发注意点**
-
-``converting HEAP to MyISAM`` 查询结果太大，内存都不够用了往磁盘上搬了
-
-``Creating tmp table`` 创建临时表，拷贝数据到临时表，用完再删除
-
-``Copying to tmp table on disk`` 把内存中临时表复制到磁盘，危险！！！
-
-``locked``
-
-### 2.5 全局查询日志
-
-**配置启用**
-
-在 MySQL 的 my.cnf中，设置如下：
-
-```
-# 开启
-general_log=1
-# 记录日志文件的路径
-general_log_file=/path/logfile
-# 输出格式
-log_output=FILE
-```
-
-**编码启用**
-
-```mysql
-set global general_log=1;
-set global log_output='TABLE';
-
-# 此后，所编写的SQL语句，就会记录到mysql库里的general_log表，可以用下面的命令查看
-select * from mysql.general_log;
-```
-
-``永远不要在生产环境开启这个功能。``
+开销和加锁时间界于表锁和行锁之间：会出现死锁；锁定粒度界于表锁和行锁之间，并发度一般。
 
 ## 3 主从复制
 

@@ -1,8 +1,8 @@
-## 1 认识 MySQL
+# 1 认识 MySQL
 
 1985年，瑞典的几位志同道合小伙子(以 David Axmark 为首)成立了一 家公司，这就是 MySQL AB 的前身。这个公司最初并不是为了开发数据库产品，而是在实现他们想法的过程中，需要一个数据库。他们希望能够使用开源的产品。但在当时并没一个合适的选择，没办法，那就自己开发吧。
 
-## 2 MySQL 下载安装
+# 2 MySQL 下载安装
 
 下载地址：https://dev.mysql.com/ »  [MySQL Downloads](https://dev.mysql.com/downloads/) » [MySQL Community Server](https://dev.mysql.com/downloads/mysql/)
 
@@ -12,7 +12,7 @@
 
 ![1601270368086](mysql基础.assets/1601270368086.png)
 
-### 2.1 MySQL 安装流程
+## 2.1 MySQL 安装流程
 
 ```markdown
 # 1.将 tar 文件上传至 Linux 服务器 /usr/local/mysql 下
@@ -86,7 +86,7 @@
 
 ![image-20201109134356295](mysql基础.assets/image-20201109134356295.png)
 
-### 2.2 MySQL 安装完成相关命令
+## 2.2 MySQL 安装完成相关命令
 
 ```markdown
 # 查看Mysql安装时创建的mysql用户和mysql组
@@ -121,7 +121,7 @@
 	mysql -u root -p '数据库名' <abc.sql
 ```
 
-### 2.3 修改字符集和数据存储路径
+## 2.3 修改字符集和数据存储路径
 
 ```mysql
 # 查看当前字符集
@@ -160,7 +160,7 @@ default-character-set=utf8
 # 修改之后新建的数据库才会应用新的字符集配置
 ```
 
-### 2.4 主要配置文件
+## 2.4 主要配置文件
 
 ``二进制日志log-bin`` 主从复制
 
@@ -168,7 +168,7 @@ default-character-set=utf8
 
 ``查询日志log`` 默认关闭,记录查询的sql语句，如果开启会减低mysql的整体性能，因为记录日志也是需要消耗系统资源的
 
-#### 数据文件
+### 数据文件
 
 两系统：
 
@@ -182,35 +182,31 @@ linux /var/lib/mysql
 
 ``myi文件`` 存放表索引
 
-## 3 MySQL 逻辑架构
+# 3 MySQL 逻辑架构
 
 和其他数据库相比，MySQL架构可以在多种不同场景中应用并发挥良好作用。主要体现在存储引擎的架构上，``插件式的存储引擎架构将查询处理和其他的系统任务以及数据的存储提取相分离``。这种架构可以根据业务的需求和实际需要选择合适的存储引擎。
 
 ![img](mysql基础.assets/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70.png)  
 
- 											![20200327143425826](mysql基础.assets/20200327143425826.png)
-
-![watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70-20200921215629234](mysql基础.assets/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70-20200921215629234.png)
-
-![20200327143549542](mysql基础.assets/20200327143549542.png)
+![image-20210208150906557](mysql基础.assets/image-20210208150906557.png)
 
 ![image-20210207143256155](mysql基础.assets/image-20210207143256155.png)
 
-### 3.1 连接层
+## 3.1 连接层
 
-最上层是一些客户端和连接服务，包含`本地 socket 通信`(在 Linux 服务器上，如果没有指定-h 参数，它就用 socket 方式登录，如果指定 -h 参数，就会用TCP/IP 协议)和大多数基于客户端/服务端实现的类似于 `tcp/ip 的通信`。主要完成一些类似于连接处理、授权认证及相关的安全方案。在该层上引入了线程池的概念，为通过认证安全接入的客户端提供线程。同样在该层上可以实现基于SSL的安全链接。服务器也会为安全接入的每个客户端验证它所有的操作权限。
+最上层是一些客户端和连接服务，包含`Unix Socket 通信协议`(在 Linux 服务器上，如果没有指定-h 参数，它就用 socket 方式登录，如果指定 -h 参数，就会用TCP/IP 协议)和大多数基于客户端/服务端实现的类似于 `tcp/ip 的通信协议`。主要完成一些类似于连接处理、授权认证及相关的安全方案。在该层上引入了线程池的概念，为通过认证安全接入的客户端提供线程。同样在该层上可以实现基于SSL的安全链接。服务器也会为安全接入的每个客户端验证它所有的操作权限。
 
 ``Connectors`` 指的是不同语言中与SQL的交互
 
-``Management Serveices & Utilities`` 系统管理和控制工具
+``Management Serveices & Utilities`` 系统管理和控制工具，包括备份恢复、MySQL 复制、集群等等
 
-``Connection Pool 连接池`` 管理缓冲用户连接，线程处理等需要缓存的需求。
+``Connection Pool 连接池`` 管理缓冲用户连接，线程处理等需要缓存的需求
 
 负责监听对 MySQL Server 的各种请求，接收连接请求，转发所有连接请求到线程管理模块。每一个连接上 MySQL Server 的客户端请求都会被分配（或创建）一个连接线程为其单独服务。而连接线程的主要工作就是负责 MySQL Server 与客户端的通信，接受客户端的命令请求，传递 Server 端的结果信息等。线程管理模块则负责管理维护这些连接线程。包括线程的创建，线程的 cache 等。
 
-> MySQL 是支持多种通信协议的，可以使用`同步`(应用操作数据库线程会阻塞)/`异步`(一个连接就会创建一个线程，线程间切换会占用大量 CPU 资源)的方式，支持`长连接`(连接可以保持打开，减少服务端创建和释放连接的消耗)/`短连接`(操作完毕以后，马上 close 掉)。
+> MySQL 是支持多种通信协议的，可以使用`同步`(受限于被调用方的性能，应用操作数据库线程会阻塞)/`异步`(避免数据混乱，一个连接就会创建一个线程，线程间切换会占用大量 CPU 资源)的方式，支持`长连接`(连接可以保持打开，减少服务端创建和释放连接的消耗)/`短连接`(操作完毕以后，马上 close 掉)。
 >
-> 如果要异步，必须使用连接池，排队从连接池获取连接而不是创建新连接。
+> 如果要异步长连接，必须使用连接池，排队从连接池获取连接而不是创建新连接。
 
 ```markdown
 # 保持长连接会消耗内存。长时间不活动的连接，MySQL 服务器会断开
@@ -243,15 +239,17 @@ linux /var/lib/mysql
 
 **MySQL 使用了半双工的通信方式？**
 
-要么是客户端向服务端发送数据，要么是服务端向客户端发送数据，这两个动作不能 同时发生。所以客户端发送 SQL 语句给服务端的时候，（在一次连接里面）数据是不能分成小块发送的，不管你的 SQL 语句有多大，都是一次性发送(可以调整 MySQL 服务器配置 `max_allowed_packet` 参数的值（默认是 4M）)。
+要么是客户端向服务端发送数据，要么是服务端向客户端发送数据，这两个动作不能同时发生。所以客户端发送 SQL 语句给服务端的时候，(在一次连接里面) SQL 语句是不能分成小块发送的，不管语句有多大，都是一次性发送(可以调整 MySQL 服务器配置 `max_allowed_packet` 参数的值，`默认是 4M`)。
 
-### 3.2 服务层
+另一方面，对于服务端来说，也是一次性发送所有的数据，不能因为你已经取到了想要的数据就中断操作，这个时候会对网络和内存产生大量消耗(在程序里面一定要避免不带 limit)。
+
+## 3.2 服务层
 
 第二层架构主要完成大多数的核心服务功能，如SQL接口，并完成`缓存的查询`，SQL的分析和优化及部分内置函数的执行，所有跨存储引擎的功能也在这一层实现，如过程、函数等。在该层，服务器会解析查询并创建相应的内部解析树，并对其完成相应的优化如确定查询表的顺序，是否利用索引等，最后生成相应的执行操作。如果是select语句，服务器还会查询内部的缓存，如果缓存空间足够大，这样在解决大量读操作的环境中能够很好的提升系统性能。
 
 ``SQL Interface: SQL 接口`` 接受用户的SQL命令，并且返回用户需要查询的结果。比如select from就是调用SQL Interface
 
-``Cache和Buffer：查询缓存`` 他的主要功能是将客户端提交 给MySQL 的 Select 类 query 请求的返回结果集 cache 到内存中，与该 query 的一个 hash 值 做一个对应。该 Query 所取数据的基表发生任何数据的变化之后， MySQL 会自动使该 query 的Cache 失效。在读写比例非常高的应用系统中， Query Cache 对性能的提高是非常显著的。当然它对内存的消耗也是非常大的。
+``Cache和Buffer：查询缓存`` 他的主要功能是将客户端提交给MySQL 的 Select 类 query 请求的返回结果集 cache 到内存中，与该 query 的一个 hash 值 做一个对应。该 Query 所取数据的基表发生任何数据的变化之后， MySQL 会自动使该 query 的Cache 失效。在读写比例非常高的应用系统中， Query Cache 对性能的提高是非常显著的。当然它对内存的消耗也是非常大的。
 
 如果查询缓存有命中的查询结果，查询语句就可以直接去查询缓存中取数据。这个缓存机制是由一系列小缓存组成的。比如表缓存，记录缓存，key缓存，权限缓存等。
 
@@ -262,74 +260,89 @@ linux /var/lib/mysql
 	show variables like 'query_cache%';
 ```
 
-主要是因为 MySQL 自带的缓存的应用场景有限，第一个是它要求 SQL 语句必须一 模一样，中间多一个空格，字母大小写不同都被认为是不同的的 SQL。 
+> 主要是因为 MySQL 自带的缓存的应用场景有限：
+>
+> * 它要求 SQL 语句必须一 模一样，中间多一个空格，字母大小写不同都被认为是不同的的 SQL
+>
+> * 表里面任何一条数据发生变化的时候，这张表所有缓存都会失效，所以对于有大量数据更新的应用，也不适合
+>
+> 所以缓存这一块，我们还是交给 ORM 框架（比如 MyBatis 默认开启了一级缓存）， 或者独立的缓存服务，比如 Redis 来处理更合适。
+>
+> 在 MySQL 8.0 中，查询缓存已经被移除了。
 
-第二个是表里面任何一条数据发生变化的时候，这张表所有缓存都会失效，所以对 于有大量数据更新的应用，也不适合。
-
-所以缓存这一块，我们还是交给 ORM 框架（比如 MyBatis 默认开启了一级缓存）， 或者独立的缓存服务，比如 Redis 来处理更合适。
-
-在 MySQL 8.0 中，查询缓存已经被移除了。
-
-``Parser: 解析器`` SQL命令传递到解析器的时候会被解析器验证和解析。解析器是由Lex和YACC实现的，是一个很长的脚本。
+``Parser 解析器`` SQL命令传递到解析器的时候会被解析器验证和解析。解析器是由Lex和YACC实现的，是一个很长的脚本。
 
 在 MySQL中我们习惯将所有 Client 端发送给 Server 端的命令都称为 query ，在 MySQL Server 里面，连接线程接收到客户端的一个 Query 后，会直接将该 query 传递给专门负责将各种 Query 进行分类然后转发给各个对应的处理模块。
 
 主要功能：
 
-1. 将SQL语句进行`词法`(完整的 SQL 语句打碎成一个个的单词)和`语法`分析，分解成数据结构(`解析树 select_lex`)，然后按照不同的操作类型进行分类，然后做出针对性的转发到后续步骤，以后SQL语句的传递和处理就是基于这个结构的。
-2. 如果在分解构成中遇到错误，那么就说明这个sql语句是不合理的
+1. 将SQL语句进行`词法`(完整的 SQL 语句打碎成一个个的单词)和`语法`分析，分解成数据结构(`解析树 select_lex`)，然后按照不同的操作类型进行分类，然后做出针对性的转发到后续步骤，以后SQL语句的传递和处理就是基于这个结构的
+2. 如果在分解构成中遇到错误，那么就说明这个 sql 语句是不合理的
 
 ![image-20210207145612429](mysql基础.assets/image-20210207145612429.png)
 
-`预处理器` 在解析 SQL 的环节里面有个预处理器。它会检查生成的解析树，解决解析器无法解析的语义。比如，它会检查表和列名是否存在，检查名字和别名，保证没有歧义。 预处理之后得到一个新的解析树。
+> `Preprocessor 预处理器` 在解析 SQL 的环节里面有个预处理器。它会检查生成的解析树，解决解析器无法解析的语义。比如，它会检查表和列名是否存在，检查名字和别名，保证没有歧义。 预处理之后得到一个新的解析树。
 
-``Optimizer: 查询优化器`` SQL语句在查询之前会使用查询优化器对查询进行优化。就是优化客户端请求的 query（sql语句） ，根据客户端请求的 query 语句，和数据库中的一些统计信息，在一系列算法的基础上进行分析，得出一个最优的策略，告诉后面的程序如何取得这个 query 语句的结果。
+``Optimizer 查询优化器`` SQL语句在查询之前会使用查询优化器对查询进行优化。就是优化客户端请求的 query（sql语句） ，根据客户端请求的 query 语句，和数据库中的一些统计信息，在一系列算法的基础上进行分析，得出一个最优的策略，告诉后面的程序如何取得这个 query 语句的结果。
 
 > 他使用的是“选取-投影-联接”策略进行查询。
 >
 > 用一个例子就可以理解： select uid,name from user where gender = 1;
 >
-> 这个select 查询先根据where 语句进行选取，而不是先将表全部查询出来以后再进行gender过滤
+> 这个 select 查询先根据 where 语句进行选取，而不是先将表全部查询出来以后再进行 gender 过滤
 >
-> 这个select查询先根据uid和name进行属性投影，而不是将属性全部取出以后再进行过滤
+> 这个 select 查询先根据 uid 和 name 进行属性投影，而不是将属性全部取出以后再进行过滤
 >
 > 将这两个查询条件联接起来生成最终查询结果
 
 ```markdown
 # 可以使用这个命令查看查询的开销
 	show status like 'Last_query_cost';
+# 要启用优化器的追踪（默认是关闭的），注意开启这开关是会消耗性能的，因为它要把优化分析的结果写到表里面，所以不要轻易开启，或者查看完之后关闭它
+	SHOW VARIABLES LIKE 'optimizer_trace';
+	set optimizer_trace='enabled=on';
 ```
 
-### 3.3 引擎层
+优化器最终会把解析树变成一个`查询执行计划`，查询执行计划是一个数据结构。
 
-存储引擎层，存储引擎真正的负责了MySQL中数据的存储和提取，服务器通过API与存储进行通信，不同的存储引擎具有的功能不同，这样可以根据自己的实际需要进行选取。
+MySQL 提供了一个执行计划的工具，我们在 SQL 语句前面加上 EXPLAIN，就可以看到执行计划的信息。
+
+## 3.3 引擎层
+
+存储引擎层，存储引擎真正的负责了MySQL中数据的存储和提取，服务器通过 API 与存储进行通信，不同的存储引擎具有的功能不同，这样可以根据自己的实际需要进行选取。
 
 ``存储引擎接口`` 存储引擎接口模块可以说是 MySQL 数据库中最有特色的一点了。目前各种数据库产品中，基本上只有 MySQL 可以实现其底层数据存储引擎的插件式管理。这个模块实际上只是 一个抽象类，但正是因为它成功地将各种数据处理高度抽象化，才成就了今天 MySQL 可插拔存储引擎的特色。
 
-MySQL区别于其他数据库的最重要的特点就是其插件式的表存储引擎。MySQL插件式的存储引擎架构提供了一系列标准的管理和服务支持，这些标准与存储引擎本身无关，可能是每个数据库系统本身都必需的，如SQL分析器和优化器等，而存储引擎是底层物理结构的实现，每个存储引擎开发者都可以按照自己的意愿来进行开发。
+MySQL区别于其他数据库的最重要的特点就是其`插件式的表存储引擎`。MySQL插件式的存储引擎架构提供了一系列标准的管理和服务支持，这些标准与存储引擎本身无关，可能是每个数据库系统本身都必需的，如SQL分析器和优化器等，而存储引擎是底层物理结构的实现，每个存储引擎开发者都可以按照自己的意愿来进行开发。
 
 注意：存储引擎是基于表的，而不是数据库。
 
-### 3.4 存储层
+> `执行引擎`利用存储引擎提供的相应的 API 来使用执行计划去操作存储引擎。
+>
+> 为什么我们修改了表的存储引擎，操作方式不需要做任何改变？
+>
+> 因为不同功能的存 储引擎实现的 API 是相同的。
+
+## 3.4 存储层
 
 数据存储层，主要是将数据存储在运行于裸设备的文件系统之上，并完成于存储引擎的交互。
 
-## 4 存储引擎
+# 4 存储引擎
 
 在 MySQL 里面，我们创建的每一张表都可以指定它的存储引擎，而不是一个数据库只能使用一个存储引擎。存储引擎的使用是以表为单位的。而且，创建表之后还可以修改存储引擎。
 
 ```mysql
 # 查看MySQL现在提供什么存储引擎
-show engines
+show engines;
 # 查看当前存储引擎
-show variables like '%storage_engine%'
+show variables like '%storage_engine%';
+# 查看数据库里面已经存在表的存储引擎
+show table status from spring;
 # 查看数据库存放数据的路径
 show variables like 'datadir';
 ```
 
 默认情况下，每个数据库有一个自己文件夹，任何一个存储引擎都有一个 frm 文件，这个是`表结构定义文件`。 不同的存储引擎存放数据的方式不一样，产生的文件也不一样，innodb 是 1 个，myisam 是两个。
-
-#### 4.1 MyISAM 和 InnoDB
 
 | 对比项 | MyISAM                                                     | InnoDB                                                       |
 | ------ | ---------------------------------------------------------- | ------------------------------------------------------------ |
@@ -347,494 +360,242 @@ show variables like 'datadir';
 >
 > 如果数据查询多更新少，对查询性能要求比较高，可以选择 MyISAM。
 
-5 InnoDB 数据更新
+# 5 InnoDB 数据更新
 
 更新流程和查询流程有什么不同呢？ 基本流程也是一致的，也就是说，它也要经过解析器、优化器的处理，最后交给执行器。 区别就在于拿到符合条件的数据之后的操作。
 
-5.1 缓冲池 Buffer Pool
+## 5.1 缓冲池 Buffer Pool
 
-首先，InnnoDB 的数据都是放在磁盘上的，InnoDB 操作数据有一个最小的逻辑单位，叫做页（索引页和数据页）。我们对于数据的操作，不是每次都直接操作磁盘，因为磁盘的速度太慢了。InnoDB 使用了一种缓冲池的技术，也就是把磁盘读到的页放到一 块内存区域里面。这个内存区域就叫 `Buffer Pool`。
+首先，InnnoDB 的数据都是放在磁盘上的，InnoDB 操作数据有一个`最小的逻辑单位，叫做页`(索引页和数据页)。我们对于数据的操作，不是每次都直接操作磁盘，因为磁盘的速度太慢了。InnoDB 使用了一种缓冲池的技术，也就是把磁盘读到的页放到一 块内存区域里面。这个内存区域就叫 `Buffer Pool`。
 
 下一次读取相同的页，先判断是不是在缓冲池里面，如果是就直接读取，不用再次访问磁盘。 修改数据的时候，先修改缓冲池里面的`页`。内存的数据页和磁盘数据不一致的时候， 我们把它叫做`脏页`。
 
 InnoDB 里面有专门的后台线程把 Buffer Pool 的数据写入到磁盘， 每隔一段时间就一次性地把多个修改写入磁盘，这个动作就叫做`刷脏`。
 
+## 5.2 InnoDB 内存结构和磁盘结构
 
+![image-20210208104850454](mysql基础.assets/image-20210208104850454.png)
 
-## 5 性能优化
+### 5.2.1 内存结构
 
-### 5.1 MySQL Query Optimizer
+Buffer Pool 主要分为 3 个部分： Buffer Pool、Change Buffer、Adaptive Hash Index，另外还有一个（redo）log buffer。
 
-MySQL 中有专门负责优化SELECT语句的优化器模块，主要功能：通过计算分析系统中收集到的统计信息，为客户端请求的Query提供它认为最优的执行计划（它认为最优的数据检索方式，但不见得是DBA认为是最优的，这部分最耗费时间）。
+#### Buffer Pool
 
-当客户端向MySQL请求一条Query，命令解析器模块完成请求分类，区别出是SELECT并转发给MySQL Query Optimizer时，MySQL Query Optimizer 首先会对整条Query进行优化，处理掉一些常量表达式的预算，直接换算成常量值。并对 Query 中的查询条件进行简化和转换，如去掉一些无用或显而易见的条件、结构调整等。然后分析 Query 中的 Hint 信息（如果有），看显示Hint信息是否可以完全确定该Query的执行计划。如果没有Hint或Hint信息还不足以完全确定执行计划，则会读取所涉及对象的统计信息，根据Query进行写相应的计算分析，然后再得出最后的执行计划。
-
-### 5.2 MySQL 常见性能瓶颈
-
-``CPU`` CPU在饱和的时候一般发生在数据装入在内存或从磁盘上读取数据时候
-
-``IO`` 磁盘I/O瓶颈发生在装入数据远大于内存容量时
-
-``服务器硬件的性能瓶颈`` top,free,iostat和vmstat来查看系统的性能状态
-
-### 5.3 EXPLAIN
-
-``EXPLAIN(执行计划)`` 用EXPLAIN关键字可以模拟优化器执行SQL语句，从而知道MySQL是如何处理你的SQL语句的。
-
-分析你的查询语句或是结构的性能瓶颈，主要功能：
-
-* 表的读取顺序
-* 数据读取操作的操作类型
-* 哪些索引可以使用
-* 哪些索引被实际使用
-* 表之间的引用
-* 每张表有多少行被优化器查询
-
-``QEP(Query Execution Plan)`` 打印执行计划，加上 explain：
+Buffer Pool 缓存的是页面信息，包括数据页、索引页。 
 
 ```mysql
-EXPLAIN SELECT * FROM user
+# 查看服务器状态，里面有很多跟 Buffer Pool 相关的信息
+SHOW STATUS LIKE '%innodb_buffer_pool%';
+# https://dev.mysql.com/doc/refman/5.7/en/server-status-variables.html
 ```
 
-![image-20200923195934590](mysql基础.assets/image-20200923195934590.png)
+![image-20210208105432511](mysql基础.assets/image-20210208105432511.png)
 
-#### id
-
-select 查询的序列号，包含一组数字，表示查询中执行select子句或操作表的顺序。
-
-id相同，执行顺序由上至下：
-
-![image-20200923200411220](mysql基础.assets/image-20200923200411220.png)
-
-id不同，如果是子查询，id的序号会递增，id值越大优先级越高，越先被执行：
-
-![image-20200923200713777](mysql基础.assets/image-20200923200713777.png)
-
-id相同不同同时存在：
-
-![image-20200923201206002](mysql基础.assets/image-20200923201206002.png)
-
-id如果相同，可以认为是一组，从上往下执行；在所有组中，id值越大，优先级越高，越先执行。
-
-``derived 衍生``
-
-#### select_type
-
-查询的类型，主要用于区别普通查询、联合查询、子查询等的复杂查询，主要有以下这几种查询类型：
-
-* ``SIMPLE`` 简单的 select 查询，不包含子查询或 UNION
-* ``PRIMARY`` 查询中若包含任何复杂的子查询，最外层查询则被标记为PRIMARY 
-
- - ``SUBQUERY``  在select 或 where 列表中包含了子查询
- - ``DERIVED`` 在from列表中包含的子查询被标记为DETIVED，MySQL 会递归执行这些子查询，把结果放在临时表里 
-  - ``UNION`` 若第二个 select 出现在 UNION 之后，则被标记为 UNION；若UNION包含在FROM子句的子查询中，外层 select 将被标记为：DERIVED
-  - ``UNION RESULT`` 从 UNION 表获取结果的 select 
-
-#### table
-
-显示这一行的数据的表的名称 
-
-#### type
-
-访问类型，显示查询使用了何种类型。
-
-从最好到最差依次是：system>const>eq_ref>ref>range>index>ALL 
-
-一般来说，得保证查询至少达到range级别，最好能达到ref。
-
-
-  - ``system`` 表只有一行记录（等于系统表）这是const类型的特例，平时很少出现 
-
-  - ``const`` 表示通过索引一次就能找到（单表），const用于比较primary key 或者unique索引。因为只匹配一行数据，所以很快。如将逐渐置于where列表中，MySQL 就能将该查询转换为一个常量
-
-    ```mysql
-    EXPLAIN SELECT * FROM tb_emp
-    WHERE tb_emp.id = 1
-    ```
-
-  - ``eq_ ref`` 唯一性索引扫描，对于每个索引键，表中只会有一条匹配结果(对于前表的每一行，后表只有一行被扫描)，常见于主键或者唯一键索引扫描
-
-    ```mysql
-    EXPLAIN SELECT * FROM tb_emp,tb_dept
-    WHERE tb_emp.deptId = tb_dept.id
-    ```
-
-  - ``ref`` 非唯一索引扫描，返回匹配某个单独值的所有行。本质上也是一种索引访问，它返回所有匹配单个单独值的行，然而，它可能会找到多个符合条件的行，所以应该属于查找和扫描的混合体
-
-    ```mysql
-    # 为 name 列创建普通索引
-    EXPLAIN SELECT * FROM tb_emp
-    WHERE tb_emp.name = 'z3'
-    ```
-
-  - ``range`` 只检索给定范围的行，使用一个索引来选择行。key列显示使用了哪个索引。一般就是在你的where语句中出现了between、<、>、in等的查询，这种范围扫描索引扫描比全表扫描要好，因为他只需要开始索引的某一点，而结束语另一点，不用扫描全部索引（可能和最终得到数的结果有关，数量多为ALL）
-
-    ```mysql
-    # 为 deptId 列创建普通索引
-    EXPLAIN SELECT * FROM tb_emp
-    WHERE deptId > 3
-    ```
-
-  - ``index`` Full Index Scan,index与ALL区别为index类型只遍历索引树。这通常比ALL快，因为索引文件通常比数据文件小。
-
-    （也就是说虽然all和index都是读全表，但index是从索引中读取的，而all是从硬盘中读的）
-
-    ```mysql
-    EXPLAIN SELECT id FROM tb_emp
-    EXPLAIN SELECT deptId FROM tb_emp
-    ```
-
-  - ``all`` Full Table Scan，全表扫描 
-
-  - 依次从好到差:system，const，eq_ref，ref，fulltext，ref_or_null， unique_subquery，index_subquery，range，index_merge，index，ALL 
-
-#### possible_ _keys
-
-显示可能应用在这张表中的索引，一个或多个。
-
-查询涉及到的字段上若存在索引，则该索引被列出，但不一定被查询实际使用。如果没有任何索引可以使用，就会显示成null。
-
-#### key
-
-实际使用的索引。如果为null则没有使用索引，查询中若使用了``覆盖索引``，则索引和查询的select字段重叠。
-
-#### key_ len
-
-表示索引中使用的字节数，可通过该列计算查询中使用的索引的长度。在不损失精确性的情况下，长度越短越好。
-
-key_len显示的值为索引最大可能长度，并非实际使用长度，即key_len是根据表定义计算而得，不是通过表内检索出的。
-
-#### ref
-
-显示索引``那一列``被使用了，如果可能的话，是一个常数。那些列或常量被用于查找索引列上的值。
-
-查询中与其他表关联的字段，外键关系建立索引。
-
-#### rows
-
-根据表统计信息及索引选用情况，大致估算出找到所需的记录所需要读取的行数。
-
-#### extra
-
-包含不适合在其他列中显示但十分重要的额外信息：
-
-
-  - ``using filesort`` 说明 MySQL 会对数据使用一个外部的索引排序，而不是按照表内的索引顺序进行读取。MySQL 中无法利用索引完成的排序操作称为``文件排序``。
-
-  - ``using temporary`` 使用了临时表保存中间结果，MySQL在对查询结果排序时使用临时表。常见于排序order by 和分组查询 group by。
-
-  - ``using index`` 表示相应的select操作中使用了``覆盖索引（Coveing Index）``，避免访问了表的数据行，效率不错！
-    如果同时出现 using where，表明索引被用来执行索引键值的查找；
-    如果没有同时出现 using where，表面索引用来读取数据而非执行查找动作。
-
-    覆盖索引（Coveing Index），一说索引覆盖。就是 select 的数据列只用从索引中就能够得到，不必读取数据行，MySQL 可以利用索引返回 select 列表中的字段，而不必根据索引再次读取数据文件，换句话说查询列要被所建的索引覆盖。
-
-    注意：
-
-    如果要使用覆盖索引，一定要注意 select列表中只取出需要的列，不可 select *，因为如果将所有字段一起做索引会导致索引文件过大，查询性能下降。
-
-  - ``using where`` 表面使用了where过滤
-
-  - ``using join buffer`` 使用了连接缓存
-
-  - ``impossible where`` where子句的值总是false，不能用来获取任何元组
-
-  - ``select tables optimized away`` 在没有GROUPBY子句的情况下，基于索引优化MIN/MAX操作或者对于MyISAM存储引擎优化COUNT(*)操作，不必等到执行阶段再进行计算，查询执行计划生成的阶段即完成优化。
-
-  - ``distinct`` 优化distinct，在找到第一匹配的元组后即停止找同样值的工作
-
-### 5.4 示例分析
-
-![1600939704485](mysql基础.assets/1600939704485.png)
-
-第一行（执行顺序4）：id列为1，表示是union里的第一个select，select_tyep列的primary
-
-第二行（执行顺序2）：id列为3，是整个查询中第三个select的一部分。因查询包含在from中，所以为derived。【select id,name from t1 where other_column=''】
-
-第三行（执行顺序3）：select列表中的子查询select_type为subquery，为整个查询中的第二个select。【select id from t3】
-
-第四行（执行顺序1）：select_type为union，说明第四个select是union里的第二个select，最先执行【select name,id from t2】
-
-第五行（执行顺序5）：代表从union的临时表中读取行的阶段，table列的<union1,4>表示用第一个和第四个select的结果进行union操作。【两个结果union操作】
-
-### 5.5 性能优化一般流程
-
-1. 开启慢查询日志（设置阙值，如超过5秒就是慢SQL，抓取出来）并捕获
-2. explain + 慢SQL分析
-3. show profile 查询SQL在MySQL服务器里面的执行细节和生命周期情况
-4. SQL数据库服务器的参数调优
-
-## 6 MySQL 锁机制
-
-### 6.1 概述
-
-锁是计算机协调多个进程或线程并发访问某一资源的机制。
-
-在数据库中，除传统的计算资源(如CPU、RAM、I/O等)的争用以外，数据也是一种供许多用户共享的资源，如何保证数据并发访问的一致性、有效性是所有数据库必须解决的一个问题，锁冲突也是影响数据库并发访问性能的一个重要因素。从这个角度来说，锁对数据库而言显得尤其重要，也更加复杂。
-
-#### 锁的分类
-
-从数据操作的类型（读、写）分：
-
-读锁（共享锁）：针对同一份数据，多个读操作可以同时进行而不互相影响。
-
-写锁（排它锁）：当前写操作没有完成前，它会阻断其他写锁和读锁。
-
-从对数据操作的颗粒度分：
-
-行锁、表锁
+Buffer Pool 默认大小是 `128M(134217728 字节)`，可以调整。 
 
 ```mysql
-# 表级锁争用状态变量
-show status like 'table%'
-# 行级锁争用状态变量
-show status like 'innodb_row_lock%'
+# 查看参数（系统变量）
+SHOW VARIABLES like '%innodb_buffer_pool%';
 ```
 
-### 6.2 表锁（偏读）
+![image-20210208110747264](mysql基础.assets/image-20210208110747264.png)
 
-偏向MyISAM存储引擎，开销小，获取释放锁快，避免死锁，锁定粒度大，发生锁冲突的概率最高，并发最低。
+**内存的缓冲池写满了怎么办？**
+
+InnoDB 用 LRU 算法来管理缓冲池(链表实现，不是传统的 LRU，分成了 young 和 old)，经过淘汰的数据就是热点数据。 
+
+内存缓冲区对于提升读写性能有很大的作用。
+
+#### Change Buffer 写缓冲
+
+当需要更新一个数据页时，如果数据页在 Buffer Pool 中存在，那么就直接更新好了。 否则的话就需要从磁盘加载到内存，再对内存的数据页进行操作。也就是说，如果没有命中缓冲池，至少要产生一次磁盘 IO。
+
+非唯一索引不需要从磁盘加载索引页判断数据是不是重复(唯一性检查)。这种情况下可以先把修改记录在内存的缓冲池中，从而提升更新(Insert、Delete、Update)语句的执行速度。这一块区域就是 `Change Buffer`。
+
+最后把 Change Buffer 记录到数据页的操作叫做 `merge`：
+
+* 在访问这个数据页的时候
+* 通过后台线程或者数据库 shut down
+* redo log 写满时触发
+
+如果数据库大部分索引都是非唯一索引，并且业务是写多读少，不会在写数据后立刻读取，就可以使用 Change Buffer。写多读少的业务，调大这个值：
 
 ```mysql
-CREATE TABLE `mylock` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(20) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8;
-
-insert into mylock(name) values('a');
-insert into mylock(name) values('b');
-insert into mylock(name) values('c');
-insert into mylock(name) values('d');
-insert into mylock(name) values('e');
-
-# 手动增加表锁
-# 为mylock表添加读锁，为book添加写锁
-lock table mylock read, book write;
-
-# 查看表上加过的锁
-show open tables;
-
-# 释放表锁
-unlock tables;
+# Change Buffer 占 Buffer Pool 的比例，默认 25%
+SHOW VARIABLES LIKE 'innodb_change_buffer_max_size';
 ```
 
-![image-20200927214048725](mysql基础.assets/image-20200927214048725.png)
+#### (redo)Log Buffer
 
-#### 6.2.1 加读锁
+如果 Buffer Pool 里面的脏页还没有刷入磁盘时，数据库宕机或者重启，这些数据丢失。如果写操作写到一半，甚至可能会破坏数据文件导致数据库不可用。 
 
-为mylock表加read锁（读阻塞写例子）
+为了避免这个问题，InnoDB 把所有对页面的修改操作专门写入一个日志文件，并且在数据库启动时从这个文件进行恢复操作(`实现 crash-safe`) — — 用它来实现`事务的持久性`。
 
-| session_1                                                    | session_2                                                    |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
-| 获得表mylock的READ锁定<br>lock table mylock read;            | 连接终端                                                     |
-| 当前session可以查询该表记录<br>select * from mylock;         | 其他session也可以查询该表记录<br>select * from mylock;       |
-| 当前session不能查询其他没有锁定的表<br>select * from book;<br/>ERROR 1100 (HY000): Table 'book' was not locked with LOCK TABLES | 其他session可以查询或更新未锁定的表<br>select * from book;<br>update book set card=20 where bookid = 25; |
-| 当前session中插入或更新锁定的表都会提示错误<br>update mylock set name='a2' where id = 1;<br/>ERROR 1099 (HY000): Table 'mylock' was locked with a READ lock and can't be updated | 其他session插入或更新锁定表会一直等待获得锁<br>update mylock set name='a2' where id = 1; |
-| 释放锁<br>unlock tables;                                     | session2 获得锁，插入操作完成<br>Query OK, 0 rows affected (40.17 sec) |
-
-#### 6.2.2 加写锁
-
-为mylock表加write锁（MyISAM存储引擎的写阻塞读例子）
-
-| session_1                                                    | session_2                                                    |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
-| 获得锁mylock的write锁定                                      | session2再连接终端                                           |
-| 当前session对锁定表的查询更新插入操作都可以执行<br>select * from mylock;<br>update mylock set name='a2' where id = 1; | 其他session对锁定表的查询被阻塞，需要等待锁被释放<br>select * from mylock where id=1; |
-| 释放锁<br/>unlock tables;                                    | session2获得锁，查询返回<br>5 rows in set (29.73 sec)        |
-
-MySQL的表级锁有两种模式：
-
-表共享读锁（Table Read Lock）
-
-表独占写锁（Table Write Lock）
-
-1. 对MyISAM表的读操作（加读锁），不会阻塞其他进程对同一表的读请求，但会阻塞对同一表的写请求。只有当前读锁释放后，才会执行其他进程的写操作。
-2. 对MyISAM表的写操作（加写锁），会阻塞其他线程对同一表的读和写操作，只有当写锁释放后，才会执行其他进程的读写操作。
-
-简而言之，就是读锁会阻塞写，但不会阻塞读。而写锁则会把读和写都阻塞。
-
-#### 6.2.3 分析表锁定
+这个文件就是磁盘的 `redo log(叫做重做日志)`，对应于/var/lib/mysql/目录下的 ib_logfile0 和 ib_logfile1，每个 48M。
 
 ```mysql
-show status like 'table%';
+show variables like 'innodb_log%';
+# innodb_log_file_size 指定每个文件的大小，默认 48M
+# innodb_log_files_in_group 指定文件的数量，默认为 2
+# innodb_log_group_home_dir 指定文件所在路径，相对或绝对。如果不指定，则为datadir 路径
 ```
 
-![image-20200927222724030](mysql基础.assets/image-20200927222724030.png)
+> 这种日志和磁盘配合的整个过程，其实就是 MySQL 里的 `WAL 技术(Write-Ahead Logging)`，它的关键点就是<font color=red>先写日志，再写磁盘。</font>
+>
+> 刷盘是`随机 I/O`，而记录日志是`顺序 I/O`，顺序 I/O 效率更高。因此先把修改写入日志，可以延迟刷盘时机，进而提升系统吞吐。
 
-可以通过检查table_locks_waited和table_locks_immediate状态变量来分析系统上的表锁定：
-
-``table_locks_immediate`` 产生表级锁的次数，表示可以立即获取锁的查询次数，每立即获取锁值加1；
-
-``table_locks_waited`` 出现表级锁争用而产生等待的次数（不能立即获取锁的次数，每等待一次锁值加1），此值高则说明存在着较严重的表级锁争用情况；
-
-此外，MyISAM的读写锁调度是写优先，这也是MyISAM不适合做写为主表的引擎。因为写锁后，其他线程不能做任何操作，大量的更新会是查询很难得到锁，从而造成阻塞。
-
-### 6.3 行锁（偏写）
-
-偏向InnoDB存储引擎，开销大，获取释放锁慢；会出现死锁；锁定粒度最小，发生锁冲突的概率最低，并发度也最高。
-
-InnoDB与MyISAM的最大不同有两点：一是支持事务（TRANSACTION）;二是采用了行级锁
-
-#### 6.3.1事务（Transation）及其ACID属性
-
-参考 Spring 事务原理详解
-
-#### 6.3.2 并发事务处理带来的问题
-
-``更新丢失(Lost Update)`` 当两个或多个事务选择同一行，然后基于最初选定的值更新该行时，由于每个事务都不知道其他事务的存在，就会发生丢失更新问题，最后的更新覆盖了由其他事务所做的更新。
-
-``脏读(Dirty Reads)`` 一个事务对数据进行了增删改，但未提交，这条记录就处于不一致状态，另一个事务可以读取到未提交的数据。如果第一个事务这时候回滚，那么第二个事务读到了脏数据，不符合一致性要求。
-
-事务A读取到了事务B已修改但尚未提交的数据。 
-
-``不可重复读(Non-Reoeatable Reads)`` 一个事务中发生了两次读操作，第一次读操作和第二次读操作之间，另一个事务对数据进行了修改，这时候两次读取的数据是不一致的。 
-
-事务A读取到了事务B已经提交的修改数据，不符合隔离性。
-
-``幻读(Phantom Reads)`` 一个事物按相同的查询条件重新读取检索过的数据，却发现其他事务插入了满足其查询条件的新数据。
-
-事务A读取到了事务B已提交的新增数据，不符合隔离性。
-
-幻读和不可重复读有点类似，不可重复读是事务B修改了数据，幻读是事务B新增了数据。
-
-#### 6.3.3 数据库事务隔离级别
-
-| 隔离级别                  | 隔离级别的值                     | 导致的问题                                                   |
-| ------------------------- | -------------------------------- | ------------------------------------------------------------ |
-| 未提交读 Read-Uncommitted | 0 只能保证不读取物理上损坏的数据 | 允许读取还未提交的改变了的数据，导致脏读，幻，不可重复读     |
-| 已提交读 Read-Committed   | 1 语句级                         | 允许在并发事务已经提交后读取，避免脏读，允许不可重复读和幻读（默认） |
-| 可重复读Repeatable-Read   | 2 事务级                         | 对相同字段的多次读取是一致的，除非数据被事务本身改变，避免脏读，不可重复读，允许幻读（有增删改操作，不允许读取） |
-| 可串行化 Serializable     | 3 最高级别，事务级               | 串行化读，事务只能一个一个执行，避免了脏读，不可重复读，幻读。执行效率慢，使用时谨慎 |
-
-总结： 隔离级别越高，越能保证数据的完整性和一致性，但是对并发性能的影响也越大。 
-
-大多数的数据库默认隔离级别为Read Commited,比如SqlServer、 Oracle 
-
-少数数据库默认隔离级别为: Repeatable Read比如: MySQL InnoDB
+当然 redo log 也不是每一次都直接写入磁盘，在 Buffer Pool 里面有一块内存区域 Log Buffer 专门用来保存即将要写入日志文件的数据，`默认 16M`，它一样可以节省磁盘 IO。
 
 ```mysql
-# 查看当前数据库的事务隔离级别
-show variables like 'tx_isolation';
+SHOW VARIABLES LIKE 'innodb_log_buffer_size';
 ```
 
-#### 6.3.4 行锁演示
+![image-20210208131959872](mysql基础.assets/image-20210208131959872.png)
+
+需要注意：redo log 的内容主要是`用于崩溃恢复`。磁盘的数据文件，数据来自 buffer pool。redo log 写入磁盘，不是写入数据文件。
+
+**那么，Log Buffer 什么时候写入 log file？**
 
 ```mysql
-create table innodb_lock(a int(11), b varchar(16)) engine=innodb;
-
-insert into innodb_lock values(1, 'b2');
-insert into innodb_lock values(3, '3');
-insert into innodb_lock values(4, '4000');
-insert into innodb_lock values(5, '5000');
-insert into innodb_lock values(6, '6000');
-insert into innodb_lock values(7, '7000');
-
-create index innodb_a_ind on innodb_lock(a);
-create index innodb_b_ind on innodb_lock(b);
+# log buffer 写入磁盘的时机，由一个参数控制，默认是 1。
+SHOW VARIABLES LIKE 'innodb_flush_log_at_trx_commit';
+# 0（延迟写） log buffer 将每秒一次地写入 log file 中，并且 log file 的 flush 操作同时进行。该模式下，在事务提交的时候，不会主动触发写入磁盘的操作
+# 1（默认，实时写，实时刷） 每次事务提交时 MySQL 都会把 log buffer 的数据写入 log file，并且刷到磁盘中去
+# 2（实时写，延迟刷） 每次事务提交时 MySQL 都会把 log buffer 的数据写入 log file。但是 flush 操作并不会同时进行。该模式下，MySQL 会每秒执行一次 flush 操作
 ```
 
-| session1                                                     | session2                                                     |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
-| set autocommit=0;                                            | set autocommit=0;                                            |
-| 更新但不提交，没有手动commit<br>update innodb_lock set b='4001' where a=4; | session更新同一行数据，只能阻塞等待<br>update innodb_lock set b='4002' where a=4; |
-| 提交更新<br>commit;                                          | 解除阻塞，更新正常进行<br>Query OK, 1 row affected (15.42 sec) |
-|                                                              | commit执行提交                                               |
-| 更新但不提交，没有手动commit<br/>update innodb_lock set b='4002' where a=4;<br>session1自己可以查询到更新 | session2查询不到session1的更改<br>select  * from innodb_lock; |
-| 提交更新<br/>commit;                                         | 依然查询不到，需要session2也执行commit;<br>才能查询到session1的更新，保证可重复读 |
-| session1更新a=4;                                             | session更新a=5;<br>不会阻塞                                  |
+> 在我们写入数据到磁盘的时候，操作系统本身是有缓存的。flush 就是把操作系统缓冲区写入到磁盘。
 
-##### 无索引行锁升级为表锁
+![image-20210208133743826](mysql基础.assets/image-20210208133743826.png)
 
-varchar  不用 ' '  导致系统自动转换类型, 行锁变表锁
+redo log，它又分成内存和磁盘两部分。redo log 有什么特点？ 
+
+* redo log 是 InnoDB 存储引擎实现的，并不是所有存储引擎都有
+* 不是记录数据页更新之后的状态，而是记录这个页做了什么改动，属于`物理日志`
+* redo log 的大小是固定的，前面的内容会被覆盖
+
+![image-20210208133351730](mysql基础.assets/image-20210208133351730.png)
+
+check point 是当前要覆盖的位置。如果 write pos 跟 check point 重叠，说明 redo log 已经写满，这时候需要同步 redo log 到磁盘中。
+
+### 5.2.2 磁盘结构
+
+表空间可以看做是 InnoDB 存储引擎逻辑结构的最高层，所有的数据都存放在表空间中。InnoDB 的表空间分为 5 大类。
+
+#### 系统表空间 system tablespace
+
+在默认情况下 InnoDB 存储引擎有一个共享表空间（对应文件/var/lib/mysql/ibdata1），也叫系统表空间。 
+
+InnoDB 系统表空间包含 InnoDB `数据字典`(由内部系统表组成，存储表和索引的元数据(定义信息))、`双写缓冲区` 和 `Undo Logs`，如果没有指定 file-per-table，也包含用户创建的表和索引数据。 
+
+**双写缓冲**
+
+InnoDB 的页和操作系统的页大小不一致，InnoDB 页大小一般为 16K，操作系统页大小为 4K，InnoDB 的页写入到磁盘时，一个页需要分 4 次写。
+
+![image-20210208135245690](mysql基础.assets/image-20210208135245690.png)
+
+如果存储引擎正在写入页的数据到磁盘时发生了宕机，可能出现页只写了一部分的情况，比如只写了 4K，就宕机了，这种情况叫做`部分写失效 partial page write`，可能会导致数据丢失。 
 
 ```mysql
-# session1做如下更新（b使用int类型变表锁），session2会阻塞(有索引未加‘’)
-update innodb_lock set a=8 where b=4001;
-
-# 删除 b 字段的索引后，session1使用 b 字段做更新（无索引变表锁），session2会阻塞
-update innodb_lock set a=8 where b='4001';
+show variables like 'innodb_doublewrite';
+# 默认开启
 ```
 
-##### 如何锁定一行
+我们不是有 redo log 吗？但是有个问题，如果这个页本身已经损坏了，用它来做崩溃恢复是没有意义的。所以在对于应用 redo log 之前，需要一个页的副本。如果出现了写入失效，就用页的副本来还原这个页，然后再应用 redo log。这个页的副本就是 `double write`，InnoDB 的双写技术。通过它实现了数据页的可靠性。
+
+跟 redo log 一样，double write 由两部分组成，一部分是内存的 double write，一个部分是磁盘上的 double write。因为 double write 是顺序写入的，不会带来很大的开销。 
+
+在默认情况下，所有的表共享一个系统表空间，这个文件会越来越大，而且它的空间不会收缩。 
+
+#### 独占表空间 file-per-table tablespaces
+
+我们可以让每张表独占一个表空间。这个开关通过 `innodb_file_per_table` 设置，默认开启。 
 
 ```mysql
-# select ... for update;锁定某一行后，其他操作会被阻塞，直到锁定行的会话commit
-begin;
-select * from innodb_lock where a=8 for update;
-...
-commit;
+SHOW VARIABLES LIKE 'innodb_file_per_table'; 
 ```
 
-##### 行锁总结
+开启后，则每张表会开辟一个表空间，这个文件就是数据目录下的 ibd 文件，存放表的索引和数据。 
 
-Innodb存储引擎由于实现了行级锁定，虽然在锁定机制的实现方面所带来的性能损耗可能比表级锁定会更高一些，但是在整体并发处理能力方面要远远优于MyISAM的表级锁定的。当系统并发量较高的时候，Innodb的整体性能和MyISAM相比就会有比较明显的优势了。
+但是其他类的数据，如回滚（undo）信息，插入缓冲索引页、系统事务信息，二次写缓冲（Double write buffer）等还是存放在原来的共享表空间内。
 
-但是Innodb的行级锁定同样也有脆弱的一面，当我们使用不当的时候，可能会让InnoDB的整体性能表现不仅不能比MyISAM高甚至会更差。
+#### 通用表空间 general tablespaces
 
-##### 行锁分析
+通用表空间也是一种共享的表空间，跟 ibdata1 类似。 
+
+不同表空间的数据是可以移动的。
 
 ```mysql
-show status like 'innodb_row_lock%';
+# 创建一个通用的表空间，用来存储不同数据库的表，数据路径和文件可以自定义
+create tablespace ts2673 add datafile '/var/lib/mysql/ts2673.ibd' file_block_size=16K engine=innodb; 
+# 在创建表的时候可以指定表空间，用 ALTER 修改表空间可以转移表空间
+create table t2673(id integer) tablespace ts2673; 
+# 删除表空间需要先删除里面的所有表
+drop table t2673; 
+drop tablespace ts2673; 
 ```
 
-![1601261501682](mysql基础.assets/1601261501682.png)
+#### 临时表空间 temporary tablespaces
 
-各个状态量的说明如下：
+存储临时表的数据，包括用户创建的临时表，和磁盘的内部临时表。对应数据目录下的 ibtmp1 文件。当数据服务器正常关闭时，该表空间被删除，下次重新产生。
 
-``Innodb_row_lock_current_waits`` 当前正在等待锁定的数量
+#### undo log tablespace
 
-``Innodb_row_lock_time`` 从系统启动到现在锁定总时间长度
+undo log（撤销日志或回滚日志）记录了事务发生之前的数据状态（不包括 select）。如果修改数据时出现异常，可以用 undo log 来实现回滚操作（保持原子性）。
 
-``Innodb_row_lock_time_avg `` 每次等待所花平均时间
+在执行 undo 的时候，仅仅是将数据从逻辑上恢复至事务之前的状态，而不是从物理页面上操作实现的，属于`逻辑日志`。
 
-``Innodb_row_lock_time_max`` 从系统启动到现在等待最长的一次所花的时间
+redo Log 和 undo Log 与事务密切相关，统称为事务日志。
 
-``Innodb_row_lock_waits`` 系统启动后到现在总共能带的次数
+undo Log 的数据默认在系统表空间 ibdata1 文件中，因为共享表空间不会自动收缩，也可以单独创建一个 undo 表空间。
 
-比较重要的主要是：
+```mysql
+show global variables like '%undo%'; 
+```
 
-``Innodb_row_lock_time_avg `` 等待平均时长
+有了这些日志之后，我们来总结一下一个更新操作的流程，这是一个简化的过程。
 
-``Innodb_row_lock_waits`` 等待总次数
+```mysql
+# name 原值是 xiaoxiao
+update user set name = 'spring' where id=1;
+```
 
-``Innodb_row_lock_time`` 等待总时长
+1. 事务开始，从内存或磁盘取到这条数据，返回给 Server 的执行器
 
-尤其等等待次数很高，而且每次等待时长也不小的时候，我们就需要分析系统中为什么如此多的等待，然后根据分析结果着手指定优化计划（show profile）。
+2. 执行器修改这一行数据的值为 spring
 
-#### 6.3.5 优化建议
+3. 记录 name=xiaoxiao 到 undo log
 
-尽可能让所有数据检索都通过索引来完成，避免无索引行锁升级为表锁
+4. 记录 name=spring 到 redo log 
 
-合理设计索引，尽量缩小锁的范围
+5. 调用存储引擎接口，在内存（Buffer Pool）中修改 name=spring
 
-尽可能较少检索条件，避免间隙锁
+6. 事务提交
 
-尽量控制事务大小，减少锁定资源量和时间长度
+## 5.3 Binlog
 
-尽可能低级别事务隔离
+binlog 以事件的形式记录了所有的 DDL 和 DML 语句(因为它记录的是操作而不是数据值，属于`逻辑日志`)，可以用来做主从复制和数据恢复。
 
-### 6.4 间隙锁
+跟 redo log 不一样，它的文件内容是可以追加的，没有固定大小限制。 在开启了 binlog 功能的情况下，我们可以把 binlog 导出成 SQL 语句，把所有的操作重放一遍，来`实现数据的恢复`。
 
-当我们用范围条件而不是相等条件检索数据，并请求共享或排它锁时，InnoDB会给符合条件的已有数据记录的索引项加锁；对于键值在条件范围但不存在的记录，叫做“间隙（GAP）”；
+binlog 的另一个功能就是用来`实现主从复制`，它的原理就是从服务器读取主服务器 的 binlog，然后执行一遍。 
 
-InnoDB也会对这个“间隙”加锁，这种锁机制就是所谓的``间隙锁（Next-Key锁）``。
+有了这两个日志之后，我们来看一下一条更新语句是怎么执行的： 
 
-**危害**
+<img src="mysql基础.assets/image-20210208141939977.png" alt="image-20210208141939977" style="zoom:80%;" />
 
-因为Query执行过程中通过范围查找的话，它会锁定整个范围内所有的索引键值，即使这个键值并不存在。
+```mysql
+update teacher set name='盆鱼宴' where id=1; 
+```
 
-间隙锁有一个比较致命的弱点，就是当锁定一个范围键值之后，即使某些不存在的键值也会被无辜的锁定，而造成在锁定的时候无法插入锁定范围的任何数据。在某些场景下这可能会对性能造成很大的危害。
+1. 先查询到这条数据，如果有缓存，也会用到缓存
 
-| session1                                           | session2                                                     |
-| -------------------------------------------------- | ------------------------------------------------------------ |
-| update innodb_lock set b='0928' where a>1 and a<6; | 阻塞产生，暂时不能插入<br>insert into innodb_lock values(2, '2000'); |
-| commit;                                            | 阻塞解除，完成插入<br>Query OK, 1 row affected (4.47 sec)    |
+2. 把 name 改成盆鱼宴，然后调用引擎的 API 接口，写入这一行数据到内存，同时记录 redo log。这时 redo log 进入 prepare 状态，然后告诉执行器，执行完成了，可以随时提交
 
-### 6.5 页锁
+3. 执行器收到通知后记录 binlog，然后调用存储引擎接口，设置 redo log为 commit 状态
 
-开销和加锁时间界于表锁和行锁之间：会出现死锁；锁定粒度界于表锁和行锁之间，并发度一般。
+4. 更新完成
 
 ------
-
 
