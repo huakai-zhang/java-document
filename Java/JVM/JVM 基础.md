@@ -384,7 +384,7 @@ public class Thread implements Runnable {
 如果执行的是一个Native方法，那这个计数器是空的。
 用以完成分支、循环、跳转、异常处理、线程恢复等基础功能。不会发生内存溢出(OutOfMemory=OOM)错误。
 
-# 5 SOFE和OOM
+# 5 SOFE 和 OOM
 
 ![1601429347879](JVM 基础.assets/1601429347879.png)
 
