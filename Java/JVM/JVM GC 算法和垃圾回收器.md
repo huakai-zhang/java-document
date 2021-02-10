@@ -299,13 +299,13 @@ public class HelloGC {
 
 串行收集器，一个单线程的收集器，在进行垃圾收集时候，必须暂停其他所有的工作现场知道它收集结束。
 
-![1601286112905](JVM GC 算法和垃圾回收器.assets/1601286112905.png)
+![image-20210210154108377](JVM GC 算法和垃圾回收器.assets/image-20210210154108377.png)
 
 串行收集器是最古老，最稳定以及效率高的收集器，只使用一个线程去回收其在进行垃圾收集过程中可能会产生较长的停顿（``Stop-The-World状态``）。虽然在收集垃圾过程中需要暂停所有其他的工作线程，但是它简单高效，对于限定单个CPU环境来说，没有线程交互的开销可以获得最高的单线程垃圾收集效率，因此Serial垃圾收集器依然是Java虚拟机运行在Client模式下默认的新生代垃圾收集器。
 
 对应JVM参数是：`-XX:+UseSerialGC`
 
-开启后会使用：Serial(Young区用) + Serial Old(Old区)的收集器组合
+开启后会使用：`Serial(Young区用) + Serial Old(Old区)`的收集器组合
 
 表示：新生代、老年代都会使用串行回收收集器，新生代使用``复制算法``，老年代使用``标记-整理算法``。
 
@@ -321,13 +321,13 @@ public class HelloGC {
 
 使用多线程进行垃圾回收，在垃圾收集时，会Stop-The-World暂停其他所有的工作线程直到它收集结束。
 
-![1601287098321](JVM GC 算法和垃圾回收器.assets/1601287098321.jpeg)
+![image-20210210151234971](JVM GC 算法和垃圾回收器.assets/image-20210210151234971.png)
 
 ParNew收集器其实就是Serial收集器新生代的并行多线程版本，最常见的应用场景就是配合老年代的CMS GC工作，其余的行为和Serial收集器完全一样，ParNew垃圾收集器在垃圾回收过程中同样也要暂停所有其他的工作线程。它是很多Java虚拟机运行在Server模式下新生代的默认垃圾收集器。
 
 常用对应JVM参数：``-XX:+UseParNewGC`` 启用ParNew收集器，只影响新生代的收集，不影响老年代。
 
-开启上诉参数后，会使用：ParNew(Young区用) + Serial Old的收集器组合，新生代使用``复制算法``，老年代采用``标记-整理``算法。
+开启上诉参数后，会使用：`ParNew(Young区用) + Serial Old`的收集器组合，新生代使用``复制算法``，老年代采用``标记-整理``算法。
 
 ```markdown
 # 限制线程数量，默认开启和CPU数目相同的线程数
@@ -345,7 +345,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: Using the ParNew young collector with
 
 ### Parallel Scavenge收集器
 
-<img src="JVM 基础.assets/image-20200928194031262.png" alt="image-20200928194031262" style="zoom:50%;" />
+![image-20210210154917530](JVM GC 算法和垃圾回收器.assets/image-20210210154917530.png)
 
 Parallel Scavenge收集器类似ParNew也是新生代垃圾收集器，使用``复制算法``，也是一个并行的多线程的垃圾收集器，俗称`吞吐量优先`收集器。一句话：串行收集器在新生代和老年代的并行化
 
@@ -377,6 +377,10 @@ cpu > 8 N = (3+((5*CPU_count)/8))
 [Full GC (Allocation Failure) [PSYoungGen: 0K->0K(1536K)] [ParOldGen: 4366K->4352K(7168K)] 4366K->4352K(8704K), [Metaspace: 2667K->2667K(1056768K)], 0.0073078 secs] [Times: user=0.01 sys=0.00, real=0.00 secs] 
 ```
 
+![1601365760361](JVM GC 算法和垃圾回收器.assets/1601365760361.png)
+
+>  如果新生代回收的差值和 JVM 堆回收的差值中间有出入，说明这部分空间是 Old 区释放出来的
+
 ## 2.5 老年代垃圾收集器
 
 ### Parallel Old收集器
@@ -397,7 +401,7 @@ CMS收集器（Concurrent Mark Sweep：并发标记清除）是一种以``获取
 
 CMS非常适合堆内存大、CPU核数多的服务器端应用，也是G1出现之前大型应用的首选收集器。
 
-<img src="JVM 基础.assets/image-20200928202151131.png" alt="image-20200928202151131" style="zoom:50%;" />
+![image-20210210160114928](JVM GC 算法和垃圾回收器.assets/image-20210210160114928.png)
 
 Concurrent Mark Sweep 并发标记清除，并发收集低停顿，并发指的是与用户线程一起执行。
 
@@ -536,7 +540,7 @@ G1算法将堆划分为若干个区域（Region），它仍然属于分代收集
 
 ### G1 回收步骤
 
-针对Eden区进行收集，Eden区耗尽后会触发，主要是小区域收集 + 形成连续内存块，避免内存碎片：
+针对Eden区进行收集，Eden区耗尽后会触发，主要是小区域收集(`优先收集垃圾比价多的区域`) + 形成连续内存块，避免内存碎片：
 
 * Eden区的数据移动到Survivor区，假如出现Survivor区空间不够，Eden区数据会部分晋升到Old区
 * Survivor区的数据移动到新的Survivor区，部分数据晋升到Old区
@@ -553,12 +557,15 @@ G1算法将堆划分为若干个区域（Region），它仍然属于分代收集
 3. 最终标记，修正并发标记期间，因程序运行导致标记发生变化的那一部分对象
 4. 筛选回收，根据时间来进行价值最大化的回收
 
-![1601349053319](JVM GC 算法和垃圾回收器.assets/1601349053319.png)
+![image-20210210153150681](JVM GC 算法和垃圾回收器.assets/image-20210210153150681.png)
+
+> 理解 G1日志格式 https://blogs.oracle.com/poonam/understanding-g1-gc-logs
 
 ```markdown
 -Xms10m -Xmx10m -XX:+PrintGCDetails -XX:+PrintCommandLineFlags -XX:+UseG1GC
 
-[GC pause (G1 Humongous Allocation) (young) (initial-mark), 0.0017942 secs]
+# 什么时候发生的GC，相对的时间刻，GC发生的区域young，总共花费的时间，0.0017942s
+2019-12-18T16:06:46.508+0800:0.458: [GC pause (G1 Humongous Allocation) (young) (initial-mark), 0.0017942 secs]
 [GC concurrent-root-region-scan-start]
 [GC concurrent-root-region-scan-end, 0.0001925 secs]
 [GC concurrent-mark-start]
@@ -591,14 +598,82 @@ G1算法将堆划分为若干个区域（Region），它仍然属于分代收集
 	-XX:G1ReservePercent=n
 ```
 
+### G1调优与最佳指南
+
+> 是否选用G1垃圾收集器的判断依据 https://docs.oracle.com/javase/8/docs/technotes/guides/vm/G1.html#use_cases
+>
+> * 50%以上的堆被存活对象占用
+>
+> * 对象分配和晋升的速度变化非常大
+>
+> * 垃圾回收时间比较长
+
+```markdown
+# 使用G1GC垃圾收集器，并打印日志
+-XX:+UseG1GC -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -Xloggc:gc.log
+
+# 使用GCViewer分析吞吐量和响应时间
+	Throughput   MinPause   MaxPause		AvgPause		GCcount
+	97.9%        0.00108s   0.02883s    0.01557s    7
+
+# 调整内存大小再获取gc日志分析
+	-XX:MetaspaceSize=100M -Xms320M -Xmx320M
+	Throughput   MinPause   MaxPause		AvgPause		GCcount
+	98.46%       0.01188s   0.03649s    0.02106s    3
+------------- 吞吐量增加，GC 次数减少，但是停顿时间变大 -------------
+	堆空间变大，意味着能存在更多的垃圾对象，那么每次垃圾回收的时候周期就会拉长
+
+# 设置最大GC停顿时间指标
+	-XX:MaxGCPauseMillis=35
+	Throughput   MinPause   MaxPause		AvgPause		GCcount
+	96.36%       0.00476s   0.03059s    0.0144s     10
+------------- 停顿时间能够被控制，但是 GC 的次数增加了 -------------
+	由于停顿时间的限制，每次回收并为完全回收，需要等待下次回收
+
+# 启动并发GC时堆内存占用百分比
+	-XX:InitiatingHeapOccupancyPercent=50
+	Throughput   MinPause   MaxPause		AvgPause		GCcount
+	97.36%       0.0036s    0.02271s    0.01038s    9
+```
+
+**最佳指南**
+
+官网建议 https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/g1_gc_tuning.html#recommendations
+
+1. 不要手动设置新生代和老年代的大小，只要设置整个堆的大小
+
+   G1收集器在运行过程中，会自己调整新生代和老年代的大小，其实是通过 adapt 代的大小来调整对象晋升的速度和年龄，从而达到为收集器设置的暂停时间目标如果手动设置了大小就意味着放弃了G1的自动调优。
+
+2. 不断调优暂停时间目标
+
+   一般情况下这个值设置到100ms或者200ms都是可以的(不同情况下会不一样)，但如果设置成50ms就不太合理。暂停时间设置的太短，就会导致出现G1跟不上垃圾产生的速度。最终退化成FullGC。所以对这个参数的调优是一个持续的过程，逐步调整到最佳状态。暂停时间只是一个目标，并不能总是得到满足。
+
+3. 使用 `-XX:ConcGCThreads=n` 来增加标记线程的数量
+
+   IHOP如果阀值设置过高，可能会遇到转移失败的风险，比如对象进行转移时空间不足。如果阀值设置过低，就会使标记周期运行过于频繁，并且有可能混合收集期回收不到空间。
+   IHOP值如果设置合理，但是在并发周期时间过长时，可以尝试增加并发线程数，调高ConcGCThreads。
+
+4. MixedGC调优
+
+   -XX:InitiatingHeapOccupancyPercent 
+   -XX:G1MixedGCLiveThresholdPercent 
+   -XX:G1MixedGCCountTarger 
+   -XX:G1OldCSetRegionThresholdPercent
+
+5. 适当增加堆内存大小
+
 ### G1 比起CMS的优势
 
 1. G1不会产生内存碎片
 2. 可以精确的控制停顿。该收集器把整个堆（新生代、老年代）划分成多个固定大小的区域，每次根据允许停顿时间去收集垃圾最多的区域
 
-# 3 JVMGC + SpringBoot微服务的生产部署和参数调优
+# 3 JVM 性能优化指南
 
-微服务启 动时候，同时配置JVM/GC的调优参数。
+![image-20210210145151402](JVM GC 算法和垃圾回收器.assets/image-20210210145151402.png)
+
+# 4 JVMGC + SpringBoot微服务的生产部署和参数调优
+
+微服务启动时候，同时配置JVM/GC的调优参数。
 
 IDE通过Application#main()方法启动：
 
