@@ -10,7 +10,7 @@
 
 下载得到 MySQL-5.5.62-1.el7.x86_64.rpm-bundle.tar
 
-![1601270368086](mysql基础.assets/1601270368086.png)
+![1601270368086](MySQL 基础.assets/1601270368086.png)
 
 ## 2.1 MySQL 安装流程
 
@@ -84,7 +84,7 @@
 
 日志文件中的初始密码：
 
-![image-20201109134356295](mysql基础.assets/image-20201109134356295.png)
+![image-20201109134356295](MySQL 基础.assets/image-20201109134356295.png)
 
 ## 2.2 MySQL 安装完成相关命令
 
@@ -128,7 +128,7 @@
 show variables like '%char%';
 ```
 
-![image-20200921212803689](mysql基础.assets/image-20200921212803689.png)
+![image-20200921212803689](MySQL 基础.assets/image-20200921212803689.png)
 
 数据库和服务端的字符集默认都是latin1，中文会乱码。
 
@@ -186,15 +186,15 @@ linux /var/lib/mysql
 
 和其他数据库相比，MySQL架构可以在多种不同场景中应用并发挥良好作用。主要体现在存储引擎的架构上，``插件式的存储引擎架构将查询处理和其他的系统任务以及数据的存储提取相分离``。这种架构可以根据业务的需求和实际需要选择合适的存储引擎。
 
-![img](mysql基础.assets/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70.png)  
+![img](MySQL 基础.assets/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70.png)  
 
-![image-20210208150906557](mysql基础.assets/image-20210208150906557.png)
+![image-20210208150906557](MySQL 基础.assets/image-20210208150906557.png)
 
-![image-20210207143256155](mysql基础.assets/image-20210207143256155.png)
+![image-20210207143256155](MySQL 基础.assets/image-20210207143256155.png)
 
 ## 3.1 连接层
 
-最上层是一些客户端和连接服务，包含`Unix Socket 通信协议`(在 Linux 服务器上，如果没有指定-h 参数，它就用 socket 方式登录，如果指定 -h 参数，就会用TCP/IP 协议)和大多数基于客户端/服务端实现的类似于 `tcp/ip 的通信协议`。主要完成一些类似于连接处理、授权认证及相关的安全方案。在该层上引入了线程池的概念，为通过认证安全接入的客户端提供线程。同样在该层上可以实现基于SSL的安全链接。服务器也会为安全接入的每个客户端验证它所有的操作权限。
+最上层是一些客户端和连接服务，包含`Unix Socket 通信协议`(在 Linux 服务器上，如果没有指定 `-h 参数`，它就用 socket 方式登录，如果指定 -h 参数，就会用TCP/IP 协议)和大多数基于客户端/服务端实现的类似于 `tcp/ip 的通信协议`。主要完成一些类似于连接处理、授权认证及相关的安全方案。在该层上引入了线程池的概念，为通过认证安全接入的客户端提供线程。同样在该层上可以实现基于SSL的安全链接。服务器也会为安全接入的每个客户端验证它所有的操作权限。
 
 ``Connectors`` 指的是不同语言中与SQL的交互
 
@@ -204,7 +204,7 @@ linux /var/lib/mysql
 
 负责监听对 MySQL Server 的各种请求，接收连接请求，转发所有连接请求到线程管理模块。每一个连接上 MySQL Server 的客户端请求都会被分配（或创建）一个连接线程为其单独服务。而连接线程的主要工作就是负责 MySQL Server 与客户端的通信，接受客户端的命令请求，传递 Server 端的结果信息等。线程管理模块则负责管理维护这些连接线程。包括线程的创建，线程的 cache 等。
 
-> MySQL 是支持多种通信协议的，可以使用`同步`(受限于被调用方的性能，应用操作数据库线程会阻塞)/`异步`(避免数据混乱，一个连接就会创建一个线程，线程间切换会占用大量 CPU 资源)的方式，支持`长连接`(连接可以保持打开，减少服务端创建和释放连接的消耗)/`短连接`(操作完毕以后，马上 close 掉)。
+> MySQL 是支持多种通信协议的，可以使用`同步`(受限于被调用方的性能，应用操作数据库线程会阻塞)/`异步`(避免数据混乱，一个连接就会创建一个线程，线程间切换会占用大量 CPU 资源，并不能节省服务端执行 SQL 的时间)的`通信类型`，支持`长连接`(连接可以保持打开，减少服务端创建和释放连接的消耗)/`短连接`(操作完毕以后，马上 close 掉)的`连接方式`。
 >
 > 如果要异步长连接，必须使用连接池，排队从连接池获取连接而不是创建新连接。
 
@@ -237,7 +237,11 @@ linux /var/lib/mysql
 	show variables like 'max_connections';
 ```
 
-**MySQL 使用了半双工的通信方式？**
+> show session/global XXX like 'XXX'
+>
+> `session` 表示会话级别，`global` 表示全局，如果没有指定默认为会话级别。
+
+**MySQL 使用了半双工的`通信方式`？**
 
 要么是客户端向服务端发送数据，要么是服务端向客户端发送数据，这两个动作不能同时发生。所以客户端发送 SQL 语句给服务端的时候，(在一次连接里面) SQL 语句是不能分成小块发送的，不管语句有多大，都是一次性发送(可以调整 MySQL 服务器配置 `max_allowed_packet` 参数的值，`默认是 4M`)。
 
@@ -279,7 +283,7 @@ linux /var/lib/mysql
 1. 将SQL语句进行`词法`(完整的 SQL 语句打碎成一个个的单词)和`语法`分析，分解成数据结构(`解析树 select_lex`)，然后按照不同的操作类型进行分类，然后做出针对性的转发到后续步骤，以后SQL语句的传递和处理就是基于这个结构的
 2. 如果在分解构成中遇到错误，那么就说明这个 sql 语句是不合理的
 
-![image-20210207145612429](mysql基础.assets/image-20210207145612429.png)
+![image-20210207145612429](MySQL 基础.assets/image-20210207145612429.png)
 
 > `Preprocessor 预处理器` 在解析 SQL 的环节里面有个预处理器。它会检查生成的解析树，解决解析器无法解析的语义。比如，它会检查表和列名是否存在，检查名字和别名，保证没有歧义。 预处理之后得到一个新的解析树。
 
@@ -301,11 +305,119 @@ linux /var/lib/mysql
 # 要启用优化器的追踪（默认是关闭的），注意开启这开关是会消耗性能的，因为它要把优化分析的结果写到表里面，所以不要轻易开启，或者查看完之后关闭它
 	SHOW VARIABLES LIKE 'optimizer_trace';
 	set optimizer_trace='enabled=on';
+
+# 执行一条查询语句，这个时候优化器分析的过程已经记录到系统表
+	select * from information_schema.optimizer_trace\G
+	
+	*************************** 1. row ***************************
+                            QUERY: select * from blog
+                            TRACE: {
+	"steps": [
+    {
+      "join_preparation": {
+        "select#": 1,
+        "steps": [
+          {
+            "expanded_query": "/* select#1 */ select `blog`.`bid` AS `bid`,`blog`.`name` AS `name`,`blog`.`aid` AS `aid` from `blog`"
+          }
+        ]
+      }
+    },
+    {
+      "join_optimization": {
+        "select#": 1,
+        "steps": [
+          {
+            "table_dependencies": [
+              {
+                "table": "`blog`",
+                "row_may_be_null": false,
+                "map_bit": 0,
+                "depends_on_map_bits": [
+                ]
+              }
+            ]
+          },
+          {
+            "rows_estimation": [
+              {
+                "table": "`blog`",
+                "table_scan": {
+                  "rows": 1,
+                  "cost": 1
+                }
+              }
+            ]
+          },
+          {
+            "considered_execution_plans": [
+              {
+                "plan_prefix": [
+                ],
+                "table": "`blog`",
+                "best_access_path": {
+                  "considered_access_paths": [
+                    {
+                      "rows_to_scan": 1,
+                      "access_type": "scan",
+                      "resulting_rows": 1,
+                      "cost": 1.2,
+                      "chosen": true
+                    }
+                  ]
+                },
+                "condition_filtering_pct": 100,
+                "rows_for_plan": 1,
+                "cost_for_plan": 1.2,
+                "chosen": true
+              }
+            ]
+          },
+          {
+            "attaching_conditions_to_tables": {
+              "original_condition": null,
+              "attached_conditions_computation": [
+              ],
+              "attached_conditions_summary": [
+                {
+                  "table": "`blog`",
+                  "attached": null
+                }
+              ]
+            }
+          },
+          {
+            "refine_plan": [
+              {
+                "table": "`blog`"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "join_execution": {
+        "select#": 1,
+        "steps": [
+        ]
+      }
+    }
+	 ]
+	}
+	MISSING_BYTES_BEYOND_MAX_MEM_SIZE: 0
+	INSUFFICIENT_PRIVILEGES: 0
 ```
+
+> 它是一个 JSON 类型的数据，主要分成三部分，`join_preparation 准备阶段`、`join_optimization 优化阶段`和 `join_execution 执行阶段`。
+>
+> `expanded_query` 是优化后的 SQL 语句
+>
+> `considered_execution_plans` 里面列出了所有的执行计划
 
 优化器最终会把解析树变成一个`查询执行计划`，查询执行计划是一个数据结构。
 
-MySQL 提供了一个执行计划的工具，我们在 SQL 语句前面加上 EXPLAIN，就可以看到执行计划的信息。
+MySQL 提供了一个执行计划的工具，我们在 SQL 语句前面加上 `EXPLAIN`，就可以看到执行计划的信息。
 
 ## 3.3 引擎层
 
@@ -321,7 +433,7 @@ MySQL区别于其他数据库的最重要的特点就是其`插件式的表存�
 >
 > 为什么我们修改了表的存储引擎，操作方式不需要做任何改变？
 >
-> 因为不同功能的存 储引擎实现的 API 是相同的。
+> 因为不同功能的存储引擎实现的 API 是相同的。
 
 ## 3.4 存储层
 
@@ -329,7 +441,7 @@ MySQL区别于其他数据库的最重要的特点就是其`插件式的表存�
 
 # 4 存储引擎
 
-在 MySQL 里面，我们创建的每一张表都可以指定它的存储引擎，而不是一个数据库只能使用一个存储引擎。存储引擎的使用是以表为单位的。而且，创建表之后还可以修改存储引擎。
+在 MySQL 里面，我们创建的每一张表都可以指定它的存储引擎，而不是一个数据库只能使用一个存储引擎。存储引擎的使用是以表为单位的，而且创建表之后还可以修改存储引擎。
 
 ```mysql
 # 查看MySQL现在提供什么存储引擎
@@ -374,7 +486,7 @@ InnoDB 里面有专门的后台线程把 Buffer Pool 的数据写入到磁盘，
 
 ## 5.2 InnoDB 内存结构和磁盘结构
 
-![image-20210208104850454](mysql基础.assets/image-20210208104850454.png)
+![image-20210208104850454](MySQL 基础.assets/image-20210208104850454.png)
 
 ### 5.2.1 内存结构
 
@@ -390,7 +502,7 @@ SHOW STATUS LIKE '%innodb_buffer_pool%';
 # https://dev.mysql.com/doc/refman/5.7/en/server-status-variables.html
 ```
 
-![image-20210208105432511](mysql基础.assets/image-20210208105432511.png)
+![image-20210208105432511](MySQL 基础.assets/image-20210208105432511.png)
 
 Buffer Pool 默认大小是 `128M(134217728 字节)`，可以调整。 
 
@@ -399,11 +511,11 @@ Buffer Pool 默认大小是 `128M(134217728 字节)`，可以调整。
 SHOW VARIABLES like '%innodb_buffer_pool%';
 ```
 
-![image-20210208110747264](mysql基础.assets/image-20210208110747264.png)
+![image-20210208110747264](MySQL 基础.assets/image-20210208110747264.png)
 
 **内存的缓冲池写满了怎么办？**
 
-InnoDB 用 LRU 算法来管理缓冲池(链表实现，不是传统的 LRU，分成了 young 和 old)，经过淘汰的数据就是热点数据。 
+InnoDB 用 `LRU (最近最少使用)算法`来管理缓冲池(链表实现，不是传统的 LRU，分成了 young 和 old)，经过淘汰的数据就是热点数据。 
 
 内存缓冲区对于提升读写性能有很大的作用。
 
@@ -451,7 +563,7 @@ show variables like 'innodb_log%';
 SHOW VARIABLES LIKE 'innodb_log_buffer_size';
 ```
 
-![image-20210208131959872](mysql基础.assets/image-20210208131959872.png)
+![image-20210208131959872](MySQL 基础.assets/image-20210208131959872.png)
 
 需要注意：redo log 的内容主要是`用于崩溃恢复`。磁盘的数据文件，数据来自 buffer pool。redo log 写入磁盘，不是写入数据文件。
 
@@ -467,7 +579,7 @@ SHOW VARIABLES LIKE 'innodb_flush_log_at_trx_commit';
 
 > 在我们写入数据到磁盘的时候，操作系统本身是有缓存的。flush 就是把操作系统缓冲区写入到磁盘。
 
-![image-20210208133743826](mysql基础.assets/image-20210208133743826.png)
+![image-20210208133743826](MySQL 基础.assets/image-20210208133743826.png)
 
 redo log，它又分成内存和磁盘两部分。redo log 有什么特点？ 
 
@@ -475,7 +587,7 @@ redo log，它又分成内存和磁盘两部分。redo log 有什么特点？
 * 不是记录数据页更新之后的状态，而是记录这个页做了什么改动，属于`物理日志`
 * redo log 的大小是固定的，前面的内容会被覆盖
 
-![image-20210208133351730](mysql基础.assets/image-20210208133351730.png)
+![image-20210208133351730](MySQL 基础.assets/image-20210208133351730.png)
 
 check point 是当前要覆盖的位置。如果 write pos 跟 check point 重叠，说明 redo log 已经写满，这时候需要同步 redo log 到磁盘中。
 
@@ -493,7 +605,7 @@ InnoDB 系统表空间包含 InnoDB `数据字典`(由内部系统表组成，�
 
 InnoDB 的页和操作系统的页大小不一致，InnoDB 页大小一般为 16K，操作系统页大小为 4K，InnoDB 的页写入到磁盘时，一个页需要分 4 次写。
 
-![image-20210208135245690](mysql基础.assets/image-20210208135245690.png)
+![image-20210208135245690](MySQL 基础.assets/image-20210208135245690.png)
 
 如果存储引擎正在写入页的数据到磁盘时发生了宕机，可能出现页只写了一部分的情况，比如只写了 4K，就宕机了，这种情况叫做`部分写失效 partial page write`，可能会导致数据丢失。 
 
@@ -583,7 +695,7 @@ binlog 的另一个功能就是用来`实现主从复制`，它的原理就是�
 
 有了这两个日志之后，我们来看一下一条更新语句是怎么执行的： 
 
-<img src="mysql基础.assets/image-20210208141939977.png" alt="image-20210208141939977" style="zoom:80%;" />
+<img src="MySQL 基础.assets/image-20210208141939977.png" alt="image-20210208141939977" style="zoom:80%;" />
 
 ```mysql
 update teacher set name='盆鱼宴' where id=1; 

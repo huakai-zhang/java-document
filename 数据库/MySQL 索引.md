@@ -28,9 +28,28 @@ MySQL 官方对索引的定义为：``索引(Index)`` 是帮助 MySQL 高效获�
 
 `唯一(Unique)` 唯一索引要求键值不能重复，但允许有空值。另外需要注意的是，主键索引是一 种特殊的唯一索引，它还多了一个限制条件，要求键值不能为空，主键索引用 primay key 创建。
 
-`全文(Fulltext)`
+`全文(Fulltext)` 针对比较大的数据，比如我们存放的是消息内容，有几 KB 的数据的这种情况，如果要解决 like 查询效率低的问题，可以创建全文索引。只有文本类型的字段才可以创建全文索引，比如 char、varchar、text。
+
+```mysql
+# 创建全文索引
+create table m3 ( name varchar(50), fulltext index(name) );
+# 使用全文索引
+select * from fulltext_test where match(content) against('花开不合阳春暮' IN NATURAL LANGUAGE MODE);
+```
 
 我们平时所说的索引，如果没有特别指明，都是指B树(``多路搜索树``，并不一定是二叉树)结构组织的索引。其中``单值索引``(即一个索引只包含单个列，一个表可以有多个单列索引)，聚集索引，次要索引，覆盖索引，``复合索引``(即一个索引包含多个列)，前缀索引，唯一索引默认都是使用``B+ 树索引``，统称索引。当然除了B+ 树这种索引方法外，还有哈希索引(hash index)等。
+
+> 当字段值比较长的时候，建立索引会消耗很多的空间，搜索起来也会很慢。可以通过截取字段的前面一部分内容建立索引，这个就叫`前缀索引`。
+>
+> 通过不同长度去计算，与全表的选择性对比： 
+>
+> ```mysql
+> select count(distinct left(address,10))/count(*) as sub10, 
+> 	count(distinct left(address,11))/count(*) as sub11, 
+> 	count(distinct left(address,12))/count(*) as sub12, 
+> 	count(distinct left(address,13))/count(*) as sub13 
+> from shop;
+> ```
 
 ```mysql
 # 创建	indexName -> idx_*
@@ -141,7 +160,15 @@ MySQL 的存储结构分为 5 级：表空间、段、簇、页、行。
 
 每个页默认 `16KB`，`页是 InnoDB 存储引擎磁盘管理的最小单位`，通过 `innodb_page_size` 设置。
 
-一个表空间最多拥有 2^32 个页，默认情况下一个页的大小为 16KB，也就是说一个 表空间最多存储 64TB 的数据。
+一个表空间最多拥有 2^32 个页，默认情况下一个页的大小为 16KB，也就是说一个表空间最多存储 64TB 的数据。
+
+> 往表中插入数据时，如果一个页面已经写完，产生一个新的叶页面。如果一个簇的所有的页面都被用完，会从当前页面所在段新分配一个簇。
+>
+> 如果数据不是连续的，往已经写满的页中插入数据，会导致`页分裂`。
+
+<img src="MySQL 索引.assets/image-20210214135504158.png" alt="image-20210214135504158" style="zoom:50%;" />
+
+<img src="MySQL 索引.assets/image-20210214135410350.png" alt="image-20210214135410350" style="zoom:50%;" />
 
 ### 2.3.2 平衡二叉树用于存储索引数据
 
@@ -289,9 +316,47 @@ B+Tree 的几个主要特点：
 
 2、不够平衡。
 
-## 2.6 索引方式：真的是用的 B+Tree 吗 +++++++++++++++++++++++++++++++++
+## 2.6 索引方式：真的是用的 B+Tree 吗
+
+哈希索引有什么特点呢？ 
+
+* 它的时间复杂度是 O(1)，查询速度比较快。因为哈希索引里面的数据不是按顺序存储的，所以不能用于排序
+
+* 我们在查询数据的时候要根据键值计算哈希码，所以它只能支持等值查询(= IN)，不支持范围查询(> < >= <= between and)
+* 如果字段重复值很多的时候，会出现大量的哈希冲突(采用拉链法解决)，效率会降低
+
+**InnoDB 可以在客户端创建一个索引，使用哈希索引吗？**
+
+> https://dev.mysql.com/doc/refman/5.7/en/innodb-introduction.html 
+>
+> InnoDB utilizes hash indexes internally for its Adaptive Hash Index feature.
+>
+> InnoDB 内部使用哈希索引来实现自适应哈希索引特性。
+
+InnoDB 只支持显式创建 B+Tree 索引，对于一些`热点数据页`， InnoDB 会自动建立`自适应 Hash 索引`，也就是在 B+Tree 索引基础上建立 Hash 索引(数据库自己维护)， 这个过程对于客户端是不可控制的，隐式的。 
+
+我们在 Navicat 工具里面选择索引方法是哈希，但是它创建的还是 B+Tree 索引，这个不是我们可以手动控制的。
+
+buffer pool 里面有一块区域是 `Adaptive Hash Index` 自适应哈希索引，就是这个。
+
+```mysql
+# 开关默认是 ON
+show variables like 'innodb_adaptive_hash_index';
+# 从存储引擎的运行信息中可以看到
+show engine innodb status\G
+-------------------------------------
+INSERT BUFFER AND ADAPTIVE HASH INDEX
+-------------------------------------
+----------------------
+BUFFER POOL AND MEMORY
+----------------------
+```
+
+因为B Tree 和B+Tree 的特性，它们广泛地用在文件系统和数据库中，例如 Windows 的 HPFS 文件系统，Oracel、MySQL、SQLServer 数据库。
 
 # 3 B+Tree 落地形式
+
+`.frm` 是 MySQL 里面表结构定义的文件，不管你建表的时候选用任何一个存储引擎都会生成。
 
 ## 3.1 MyISAM
 
@@ -461,6 +526,12 @@ SELECT * FROM tb_emp te RIGHT JOIN tb_dept td ON te.deptId = td.id WHERE te.dept
 # 5 索引使用原则
 
 ## 5.1 列的离散（sàn）度
+
+列的离散度的公式 `count(distinct(column_name)) : count(*)` 列的全部不同值和所有数据行的比例。 
+
+数据行数相同的情况下，分子越大，列的离散度就越高。简单来说，如果列的重复值越多，离散度就越低，重复值越少，离散度就越高。
+
+在离散度低的列上建立的索引去检索数据的时候，由于重复值太多，需要扫描的行数就更多，所以<font color=yellow>建立索引要使用离散度更高的字段。</font>
 
 ## 5.2 索引分析
 
@@ -679,6 +750,7 @@ EXPLAIN SELECT * FROM staffs WHERE age = 23;
 
 ```mysql
 EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND pos = 'dev';
+# 优化器优化了 SQL 语句
 ```
 
 ![image-20200924220437843](MySQL 索引.assets/image-20200924220437843.png)
@@ -709,7 +781,9 @@ EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND age > 11 AND pos = 'manager
 
 ### 5.尽量使用覆盖索引
 
-尽量使用覆盖索引（只访问索引的查询（索引列和查询列一致）），减少select *
+> `回表` 非主键索引，我们先通过索引找到主键索引的键值，再通过主键值查出索引里面没有的数据，它比基于主键索引的查询多扫描了一棵索引树，这个过程就叫回表。
+
+尽量使用`覆盖索引`(只访问索引的查询(索引列和查询列一致))，减少 select
 
 ```mysql
 EXPLAIN SELECT name, age, pos FROM staffs WHERE name = 'July' AND age = 23 AND pos = 'dev';
@@ -770,9 +844,7 @@ explain select * from staffs where name like 'July%';
 
 ![1600996147924](MySQL 索引.assets/1600996147924.png)
 
-
-
-问题：解决like '%字符串%' 索引不被使用的方法？？
+**问题：解决 like '%字符串%' 索引不被使用的方法？？**
 
 ```mysql
 CREATE TABLE `tb_user` (
@@ -853,6 +925,43 @@ VAR引号不可丢，SQL高级也不难！
 
 在选择组合索引的时候，尽量选择可以能包含当前query中的where子句中更多字段的索引，尽可能通过分析统计信息和调整query的写法来达到选择合适索引的目的。
 
+> 其实用不用索引，最终都是优化器说了算，优化器是基于什么的优化器？ 
+>
+> 基于 cost 开销（Cost Base Optimizer），它不是基于规则（Rule-Based Optimizer），也不是基于语义。怎么样开销小就怎么来。 
+
+## 5.4 索引条件下推(ICP)
+
+`索引条件下推(Index Condition Pushdown)` 5.6 以后完善的功能，只适用于二级索引。
+
+ICP 的目标是减少访问表的完整行的读数量从而减少 I/O 操作。
+
+```mysql
+# 使用 5.3 中 like 小节中的 tb_user 示例
+explain select * from tb_user where name = '4aa4' and age like '%1';
+# Extra: Using index condition
+
+# 查看参数，默认打开的
+show variables like 'optimizer_switch';
+#index_merge=on,index_merge_union=on,index_merge_sort_union=on,index_merge_intersection=on,engine_condition_pushdown=on,index_condition_pushdown=on,mrr=on,mrr_cost_based=on,block_nested_loop=on,batched_key_access=off,materialization=on,semijoin=on,loosescan=on,firstmatch=on,duplicateweedout=on,subquery_materialization_cost_based=on,use_index_extensions=on,condition_fanout_filter=on,derived_merge=on
+# 关闭 ICP
+set optimizer_switch='index_condition_pushdown=off';
+explain select * from tb_user where name = '4aa4' and age like '%1';
+# Extra: Using where
+# Using Where 代表从存储引擎取回的数据不全部满足条件，需要在 Server 层过滤。
+```
+
+这条 SQL 有两种执行方式： 
+
+1. 根据联合索引查出 4aa4 的二级索引数据，然后回表到主键索引上查询全部符合条件的数据(3条数据)。然后返回给 Server 层，在 Server 层过滤出 age 以 1 结尾的数据
+
+2. 根据联合索引查出所有 4aa4 的二级索引数据，然后从二级索引中筛选出 age 以 1 结尾的索引，然后再回表到主键索引上查询全部符合条件的数据(1条数据)，返回给 Server 层
+
+很明显，第二种方式到主键索引上查询的数据更少。
+
+> 索引的比较是在存储引擎进行的，数据记录的比较，是在 Server 层进行的。
+
+而当 age 的条件不能用于索引过滤时，Server 层不会把 age 的条件传递给存储引擎，所以读取了两条没有必要的记录。如果满足 name = '4aa4' 的记录有 100000 条，就会有 99999 条没有必要读取的记录。 
+
 # 6 索引的使用
 
 ##  6.1 索引优势
@@ -874,22 +983,20 @@ VAR引号不可丢，SQL高级也不难！
 
 1. 主键自动建立唯一索引
 2. 频繁作为查询的条件的字段应该创建索引
-3. 查询中与其他表关联的字段，外键关系建立索引
-4. 频繁更新的字段不适合创建索引，因为每次更新不单单是更新了记录还会更新索引，加重IO负担
-5. Where条件里用不到的字段不创建索引
-6. 单间/组合索引的选择问题，who？（在高并发下倾向创建组合索引）
-7. 查询中排序的字段，排序字段若通过索引去访问将大大提高排序的速度
+5. 在用于 where 判断、order 排序(排序字段若通过索引去访问将大大提高排序的速度)、 join 的 on 字段(外键关系建立索引)上创建索引 
+6. 单间/组合索引的选择问题（在高并发下倾向创建组合索引，组合索引把散列性高（区分度高）的值放在前面）
 8. 查询中统计或者分组字段
+
+> 创建组合索引时，不再需要去创建单个的索引。
+>
+> 创建了 index(a,b,c)，不再需要创建 index(a)、index(a, b)
 
 ## 6.4 不要创建索引的情况
 
 1. 表记录太少
-2. 经常增删改的表
-3. 数据重复且分布平均的表字段，因此应该只为经常查询和经常排序的数据列建立索引。 注意，如果某个数据列包含许多重复的内容，为它建立索引就没有太大的实际效果。
-
-假如一个表有10万条记录，有一个字段A只有T和F两种值，且每个值的分布概率大概为50%，那么对这种表A字段建索引一般不会提高数据库的查询速度。
-
-索引的选择性是指索引列中不同值的数目与表中记录数的比。如果一个表中有2000条记录，表索引列有1980个不同的值，那么这个索引的选择性就是1980/2000=0.99。一个索引的选择性越接近1，这个索引的效率就越高。
+2. 经常增删改的表，频繁更新的字段不适合创建索引，因为每次更新不单单是更新了记录还会更新索引，加重IO负担(页分裂)
+3. 区分度低的字段，例如性别，不要建索引(离散度太低，导致扫描行数过多)
+4. 索引的个数不要过多(浪费空间，更新变慢)
 
 ------
 

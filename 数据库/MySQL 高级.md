@@ -42,7 +42,7 @@ show variables like 'autocommit';
 
 事务A读取到了事务B已提交的新增数据，不符合隔离性。
 
-幻读和不可重复读有点类似，不可重复读是事务B修改了数据，幻读是事务B新增了数据。
+幻读和不可重复读有点类似，不可重复读是事务B修改(或删除)了数据，幻读是事务B新增了数据。
 
 ## 1.4 数据库事务隔离级别
 
@@ -70,6 +70,8 @@ show variables like 'tx_isolation';
 
 如果要让一个事务前后两次读取的数据保持一致， 那么我们可以在修改数据的时候给它建立一个备份或者叫快照，后面再来读取这个快照就行了。这种方案我们叫做多版本的并发控制 `Multi Version Concurrency Control (MVCC)`。
 
+> 既然要保证前后两次读取数据一致，那么读取数据的时候锁定要操作的数据，不允许其他的事务修改就行了。这种方案我们叫做基于锁的并发控制 `Lock Based Concurrency Control（LBCC）`。
+
 问题：这个快照什么时候创建？读取数据的时候，怎么保证能读取到这个快照而不 是最新的数据？
 
 InnoDB 为每行记录都实现了两个隐藏字段： 
@@ -94,11 +96,24 @@ InnoDB 为每行记录都实现了两个隐藏字段：
 
 **锁的分类**
 
-从数据操作的类型（读、写）分：
+从锁的类型（或者叫基本的锁的模式）分：
 
-`读锁(共享锁)` 针对同一份数据，多个读操作可以同时进行而不互相影响。
+`读锁(共享锁，包括意向锁)` 针对同一份数据，多个读操作可以同时进行而不互相影响。
 
-`写锁(排它锁)` 当前写操作没有完成前，它会阻断其他写锁和读锁。
+```mysql
+begin;
+select …… lock in share mode;
+rollback / commit;
+```
+
+`写锁(排它锁，包括意向锁)` 当前写操作没有完成前，它会阻断其他写锁和读锁。
+
+```mysql
+# delete / insert / update 默认自动加上写锁
+# 手动
+select …… for update;
+rollback / commit;
+```
 
 从对数据操作的颗粒度分：`行锁`、`表锁`
 
@@ -109,7 +124,7 @@ show status like 'table%'
 show status like 'innodb_row_lock%'
 ```
 
-> 锁定粒度？？？
+> 锁定粒度，表锁大于行锁
 >
 > 加锁效率，表锁大于行锁，表锁只需要 直接锁住这张表就行了，而行锁还需要在表里面去检索这一行数据
 >
@@ -117,7 +132,18 @@ show status like 'innodb_row_lock%'
 >
 > 并发性能，表锁的冲突概率更大，所以并发性能更低
 
-## 2.2 表锁（偏读）
+## 2.2 意向锁
+
+`意向锁`是由数据库自己维护的，当我们给一行数据加上共享锁之前，数据库会自动在这张表上面加一个意向共享锁。当我们给一行数据加上排他锁之前，数据库会自动在这张表上面加一个意向排他锁。
+
+反过来说：如果一张表上面至少有一个意向共享锁，说明有其他的事务给其中的某些数据行加上了共享锁。如果一张表上面至少有一个意向排他锁，说明有其他的事务给其中的某些数据行加上了排他锁。
+
+**那么这两个表级别的锁存在的意义是什么呢？**
+
+* 我们有了表级别的锁，在 InnoDB 里面就可以支持更多粒度的锁
+* 如果说没有意向锁的话，当给一张表加上表锁的时候，必须先要去判断有没其他的事务锁定了其中了某些行(需要进行全表扫描)，引入了意向锁后，只要判断这张表上面有没有意向锁，如果有就直接返回失败，如果没有就可以加锁成功。所以 InnoDB 里面的表锁，我们可以把它理解成一个标志
+
+## 2.3 表锁（偏读）
 
 偏向 MyISAM 存储引擎，开销小，获取释放锁快，避免死锁，锁定粒度大，发生锁冲突的概率最高，并发最低。
 
@@ -145,9 +171,9 @@ show open tables;
 unlock tables;
 ```
 
-![image-20200927214048725](mysql高级.assets/image-20200927214048725.png)
+![image-20200927214048725](MySQL 高级.assets/image-20200927214048725.png)
 
-### 2.2.1 加读锁
+### 2.3.1 加读锁
 
 为mylock表加read锁（读阻塞写例子）
 
@@ -159,7 +185,7 @@ unlock tables;
 | 当前session中插入或更新锁定的表都会提示错误<br>update mylock set name='a2' where id = 1;<br/>ERROR 1099 (HY000): Table 'mylock' was locked with a READ lock and can't be updated | 其他session插入或更新锁定表会一直等待获得锁<br>update mylock set name='a2' where id = 1; |
 | 释放锁<br>unlock tables;                                     | session2 获得锁，插入操作完成<br>Query OK, 0 rows affected (40.17 sec) |
 
-### 2.2.2 加写锁
+### 2.3.2 加写锁
 
 为mylock表加write锁（MyISAM存储引擎的写阻塞读例子）
 
@@ -180,13 +206,13 @@ MySQL的表级锁有两种模式：
 
 简而言之，就是读锁会阻塞写，但不会阻塞读。而写锁则会把读和写都阻塞。
 
-### 2.2.3 分析表锁定
+### 2.3.3 分析表锁定
 
 ```mysql
 show status like 'table%';
 ```
 
-![image-20200927222724030](mysql高级.assets/image-20200927222724030.png)
+![image-20200927222724030](MySQL 高级.assets/image-20200927222724030.png)
 
 可以通过检查table_locks_waited和table_locks_immediate状态变量来分析系统上的表锁定：
 
@@ -196,13 +222,13 @@ show status like 'table%';
 
 此外，MyISAM的读写锁调度是写优先，这也是MyISAM不适合做写为主表的引擎。因为写锁后，其他线程不能做任何操作，大量的更新会是查询很难得到锁，从而造成阻塞。
 
-## 2.3 行锁（偏写）
+## 2.4 行锁（偏写）
 
 偏向InnoDB存储引擎，开销大，获取释放锁慢；会出现死锁；锁定粒度最小，发生锁冲突的概率最低，并发度也最高。
 
 InnoDB与MyISAM的最大不同有两点：一是支持事务（TRANSACTION）;二是采用了行级锁
 
-### 2.3.1 行锁演示
+### 2.4.1 行锁演示
 
 ```mysql
 create table innodb_lock(a int(11), b varchar(16)) engine=innodb;
@@ -228,9 +254,11 @@ create index innodb_b_ind on innodb_lock(b);
 | 提交更新<br/>commit;                                         | 依然查询不到，需要session2也执行commit;<br>才能查询到session1的更新，保证可重复读 |
 | session1更新a=4;                                             | session更新a=5;<br>不会阻塞                                  |
 
-#### 无索引行锁升级为表锁
+#### 不使用索引行锁升级为表锁
 
-varchar  不用 ' '  导致系统自动转换类型, 行锁变表锁
+一个没有定义索引的表(主键索引也没有)，查询时会导致锁表，原因在于 InnoDB 会选择内置 6 字节长的 ROWID 作为隐藏的聚集索引，它会随着行记录的写入而主键递增。查询没有使用索引，会进行全表扫描，然后把每一个隐藏的聚集索引都锁住了。
+
+`varchar`  不用 ' '  导致系统自动转换类型，行锁变表锁(`转换导致没有使用索引`)
 
 ```mysql
 # session1做如下更新（b使用int类型变表锁），session2会阻塞(有索引未加‘’)
@@ -239,6 +267,10 @@ update innodb_lock set a=8 where b=4001;
 # 删除 b 字段的索引后，session1使用 b 字段做更新（无索引变表锁），session2会阻塞
 update innodb_lock set a=8 where b='4001';
 ```
+
+> 通过唯一索引给数据行加锁，主键索引也会被锁住：
+>
+> 在辅助索引里面，索引存储的是二级索引和主键的值。而主键索引里面除了索引之外，还存储了完整的数据。所以我们通过辅助索引锁定一行数据的时候，它跟我们检索数据的步骤是一样的，会通过主键值找到主键索引，然后也锁定。 
 
 #### 如何锁定一行
 
@@ -262,7 +294,7 @@ Innodb存储引擎由于实现了行级锁定，虽然在锁定机制的实现�
 show status like 'innodb_row_lock%';
 ```
 
-![1601261501682](mysql高级.assets/1601261501682.png)
+![1601261501682](MySQL 高级.assets/1601261501682.png)
 
 各个状态量的说明如下：
 
@@ -286,7 +318,7 @@ show status like 'innodb_row_lock%';
 
 尤其等等待次数很高，而且每次等待时长也不小的时候，我们就需要分析系统中为什么如此多的等待，然后根据分析结果着手指定优化计划（show profile）。
 
-### 2.3.2 优化建议
+### 2.4.2 优化建议
 
 尽可能让所有数据检索都通过索引来完成，避免无索引行锁升级为表锁
 
@@ -298,28 +330,96 @@ show status like 'innodb_row_lock%';
 
 尽可能低级别事务隔离
 
-## 2.4 间隙锁
+## 2.5 锁的算法
 
-当我们用范围条件而不是相等条件检索数据，并请求共享或排它锁时，InnoDB会给符合条件的已有数据记录的索引项加锁；对于键值在条件范围但不存在的记录，叫做“间隙（GAP）”；
+<img src="MySQL 高级.assets/image-20210216124920346.png" alt="image-20210216124920346" style="zoom:50%;" />
 
-InnoDB也会对这个“间隙”加锁，这种锁机制就是所谓的``间隙锁（Next-Key锁）``。
+数据库里面存在的主键值，我们把它叫做 `Record 记录`，那么这里我们就有 4 个 Record。 
+
+根据主键，这些存在的 Record 隔开的数据不存在的区间，我们把它叫做 `Gap 间隙`，它是一个左开右开的区间。 
+
+间隙（Gap）连同它左边的记录（Record），我们把它叫做`Next-key 临键` 的区间，它是一个左开右闭的区间。
+
+### 记录锁
+
+当我们对于唯一性的索引（包括唯一索引和主键索引）使用等值查询，精准匹配到一条记录的时候，这个时候使用的就是`记录锁`。
+
+使用不同的 key 去加锁，不会冲突，它只锁住这个 record。 
+
+### 间隙锁
+
+当我们查询的记录不存在，没有命中任何一个 record，无论是用等值查询还是范围查询的时候，它使用的都是`间隙锁`。
+
+当查询的记录不存在的时候，使用间隙锁。 
+
+间隙锁主要是阻塞插入 insert，相同的间隙锁之间不冲突。
+
+++++++++++++++++++++++++++++ id > 4 and id < 7 为什么阻塞 ++++++++++++++++++++++++++++++
+
+```mysql
+CREATE TABLE `t1` (
+  `id` int(11) NOT NULL,
+  `name` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+INSERT INTO `t1` VALUES (1, '1');
+INSERT INTO `t1` VALUES (4, '4');
+INSERT INTO `t1` VALUES (7, '7');
+INSERT INTO `t1` VALUES (10, '10');
+```
+
+| session1                                             | session2                                                     |
+| ---------------------------------------------------- | ------------------------------------------------------------ |
+| update t1 set name = '2021' where id > 4 and id < 7; |                                                              |
+|                                                      | 未产生阻塞<br/>select * from t1 where id = 6 for update;<br>阻塞产生，暂时不能插入<br/>insert into t1 values(6, '2021');<br/>产生阻塞<br>select * from t1 where id > 4 and id < 7 for update; |
+| commit;                                              | 阻塞解除，完成插入<br>Query OK, 1 row affected (4.47 sec)    |
+| update t1 set name='0928' where id > 100;            |                                                              |
+|                                                      | 未产生阻塞<br>update t1 set name='0928' where id > 30;<br>阻塞产生<br>insert into t1 values(20, '2000'); |
+
+Gap Lock 只在 RR 中存在。如果要关闭间隙锁，就是把事务隔离级别设置成 RC，并且把 `innodb_locks_unsafe_for_binlog` 设置为 ON。 
+
+这种情况下除了外键约束和唯一性检查会加间隙锁，其他情况都不会用间隙锁。
+
+### 临键锁
+
+当我们使用了范围查询，不仅仅命中了 Record 记录，还包含了 Gap 间隙，在这种情况下我们使用的就是`临键锁`，它是 MySQL 里面默认的行锁算法，相当于记录锁加上间隙锁。
+
+其他两种退化的情况： 
+
+* 唯一性索引，等值查询匹配到一条记录的时候，退化成记录锁
+
+* 没有匹配到任何记录的时候，退化成间隙锁
+
+| session1                                            | session2                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------ |
+| select * from t1 where id >5 and id < 9 for update; |                                                              |
+|                                                     | 阻塞产生，暂时不能插入<br/>INSERT INTO t1 (id,name) VALUES (6, '6');<br>INSERT INTO t1 (id,name) VALUES (8, '8');<br>阻塞，无法查询区间存在的值，不存在的可以查询例如 9 <br>select * from t1 where id = 10 for update; |
+| commit;                                             | 阻塞解除，完成插入<br>Query OK, 1 row affected (4.47 sec)    |
+
+临键锁，锁住最后一个 key 的`下一个左开右闭的区间`。 
+
+```mysql
+select * from t1 where id >5 and id <=7 for update; -- 锁住(4,7]和(7,10] 
+select * from t1 where id >8 and id <=10 for update; -- 锁住 (7,10]，(10,+∞)
+```
+
+**为什么要锁住下一个左开右闭的区间？**
+
+就是为了解决幻读的问题。
 
 **危害**
 
-因为Query执行过程中通过范围查找的话，它会锁定整个范围内所有的索引键值，即使这个键值并不存在。
+因为 Query 执行过程中通过范围查找的话，它会锁定整个范围内所有的索引键值，即使这个键值并不存在。
 
 间隙锁有一个比较致命的弱点，就是当锁定一个范围键值之后，即使某些不存在的键值也会被无辜的锁定，而造成在锁定的时候无法插入锁定范围的任何数据。在某些场景下这可能会对性能造成很大的危害。
 
-| session1                                           | session2                                                     |
-| -------------------------------------------------- | ------------------------------------------------------------ |
-| update innodb_lock set b='0928' where a>1 and a<6; | 阻塞产生，暂时不能插入<br>insert into innodb_lock values(2, '2000'); |
-| commit;                                            | 阻塞解除，完成插入<br>Query OK, 1 row affected (4.47 sec)    |
+| session1                                            | session2                                                    |
+| --------------------------------------------------- | ----------------------------------------------------------- |
+| select * from t1 where id >5 and id < 9 for update; | 阻塞产生，暂时不能插入<br>insert into t1 values(6, '2000'); |
+| commit;                                             | 阻塞解除，完成插入<br>Query OK, 1 row affected (4.47 sec)   |
 
-## 2.5 页锁
-
-开销和加锁时间界于表锁和行锁之间：会出现死锁；锁定粒度界于表锁和行锁之间，并发度一般。
-
-## 2.6 死锁 
+## 2.6 死锁
 
 ### 2.6.1 锁的释放与阻塞
 
@@ -400,27 +500,63 @@ select * from information_schema.INNODB_LOCK_WAITS;
 
 6. 使用等值查询而不是范围查询查询数据，命中记录，避免间隙锁对并发的影响
 
+## 2.7 隔离级别的实现
+
+**Read Uncommited** 
+
+RU 隔离级别：不加锁
+
+**Serializable** 
+
+Serializable 所有的 select 语句都会被隐式的转化为 select ... in share mode，会 和 update、delete 互斥。 
+
+### Repeatable Read
+
+RR 隔离级别下，普通的 select 使用快照读(snapshot read)，底层使用 MVCC 来实现。
+
+加锁的 select(select ... in share mode / select ... for update)以及更新操作 update, delete 等语句使用当前读（current read），底层使用记录锁、间隙锁、临键锁。 
+
+### Read Commited
+
+RC 隔离级别下，普通的 select 都是快照读，使用 MVCC 实现。 
+
+加锁的 select 都使用记录锁，因为没有 Gap Lock，除了`外键约束检查(foreign-key constraint checking)`以及`重复键检查(duplicate-key checking)`时会使用间隙锁封锁区间，所以 RC 会出现幻读的问题。
+
+**RU 和 Serializable 肯定不能用。为什么有些公司要用 RC，或者说网上有些文章推荐有 RC？ **
+
+RC 和 RR 主要有几个区别： 
+
+1. RR 的间隙锁会导致锁定范围的扩大
+
+2. 条件列未使用到索引，RR 锁表，RC 锁行
+
+3. RC 的“半一致性”（semi-consistent）读可以增加 update 操作的并发性
+
+在 RC 中，一个 update 语句，如果读到一行已经加锁的记录，此时 InnoDB 返回记录最近提交的版本，由 MySQL 上层判断此版本是否满足 update 的 where 条件。若满足(需要更新)，则 MySQL 会重新发起一次读操作，此时会读取行的最新版本(并加锁)。 
+
+实际上，如果能够正确地使用锁（避免不使用索引去加锁），只锁定需要的数据，用默认的 RR 级别就可以了。 
+
 # 3 主从复制
 
 ## 3.1 复制的基本原理
 
-slave会从master读取binlog来进行数据同步。
+复制的节点 slave 会从被复制的节点 master 读取 binlog 来进行数据同步。slave 本身也可以作为其他节点的数据来源，这个叫做`级联复制`。
 
-![1601263215813](mysql高级.assets/1601263215813.png)
+<img src="MySQL 高级.assets/image-20210217111452786.png" alt="image-20210217111452786" style="zoom:50%;" />
 
-MySQL复制过程分为三步：
+MySQL 复制过程分为三步：
 
-1. master将改变记录到二进制日志（binary log），这些记录过程叫做二进制日志事件，binary log events；
-2. slave将master的binary log events拷贝到它的中继日志（relay log）;
-3. slave重做中继日志中的事件，将改变应用到自己的数据库中，MySQL复制是异步的且串行化的。
+1. master 将更新语句记录到`二进制日志(binary log)`，它是一种逻辑日志，这些记录过程叫做`二进制日志事件(binary log events)`，master 节点上有一个 `log dump 线程`，是用来发送 binlog 给 slave 的
+2. slave 的 `I/O 线程` 连接到 master 获取 binlog，并且解析 binlog 写入`中继日志(relay log)`
+3. 从库的 `SQL 线程`，是用来读取 relay log，把数据写入到数据库的，MySQL复制是异步的且串行化的
 
 ## 3.2 复制的基本原则
 
-每个slave只有一个master
+每个 slave 只有一个 master
 
-每个slave只能有一个唯一的服务器ID
+每个 slave 只能有一个唯一的服务器ID
 
-每个master可以有多个salve
+每个 master 可以有多个 salve
 
 ## 3.3 一主一从常见配置
 
@@ -474,7 +610,7 @@ flush privileges;
 show master status;
 ```
 
-![1601276350119](mysql高级.assets/1601276350119.png)
+![1601276350119](MySQL 高级.assets/1601276350119.png)
 
 ### 3.3.4 在从机上配置需要复制的主机
 
@@ -506,7 +642,7 @@ Slave_IO_Running:Yes
 
 Slave_SQL_Running:Yes
 
-![1601276806420](mysql高级.assets/1601276806420.png)
+![1601276806420](MySQL 高级.assets/1601276806420.png)
 
 ------
 
