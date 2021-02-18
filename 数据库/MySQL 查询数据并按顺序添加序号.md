@@ -1,19 +1,7 @@
----
-layout:  post
-title:   Mysql 查询数据并按顺序添加序号
-date:   2017-10-10 14:14:01
-author:  'zhangtao'
-header-img: 'img/post-bg-2015.jpg'
-catalog:   false
-tags:
--# MySQL
-
----
-
 建表并导入数据：
 
 
-```java
+```mysql
 CREATE TABLE `province` (
   `province_id` int(11) NOT NULL AUTO_INCREMENT,
   `province_name` varchar(255) DEFAULT NULL,
@@ -58,14 +46,14 @@ INSERT INTO `province` VALUES ('34', '澳门特别行政区', '0');
 ```
 
 
-![img](https://img-blog.csdn.net/20171010141538018?watermark/2/text/aHR0cDovL2Jsb2cuY3Nkbi5uZXQvd3N6Y3kxOTk1MDM=/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70/gravity/Center)
+![img](MySQL 查询数据并按顺序添加序号.assets/20171010141538018)
 
 
 
 MYSQL查询语句：
 
 
-```java
+```mysql
 SELECT
 	province_id,
 	province_name,
@@ -79,5 +67,5 @@ ORDER BY
 ```
 
 
-![img](https://img-blog.csdn.net/20171010141954141?watermark/2/text/aHR0cDovL2Jsb2cuY3Nkbi5uZXQvd3N6Y3kxOTk1MDM=/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70/gravity/Center)
+![img](MySQL 查询数据并按顺序添加序号.assets/20171010141954141)
 
