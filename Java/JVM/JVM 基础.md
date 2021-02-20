@@ -104,11 +104,11 @@ ClassFile {
 
 ## 3.1 虚拟机自带的加载器
 
-``启动类加载器（Bootstrap）`` C++
+``启动类加载器（Bootstrap）`` C++ 编写，加载 Java 的核心库
 
-``扩展类加载器（Extension）`` Java(拓展的包javax)
+``扩展类加载器（Extension）`` Java 编写，加载目录 %JRE_HOME%\lib\ext 目录下的 jar包和 class 文件
 
-``应用程序类加载器（AppClassLoader）``Java也叫系统类加载器，加载当前应用的 classpath 的所有类
+``应用程序类加载器（AppClassLoader）``Java 编写，也叫系统类加载器，加载当前应用的 classpath 的所有类
 
 ### 用户自定义加载器
 
@@ -122,6 +122,11 @@ public class MyObject {
         //System.out.println(object.getClass().getClassLoader().getParent()); NullPointerException
         System.out.println(object.getClass().getClassLoader());
 
+        // com.sun.java.accessibility.util.EventID --> %JRE_HOME%\lib\ext\jaccess.jar 中的类
+        EventID zipFileStore = new EventID();
+        System.out.println(zipFileStore.getClass().getClassLoader().getParent());
+        System.out.println(zipFileStore.getClass().getClassLoader());
+        
         MyObject myObject = new MyObject();
         System.out.println(myObject.getClass().getClassLoader().getParent().getParent());
         System.out.println(myObject.getClass().getClassLoader().getParent());
@@ -130,7 +135,9 @@ public class MyObject {
 }
 // null
 // null
-// sun.misc.Launcher$ExtClassLoader@2503dbd3
+// sun.misc.Launcher$ExtClassLoader@3941a79c
+// null
+// sun.misc.Launcher$ExtClassLoader@3941a79c
 // sun.misc.Launcher$AppClassLoader@135fbaa4
 ```
 
@@ -201,15 +208,15 @@ Java堆是Java虚拟机所管理内存中最大的一块，在虚拟机启动时
 
 新生区是类的诞生、成长、消亡的区域，一个类在这里产生，应用，最后被垃圾回收器收集，结束生命。
 
-新生区又分为两部分： 伊甸区（Eden space）和幸存者区（Survivor pace） ，所有的类都是在伊甸区被new出来的。
+新生区又分为两部分： `伊甸区(Eden space)`和`幸存者区(Survivor space) `，所有的类都是在伊甸区被 new 出来的。
 
-幸存区有两个： 0区（Survivor 0 space）和1区（Survivor 1 space）。
+幸存区有两个： 0 区（Survivor 0 space）和 1 区（Survivor 1 space）。
 
 > 一般情况下，新创建的对象都会被分配到 Eden 区，一些特殊的大的对象会直接分配到 Old 区。
 >
 > HotSpot 虚拟机提供了 `-XX:PretenureSizeThreshold` 参数，指定大于该设置值的对象直接在老年代分配，PretenureSizeThreshold 参数只对 Serial 和 ParNew 两款收集器有效，默认 PretenureSizeThreshold=  4m。
 
-当伊甸园的空间用完时，程序又需要创建对象，JVM的垃圾回收器将对伊甸园区进行``垃圾回收(Minor GC)``，将伊甸园区中的不再被其他对象所引用的对象进行销毁。然后将伊甸园中的剩余对象移动到幸存 0区。若幸存 0区也满了，再对该区进行垃圾回收，然后移动到 1 区。那如果1 区也满了呢？再移动到养老区。若养老区也满了，那么这个时候将产生``MajorGC（FullGC）``，进行养老区的内存清理。
+当伊甸园的空间用完时，程序又需要创建对象，JVM 的垃圾回收器将对伊甸园区进行``垃圾回收(Minor GC)``，将伊甸园区中的不再被其他对象所引用的对象进行销毁。然后将伊甸园中的剩余对象移动到幸存 0 区。若幸存 0 区也满了，再对该区进行垃圾回收，然后移动到 1 区。那如果1 区也满了呢？再移动到养老区。若养老区也满了，那么这个时候将产生``MajorGC（FullGC）``，进行养老区的内存清理。
 
 ### 4.2.1 Minor GC 过程
 
@@ -281,7 +288,7 @@ B 方法又调用了 C 方法，于是产生栈帧 F3 也被压入栈
 
 ### 4.3.2 栈帧存储什么
 
-栈帧(Java 方法)中主要保存 3 类数据：
+栈帧(Java 方法)中主要保存 4 类数据：
 
 ``局部变量表（Local Variables）`` 输入参数和输出参数以及方法内的变量，局部变量表中的变量不可直接使用，如需要使用的话，必须通过相关指令将其加载至操作数栈中作为操作数使用
 
