@@ -18,7 +18,7 @@
 
 使用关系型数据库也存在一定的限制：
 
-1. 需要扩容只能通过向上（垂直）扩展，比如磁盘限制了数据的存储，就要扩大磁盘的容量，通过对硬件的方式，不支持动态扩容。水平扩容需要通过负责的方式来实现（分库分表）
+1. 需要扩容只能通过向上（垂直）扩展，比如磁盘限制了数据的存储，就要扩大磁盘的容量，通过对硬件的方式，不支持动态扩容。水平扩容需要通过复杂的方式来实现（分库分表）
 2. 表结构修改困难，因此存储的数据格式也受到限制
 3. 在高并发和高数据量的情况下，关系型数据库通常会把数据持久化到磁盘，基于磁盘的读写压力比较大
 
@@ -38,16 +38,6 @@
 
 #### CAP原理
 
-CAP理论的核心是<font color="red">一个分布式系统不可能同时很好的满足一致性、可用性和分区容错性这三个需求，最多只能同时较好的满足两个。</font>
-
-因此，根据 CAP 原理将 NoSQL 数据库分成了满足CA原则、满足CP原则和满足AP原则三大类：
-
-`CA` 单点集群，满足一致性、可用性的系统，通常在可扩展性上不太强大
-
-`CP` 满足一致性、分区容错性的系统，通常性能不是特别高
-
-`AP` 满足可用性、分区容错性的系统，通常可能对一致性要求低一些
-
 在计算机科学中，`CAP定理(CAP theorem)` 又被称作`布鲁尔定理( Brewer's theorem)`，它指出对于一个分布式计算系统来说，不可能同时满足以下三点：
 
 `一致性(Consistency)` 所有节点在同一时间具有相同的数据，一致性分为三种：
@@ -59,6 +49,16 @@ CAP理论的核心是<font color="red">一个分布式系统不可能同时很�
 `可用性(Avaibility)` 保证每个请求不管成功或者失败都有响应
 
 `分区容错性(Partition tolerance)` 系统中任意信息的丢失或失败不影响系统的继续运行
+
+CAP理论的核心是<font color="red">一个分布式系统不可能同时很好的满足一致性、可用性和分区容错性这三个需求，最多只能同时较好的满足两个。</font>
+
+因此，根据 CAP 原理将 NoSQL 数据库分成了满足CA原则、满足CP原则和满足AP原则三大类：
+
+`CA` 单点集群，满足一致性、可用性的系统，通常在可扩展性上不太强大
+
+`CP` 满足一致性、分区容错性的系统，通常性能不是特别高
+
+`AP` 满足可用性、分区容错性的系统，通常可能对一致性要求低一些
 
 #### BASE理论
 
@@ -284,8 +284,10 @@ set 和 get 命令就是 `String（ Binary-safe strings）` 的操作命令。
 typedef struct dictEntry {
 	void *key; /* key 关键字定义 */
 	union {
-		void *val; uint64_t u64; /* value 定义 */
-		int64_t s64; double d;
+		void *val; /* value 定义 */
+		uint64_t u64;
+		int64_t s64;
+		double d;
 	} v;
 	struct dictEntry *next; /* 指向下一个键值对节点 */
 } dictEntry;
@@ -390,7 +392,7 @@ embstr 的使用只分配一次内存空间（因为 RedisObject 和 SDS 是连�
 
 当 int 数据不再是整数时自动转化为 raw。
 
-当 embstr 数据发生修改时自动转化为 raw（只有初始化非int数据且长度小于44这一种情况下，才是 embstr 数据）。
+当 embstr 数据`发生修改`时自动转化为 raw（只有`初始化`(非 apend 操作)非 int 数据或 int 数据大于 2^63-1(长度小于44)，才是 embstr 数据）。
 
 ```shell
 127.0.0.1:6379> set k2 9223372036854775808
@@ -484,9 +486,9 @@ INT 类型，INCRBY，利用原子性
 
 **计数器**
 
-INT 类型，INCR 方法 
+INT 类型，INCR 方法
 
-例如：文章的阅读量，微博点赞数，允许一定的延迟，先写入 Redis 再定时同步到 数据库。
+例如：文章的阅读量，微博点赞数，允许一定的延迟，先写入 Redis 再定时同步到数据库。
 
 **限流**
 
@@ -710,15 +712,22 @@ static unsigned int dict_force_resize_ratio = 5;
 扩容判断 _dictExpandIfNeeded（源码 dict.c）:
 
 ```c
+// dict_can_resize = true，Redis服务器目前没有在执行 BGSAVE 命令或 BGREWRITEAOF 命令
 if (d->ht[0].used >= d->ht[0].size && (dict_can_resize || d->ht[0].used/d->ht[0].size > dict_force_resize_ratio)) {
 	return dictExpand(d, d->ht[0].used*2);
 }
 return DICT_OK;
 ```
 
-当 hash 表中元素的个数等于第一维数组的长度时，就会开始扩容，扩容的新数组是原数组大小的 2 倍。<font color=red>// TODO</font>
+当 hash 表中元素满足如下其一条件就会开始扩容，扩容的新数组是原数组大小的 2 倍：
 
-不过如果 Redis 正在做 bgsave，为了减少内存页的过多分离 (Copy On Write)，Redis 尽量不去扩容 (dict_can_resize)，但是如果 hash 表已经非常满了，元素的个数已经达到了第一维数组长度的 5 倍 (dict_force_resize_ratio)，说明 hash 表已经过于拥挤了，这个时候就会强制扩容。
+* Redis 服务器目前没有在执行 BGSAVE 命令或 BGREWRITEAOF 命令，并且哈希表的负载因子大于等于 1
+
+* Redis 服务器目前在执行 BGSAVE 命令或 BGREWRITEAOF 命令，并且哈希表的负载因子大于等于 5
+
+> 负载因子 = 哈希表已保存节点数量 / 哈希表大小  load_factor = ht[0].used / ht[0].size
+
+当哈希表的负载因子小于 0.1 时，对哈希表执行收缩操作。
 
 #### 应用场景
 
@@ -734,7 +743,7 @@ String 可以做的事情，Hash 都可以做。
 
 key：用户 id；field：商品 id；value：商品数量。 
 
-+1：hincr。-1：hdecr。删除：hdel。全选：hgetall。商品数：hlen。
++1：hincrby 1。-1：hincrby -1。删除：hdel。全选：hgetall。商品数：hlen。
 
 ### 1.3.3 List 列表
 
