@@ -1054,13 +1054,13 @@ zset-max-ziplist-value 64
 
 **数据结构总结**
 
-| 对象         | 对象 type 属性值 | type 命令输出 | 底层可能的存储结构                                          | object encoding      |
-| ------------ | ---------------- | ------------- | ----------------------------------------------------------- | -------------------- |
-| 字符串对象   | OBJ_STRING       | string        | OBJ_ENCODING_INT<br>OBJ_ENCODING_EMBSTR<br>OBJ_ENCODING_RAW | int<br>embstr<br>raw |
-| 列表类型     | OBJ_LIST         | list          | OBJ_ENCODING_QUICKLIST                                      | quicklist            |
-| 哈希对象     | OBJ_HASH         | hash          | OBJ_ENCODING_ZIPLIST<br>OBJ_ENCODING_HT                     | ziplist<br>hashtable |
-| 集合对象     | OBJ_SET          | set           | OBJ_ENCODING_INTSET<br>OBJ_ENCODING_HT                      | intset<br>hashtable  |
-| 有序集合对象 | OBJ_ZSET         | zset          | OBJ_ENCODING_ZIPLIST<br/>OBJ_ENCODING_SKIPLIST              | ziplist<br>skiplist  |
+| 对象         | 对象 type 属性值 | type 命令输出 | 底层可能的存储结构                                          | object encoding                |
+| ------------ | ---------------- | ------------- | ----------------------------------------------------------- | ------------------------------ |
+| 字符串对象   | OBJ_STRING       | string        | OBJ_ENCODING_INT<br>OBJ_ENCODING_EMBSTR<br>OBJ_ENCODING_RAW | int 2^63-1<br>embstr 44<br>raw |
+| 哈希对象     | OBJ_HASH         | hash          | OBJ_ENCODING_ZIPLIST<br/>OBJ_ENCODING_HT                    | ziplist 64 512<br/>hashtable   |
+| 列表类型     | OBJ_LIST         | list          | OBJ_ENCODING_QUICKLIST                                      | quicklist                      |
+| 集合对象     | OBJ_SET          | set           | OBJ_ENCODING_INTSET<br>OBJ_ENCODING_HT                      | intset 512<br>hashtable        |
+| 有序集合对象 | OBJ_ZSET         | zset          | OBJ_ENCODING_ZIPLIST<br/>OBJ_ENCODING_SKIPLIST              | ziplist<br>skiplist            |
 
 **编码转换总结**
 
@@ -1074,7 +1074,7 @@ zset-max-ziplist-value 64
 | 集合对象     | intset                                          | hashtable          |      |
 |              | 元素都是整数类型且元素个数小于512               |                    |      |
 | 有序集合对象 | ziplist                                         | skiplist           |      |
-|              | 元素个数不超过128且任何一个member长度小于64字节 |                    |      |
+|              | 任何一个member长度小于64字节且元素个数不超过128 |                    |      |
 
 # 2 发布订阅模式
 
@@ -1625,7 +1625,7 @@ https://redis.io/topics/faq#redis-is-single-threaded-how-can-i-exploit-multiple-
 
 ![image-20201107200337182](Redis.assets/image-20201107200337182.png)
 
-在每一个进程开始创建的时候，都会分配一段虚拟地址，然后通过虚拟地址和物理地址的映射来获取真实数据，这样进程就不会直接接触到物理地址，甚至不知道自己调 用的哪块物理地址的数据。 
+在每一个进程开始创建的时候，都会分配一段虚拟地址，然后通过虚拟地址和物理地址的映射来获取真实数据，这样进程就不会直接接触到物理地址，甚至不知道自己调用的哪块物理地址的数据。 
 
 目前，大多数操作系统都使用了虚拟内存，如 Windows 系统的虚拟内存、Linux 系统的交换空间等等。Windows 的虚拟内存（pagefile.sys）是磁盘空间的一部分。 
 
@@ -1685,7 +1685,7 @@ sy 代表 CPU 消耗在 Kernel space 的时间百分比
 
 Linux 系统将所有设备都当作文件来处理，而 Linux 用`文件描述符`来标识每个文件对象。
 
-文件描述符（File Descriptor）是内核为了高效管理已被打开的文件所创建的索引，用于指向被打开的文件，所有执行 I/O 操作的系统调用都通过文件描述符；文件描述符 是一个简单的非负整数，用以表明每个被进程打开的文件。 
+文件描述符（File Descriptor）是内核为了高效管理已被打开的文件所创建的索引，用于指向被打开的文件，所有执行 I/O 操作的系统调用都通过文件描述符；文件描述符是一个简单的非负整数，用以表明每个被进程打开的文件。 
 
 Linux 系统里面有三个标准文件描述符。 
 
@@ -1733,7 +1733,7 @@ I/O 指的是网络 I/O。
 
 所以，I/O 多路复用的特点是通过一种机制一个进程能同时等待多个文件描述符，而这些文件描述符（套接字描述符）其中的任意一个进入读就绪（readable）状态，select()函数就可以返回。 
 
-Redis 的多路复用， 提供了 select, epoll, evport, kqueue 几种选择，在编译的时候来选择一种。
+`Redis 的多路复用`， 提供了 select, epoll, evport, kqueue 几种选择，在编译的时候来选择一种。
 
 源码 ae.c 
 
@@ -1856,16 +1856,16 @@ LFU，Least Frequently Used，最不常用，4.0 版本新增。
 
 random，随机删除。 
 
-| 策略<img width=200/> | 含义                                                         |
-| -------------------- | ------------------------------------------------------------ |
-| volatile-lru         | 根据 LRU 算法删除设置了超时属性（expire）的键，直到腾出足够内存为止。如果没有可删除的键对象，回退到 noeviction 策略。 |
-| allkeys-lru          | 根据 LRU 算法删除键，不管数据有没有设置超时属性，直到腾出足够内存为止。 |
-| volatile-lfu         | 在带有过期时间的键中选择最不常用的。                         |
-| allkeys-lfu          | 在所有的键中选择最不常用的，不管数据有没有设置超时属性。     |
-| volatile-random      | 在带有过期时间的键中随机选择。                               |
-| allkeys-random       | 随机删除所有键，直到腾出足够内存为止。                       |
-| volatile-ttl         | 根据键值对象的 ttl 属性，删除最近将要过期数据。如果没有，回退到 noeviction 策略。 |
-| noeviction           | 默认策略，不会删除任何数据，拒绝所有写入操作并返回客户端错误信息（error）OOM command not allowed when used memory，此时 Redis 只响应读操作。 |
+| 策略            | 含义                                                         |
+| --------------- | ------------------------------------------------------------ |
+| volatile-lru    | 根据 LRU 算法删除设置了超时属性（expire）的键，直到腾出足够内存为止。如果没有可删除的键对象，回退到 noeviction 策略。 |
+| allkeys-lru     | 根据 LRU 算法删除键，不管数据有没有设置超时属性，直到腾出足够内存为止。 |
+| volatile-lfu    | 在带有过期时间的键中选择最不常用的。                         |
+| allkeys-lfu     | 在所有的键中选择最不常用的，不管数据有没有设置超时属性。     |
+| volatile-random | 在带有过期时间的键中随机选择。                               |
+| allkeys-random  | 随机删除所有键，直到腾出足够内存为止。                       |
+| volatile-ttl    | 根据键值对象的 ttl 属性，删除最近将要过期数据。如果没有，回退到 noeviction 策略。 |
+| noeviction      | 默认策略，不会删除任何数据，拒绝所有写入操作并返回客户端错误信息（error）OOM command not allowed when used memory，此时 Redis 只响应读操作。 |
 
 如果没有符合前提条件的 key 被淘汰，那么 volatile-lru、volatile-random 、volatile-ttl 相当于 noeviction（不做内存回收）。 
 
@@ -1885,58 +1885,58 @@ redis> config set maxmemory-policy volatile-lru
 
 Redis LRU 对传统的 LRU 算法进行了改良，通过随机采样来调整算法的精度。 
 
-如果淘汰策略是 LRU，则根据配置的采样值 `maxmemory_samples`（默认是 5 个）,随机从数据库中选择 m 个 key, 淘汰其中热度最低的 key 对应的缓存数据。所以采样数m配置的数值越大, 就越能精确的查找到待淘汰的缓存数据,但是也消耗更多的CPU计 算,执行效率降低。 
+如果淘汰策略是 LRU，则根据配置的采样值 `maxmemory_samples`（默认是 5 个），随机从数据库中选择 m 个 key，淘汰其中热度最低的 key 对应的缓存数据。所以采样数m配置的数值越大，就越能精确的查找到待淘汰的缓存数据，但是也消耗更多的CPU计算，执行效率降低。 
 
 **问题：如何找出热度最低的数据？**
 
 Redis 中所有对象结构都有一个 lru 字段, 且使用了 unsigned 的低 24 位，这个字段用来记录对象的热度。对象被创建时会记录 lru 值。在被访问的时候也会更新 lru 的值。 
 
-但不是获取系统当前的时间戳，而是设置为全局变量 server.lruclock 的值。 
-
-源码：server.h 
+但不是获取系统当前的时间戳，而是设置为`全局变量 server.lruclock` 的值。 
 
 ```c
+// server.h
 typedef struct redisObject { 
-unsigned type:4; 
-unsigned encoding:4; 
-unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or 
-												* LFU data (least significant 8 bits frequency 
-												* and most significant 16 bits access time). */ 
-int refcount; 
-void *ptr; 
+	unsigned type:4; 
+	unsigned encoding:4; 
+	unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or 
+					      * LFU data (least significant 8 bits frequency 
+					      * and most significant 16 bits access time). */ 
+	int refcount; 
+	void *ptr; 
 } robj;
 ```
 
 server.lruclock 的值怎么来的？ 
 
-Redis 中有个定时处理的函数 serverCron ， 默认每 100 毫秒调用函数 updateCachedTime 更新一次全局变量的 server.lruclock 的值，它记录的是当前 unix 时间戳。
-
-源码：server.c 
+Redis 中有个定时处理的函数 serverCron ， 默认每 100 毫秒调用函数 getLRUClock 更新一次全局变量的 server.lruclock 的值，它记录的是当前 unix 时间戳。
 
 ```c
-void updateCachedTime(void) { 
-	time_t unixtime = time(NULL); 
-	atomicSet(server.unixtime,unixtime); 
-	server.mstime = mstime(); 
-	struct tm tm; 
-	localtime_r(&server.unixtime,&tm); 
-	server.daylight_active = tm.tm_isdst; 
-} 
+// server.h
+int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
+	...
+    unsigned int lruclock = getLRUClock();
+    atomicSet(server.lruclock,lruclock);
+    ...
+}
+// evict.c
+unsigned int getLRUClock(void) {
+    // LRU_CLOCK_RESOLUTION 代表LRU算法的精度，即一个LRU的单位是多长时间
+    // LRU_CLOCK_MAX 代表逻辑时钟的最大位数，类似现实中的表盘，划分了最大的刻度，一个刻度是一个LRU大小
+    // 所以整个方法表示的含义为：当前时间是LRU的单位的多少倍，即已经过了多少个LRU，然后对最大刻度LRU_CLOCK_MAX取模
+    return (mstime()/LRU_CLOCK_RESOLUTION) & LRU_CLOCK_MAX;
+}
 ```
 
 **问题：为什么不获取精确的时间而是放在全局变量中？不会有延迟的问题吗？**
 
-这样函数 lookupKey 中更新数据的 lru 热度值时,就不用每次调用系统函数 time，可以提高执行效率。 
+这样函数 lookupKey 中更新数据的 lru 热度值时,就不用每次调用系统函数 mstime()，可以提高执行效率。 
 
 OK，当对象里面已经有了 LRU 字段的值，就可以评估对象的热度了。 
 
 函数 estimateObjectIdleTime 评估指定对象的 lru 热度，思想就是对象的 lru 值和全局的 server.lruclock 的差值越大（越久没有得到更新）， 该对象热度越低。 
 
-源码 evict.c 
-
 ```c
-/* Given an object returns the min number of milliseconds the object was never 
-* requested, using an approximated LRU algorithm. */ 
+// evict.c 
 unsigned long long estimateObjectIdleTime(robj *o) { 
 	unsigned long long lruclock = LRU_CLOCK(); 
 	if (lruclock >= o->lru) { 
@@ -1946,9 +1946,20 @@ unsigned long long estimateObjectIdleTime(robj *o) {
 				LRU_CLOCK_RESOLUTION; 
 	} 
 } 
+// server.hz代表服务器刷新的频率，意思是如果服务器的时间更新精度值比LRU的精度值要小（精度值表示一次刷新的间隔时间，越小精度越高），说明服务器的精度更高，直接用服务器的时间
+// 举例如果服务器精度是10ms， LRU精度是100ms，则在100ms内服务器进行10次刷新，得到的server.lrulock都是一样，既然如此，不必调用getLRUCLOCK()函数增加额外的开销
+unsigned int LRU_CLOCK(void) {
+    unsigned int lruclock;
+    if (1000/server.hz <= LRU_CLOCK_RESOLUTION) {
+        atomicGet(server.lruclock,lruclock);
+    } else {
+        lruclock = getLRUClock();
+    }
+    return lruclock;
+}
 ```
 
-server.lruclock 只有 24 位，按秒为单位来表示才能存储 194 天。当超过 24bit 能表示的最大时间的时候，它会从头开始计算。 
+server.lruclock 只有 24 位，按秒为单位来表示才能存储 97 天。当超过 24bit 能表示的最大时间的时候，它会从头开始计算。 
 
 在这种情况下，可能会出现对象的 lru 大于 server.lruclock 的情况，如果这种情况出现那么就 lruclock + (MAX - lru) 来求最久的 key。 
 
@@ -1968,15 +1979,14 @@ https://redis.io/topics/lru-cache
 
 ### 6.2.4 LFU
 
-server.h 
-
 ```c
+// server.h 
 typedef struct redisObject { 
 	unsigned type:4; 
 	unsigned encoding:4; 
 	unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or 
-													* LFU data (least significant 8 bits frequency 
-													* and most significant 16 bits access time). */ 
+						  * LFU data (least significant 8 bits frequency 
+						  * and most significant 16 bits access time). */ 
 	int refcount; 
 	void *ptr; 
 } robj;
@@ -1990,24 +2000,93 @@ typedef struct redisObject {
 
 counter 是用基于概率的对数计数器实现的，8 位可以表示百万次的访问频率。对象被读写的时候，lfu 的值会被更新。 
 
-db.c——lookupKey 
+`counter`并不是简单的访问一次就 +1，而是采用了一个 0-1 之间的 p 因子控制增长。
 
 ```c
+// db.c
+robj *lookupKey(redisDb *db, robj *key, int flags) {
+    dictEntry *de = dictFind(db->dict,key->ptr);
+    if (de) {
+        robj *val = dictGetVal(de);
+
+        /* Update the access time for the ageing algorithm.
+         * Don't do it if we have a saving child, as this will trigger
+         * a copy on write madness. */
+        if (server.rdb_child_pid == -1 &&
+            server.aof_child_pid == -1 &&
+            !(flags & LOOKUP_NOTOUCH))
+        {
+            if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
+                updateLFU(val);
+            } else {
+                val->lru = LRU_CLOCK();
+            }
+        }
+        return val;
+    } else {
+        return NULL;
+    }
+}
 void updateLFU(robj *val) { 
 	unsigned long counter = LFUDecrAndReturn(val); 
 	counter = LFULogIncr(counter); 
 	val->lru = (LFUGetTimeInMinutes()<<8) | counter; 
-} 
+}
+uint8_t LFULogIncr(uint8_t counter) {
+    // counter 最大值为255
+    if (counter == 255) return 255;
+    // 取一个 0-1 之间的随机数 r 与 p 比较
+    double r = (double)rand()/RAND_MAX;
+    // p 取决于当前 counter 值与 lfu_log_factor 因子，counter 值与 lfu_log_factor 因子越大，p越小，r < p的概率也越小，counter 增长的概率也就越小
+    double baseval = counter - LFU_INIT_VAL;
+    if (baseval < 0) baseval = 0;
+    double p = 1.0/(baseval*server.lfu_log_factor+1);
+    // 当 r < p 时，才增加 counter 
+    if (r < p) counter++;
+    return counter;
+}
 ```
 
-增长的速率由，lfu-log-factor 越大，counter 增长的越慢 
+增长情况如下：
+
+| factor | 100 hits | 1000 hits | 100K hits | 1M hits | 10M hits |
+| ------ | -------- | --------- | --------- | ------- | -------- |
+| 0      | 104      | 255       | 255       | 255     | 255      |
+| 1      | 18       | 49        | 255       | 255     | 255      |
+| 10     | 10       | 18        | 142       | 255     | 255      |
+| 100    | 8        | 11        | 49        | 143     | 255      |
+
+可见`counter`增长与访问次数呈现对数增长的趋势，随着访问次数越来越大，`counter`增长的越来越慢。
 
 ```yml
 # redis.conf 配置文件 
 # lfu-log-factor 10 
 ```
 
-如果计数器只会递增不会递减，也不能体现对象的热度。没有被访问的时候，计数器怎么递减呢？ 
+**如果计数器只会递增不会递减，也不能体现对象的热度。没有被访问的时候，计数器怎么递减呢？ **
+
+```c
+// LFUDecrAndReturn 对 counter 进行减少操作
+unsigned long LFUDecrAndReturn(robj *o) {
+    unsigned long ldt = o->lru >> 8; // 取得高16 bits的最近降低时间 ldt
+    unsigned long counter = o->lru & 255; // 低8 bits的计数器 counter
+    // 用差值与配置 lfu_decay_time 相除，已过去 n 个 lfu_decay_time，则将 counter 减少 n
+    unsigned long num_periods = server.lfu_decay_time ? LFUTimeElapsed(ldt) / server.lfu_decay_time : 0;
+    if (num_periods)
+        counter = (num_periods > counter) ? 0 : counter - num_periods;
+    return counter;
+}
+// 当前时间转化成分钟数后取低16 bits，然后计算与ldt的差值 now - ldt
+// 当ldt > now时，默认为过了一个周期(16 bits，最大65535)，取值65535 - ldt + now。
+unsigned long LFUTimeElapsed(unsigned long ldt) {
+    unsigned long now = LFUGetTimeInMinutes();
+    if (now >= ldt) return now-ldt;
+    return 65535-ldt+now;
+}
+unsigned long LFUGetTimeInMinutes(void) {
+    return (server.unixtime/60) & 65535;
+}
+```
 
 减少的值由衰减因子 lfu-decay-time（分钟）来控制，如果值是 1 的话，N 分钟没有访问就要减少 N。 
 
@@ -2067,7 +2146,7 @@ RDB 还有两种触发方式：
 
 **手动触发** 
 
-如果我们需要重启服务或者迁移数据，这个时候就需要手动触 RDB 快照保存。Redis 提供了两条命令： 
+如果我们需要重启服务或者迁移数据，这个时候就需要手动触发 RDB 快照保存。Redis 提供了两条命令： 
 
 a）save 
 
@@ -2077,7 +2156,7 @@ save 在生成快照的时候会阻塞当前 Redis 服务器， Redis 不能处�
 
 b）bgsave 
 
-执行 bgsave 时，Redis 会在后台异步进行快照操作，快照同时还可以响应客户端请 求。
+执行 bgsave 时，Redis 会在后台异步进行快照操作，快照同时还可以响应客户端请求。
 
 具体操作是 Redis 进程执行 `fork` 操作创建子进程（copy-on-write），RDB 持久化过程由子进程负责，完成后自动结束。它不会记录 fork 之后后续的命令。阻塞只发生在 fork 阶段，一般时间很短。 
 
@@ -2135,13 +2214,13 @@ b）bgsave
 #### RDB的缺点
 
 1. 如果你需要尽量避免在服务器故障时丢失数据，那么 RDB 不适合你。虽然 Redis 允许你设置不同的保存点（save point）来控制保存 RDB 文件的频率， 但是， 因为RDB 文件需要保存整个数据集的状态， 所以它并不是一个轻松的操作。因此你可能会至少 5 分钟才保存一次 RDB 文件。在这种情况下， 一旦发生故障停机， 你就可能会丢失好几分钟的数据。
-2. 每次保存 RDB 的时候，Redis 都要 fork() 出一个子进程，并由子进程来进行实际的持久化工作。在数据集比较庞大时， fork()可能会非常耗时，造成服务器在某某毫秒内停止处理客户端；如果数据集非常巨大，并且 CPU 时间非常紧张的话，那么这种停止时间甚至可能会长达整整一秒。虽然 AOF 重写也需要进行 fork() ，但无论 AOF 重写的执行间隔有多长，数据的耐久性都不会有任何损失。
+2. 每次保存 RDB 的时候，Redis 都要 fork() 出一个子进程，并由子进程来进行实际的持久化工作。在数据集比较庞大时， fork()可能会非常耗时，造成服务器在几毫秒甚至可能会长达整整一秒内停止处理客户端；虽然 AOF 重写也需要进行 fork() ，但可以调整重写日志的频率，而不需要在持久性上进行任何权衡。
 
 ## 7.2 AOF
 
 Append Only File 
 
-AOF：Redis 默认不开启。AOF 采用日志的形式来记录每个写操作，并**追加**到文件中。开启后，执行更改 Redis 数据的命令时，就会把命令写入到 AOF 文件中。 
+AOF：Redis 默认不开启。AOF 采用日志的形式来记录每个写操作，并`追加`到文件中。开启后，执行更改 Redis 数据的命令时，就会把命令写入到 AOF 文件中。 
 
 Redis 重启时会根据日志文件的内容把写指令从前到后执行一次以完成数据的恢复工作。
 
@@ -2170,19 +2249,19 @@ AOF 持久化策略（硬盘缓存到磁盘），默认 everysec
 
 **问题：文件越来越大，怎么办？**
 
-由于 AOF 持久化是 Redis 不断将写命令记录到 AOF 文件中，随着 Redis 不断的进行，AOF 的文件会越来越大，文件越大，占用服务器内存越大以及 AOF 恢复要求时间 越长。
+由于 AOF 持久化是 Redis 不断将写命令记录到 AOF 文件中，随着 Redis 不断的进行，AOF 的文件会越来越大，文件越大，占用服务器内存越大以及 AOF 恢复要求时间越长。
 
 例如 set spring 666，执行 1000 次，结果都是 spring=666。 
 
-为了解决这个问题，Redis 新增了重写机制，当 AOF 文件的大小超过所设定的阈值 时，Redis 就会启动 AOF 文件的内容压缩，只保留可以恢复数据的最小指令集。
+为了解决这个问题，Redis 新增了重写机制，当 AOF 文件的大小超过所设定的阈值时，Redis 就会启动 AOF 文件的内容压缩，只保留可以恢复数据的最小指令集。
 
 可以使用命令 `bgrewriteaof` 来重写。 
 
 AOF 文件重写并不是对原文件进行重新整理，而是直接读取服务器现有的键值对，然后用一条命令去代替之前记录这个键值对的多条命令，生成一个新的文件后去替换原来的 AOF 文件。
 
- ``auto-aof-rewrite-percentage 100`` 默认值为 100。aof 自动重写配置，当目前 aof 文件大小超过上一次重写的 aof 文件大小的 百分之多少进行重写，即当 aof 文件增长到一定大小的时候，Redis 能够调用 bgrewriteaof 对日志文件进行重写。当前 AOF 文件大小是上次日志重写得到 AOF 文件大小的二倍（设置为 100）时，自动启动新的日志重写过程。
+ ``auto-aof-rewrite-percentage 100`` 默认值为 100。aof 自动重写配置，当目前 aof 文件大小超过上一次重写的 aof 文件大小的百分之多少进行重写，即当 aof 文件增长到一定大小的时候，Redis 能够调用 bgrewriteaof 对日志文件进行重写。当前 AOF 文件大小是上次日志重写得到 AOF 文件大小的二倍（设置为 100）时，自动启动新的日志重写过程。
 
-``auto-aof-rewrite-min-size 64mb`` 默认 64M。设置允许重写的最小 aof 文件大小，避免了达到约定百分比但尺寸仍然很小的 情况还要重写。
+``auto-aof-rewrite-min-size 64mb`` 默认 64M。设置允许重写的最小 aof 文件大小，避免了达到约定百分比但尺寸仍然很小的情况还要重写。
 
 **问题：重写过程中，AOF 文件被更改了怎么办？**
 
@@ -2192,9 +2271,9 @@ AOF 文件重写并不是对原文件进行重新整理，而是直接读取服�
 
 另外有两个与 AOF 相关的参数： 
 
-`no-appendfsync-on-rewrite` 在 aof 重写或者写入 rdb 文件的时候，会执行大量 IO，此时对于 everysec 和 always 的 aof 模式来说，执行 fsync 会造成阻塞过长时间，no-appendfsync-on-rewrite 字段设置为默认设置为 no。如果对延迟要求很高的应用，这个字段可以设置为 yes，否则还是设置为 no，这样对持久化特性来说这是更安全的选择。设置为 yes 表示 rewrite 期间对新写操作不 fsync, 暂时存在内存中,等 rewrite 完成后再写入，默认为 no，建议修改为 yes。Linux 的默认 fsync 策略是 30 秒。可能丢失 30 秒数据。 
+`no-appendfsync-on-rewrite` 在 aof 重写或者写入 rdb 文件的时候，会执行大量 IO，此时对于 everysec 和 always 的 aof 模式来说，执行 fsync 会造成阻塞过长时间，no-appendfsync-on-rewrite 字段设置为默认设置为 no (这样对持久化特性来说这是更安全的选择)。如果对延迟要求很高的应用，这个字段可以设置为 yes。设置为 yes 表示重写期间对新写操作不 fsync，暂时存在内存中，等重写完成后再写入。Linux 的默认 fsync 策略是 30 秒，可能丢失 30 秒数据。 
 
-`aof-load-truncated` aof 文件可能在尾部是不完整的，当 redis 启动的时候，aof 文件的数据被载入内存。重启可能发生在 redis 所在的主机操作系统宕机后，尤其在 ext4 文件系统没有加上 data=ordered 选项，出现这种现象。redis 宕机或者异常终止不会造成尾部不完整现象，可以选择让 redis 退出，或者导入尽可能多的数据。如果选择的是 yes，当截断的 aof 文件被导入的时候， 会自动发布一个 log 给客户端然后 load。如果是 no，用户必须手动 redis-check-aof 修复 AOF 文件才可以。默认值为 yes。 
+`aof-load-truncated` aof 文件可能在尾部是不完整的(可能发生在 redis 所在的主机操作系统宕机后，尤其在 ext4 文件系统没有加上 data=ordered 选项，出现这种现象)，当 redis 启动的时候，aof 文件的数据被载入内存。如果选择的是 yes，当截断的 aof 文件被导入的时候， 会自动发布一个 log 给客户端然后继续加载。如果是 no，用户必须手动 redis-check-aof 修复 AOF 文件才可以，默认值为 yes。 
 
 ### 7.2.2 AOF 文件损坏以后如何修复
 
@@ -2210,13 +2289,14 @@ AOF 文件重写并不是对原文件进行重新整理，而是直接读取服�
 #### AOF 的优点
 
 1. 使用 AOF 持久化会让 Redis 变得非常耐久（much more durable）：你可以设置不同的 fsync 策略，比如无 fsync ，每秒钟一次 fsync ，或者每次执行写入命令时 fsync 。AOF 的默认策略为每秒钟 fsync 一次，在这种配置下，Redis 仍然可以保持良好的性能，并且就算发生故障停机，也最多只会丢失一秒钟的数据（ fsync 会在后台线程执行，所以主线程可以继续努力地处理命令请求）。
-2. AOF 文件是一个只进行追加操作的日志文件（append only log）， 因此对 AOF 文件的写入不需要进行 seek ， 即使日志因为某些原因而包含了未写入完整的命令（比如写入时磁盘已满，写入中途停机，等等）， redis-check-aof 工具也可以轻易地修复这种问题。
-3. 同  ``AOF 重写的原理``
+2. AOF 文件是一个只进行追加操作的日志文件（append only log）， 因此对 AOF 文件的写入不需要进行查找， 即使日志因为某些原因而包含了未写入完整的命令（比如写入时磁盘已满，写入中途停机，等等）， redis-check-aof 工具也可以轻易地修复这种问题。
+3. Redis 太大时，Redis 能够在后台自动重写 AOF。重写是完全安全的，因为 Redis 继续追加到旧文件时，会生成一个全新的文件，其中包含创建当前数据集所需的最少操作集，一旦准备好第二个文件，Redis 会切换这两个文件并开始追加到新的那一个。
+4. AOF 以易于理解和解析的格式包含所有操作的日志。您甚至可以轻松导出 AOF 文件。例如，即使错误使用 FLUSHALL 命令删除了所有内容，但是如果在此期间未执行日志重写，仍然可以保存数据集，只需停止服务器，删除最新命令并再次重新启动 Redis。
 
 #### AOF 的缺点
 
 1. 对于相同的数据集来说，AOF 文件的体积通常要大于 RDB 文件的体积。
-2. 根据所使用的 fsync 策略，AOF 的速度可能会慢于 RDB 。在一般情况下， 每秒 fsync 的性能依然非常高， 而关闭 fsync 可以让 AOF 的速度和 RDB 一样快， 即使在高负荷之下也是如此。不过在处理巨大的写入载入时，RDB 可以提供更有保证的最大延迟时间（latency）。
+2. AOF 的速度可能会慢于 RDB，具体取决于 fsync 策略。在一般情况下， 每秒 fsync 的性能依然非常高， 而关闭 fsync 可以让 AOF 的速度和 RDB 一样快， 即使在高负荷之下也是如此。不过在处理巨大的写入载入时，RDB 可以提供更有保证的最大延迟时间（latency）。
 3. AOF 在过去曾经发生过这样的 bug ：因为个别命令的原因，导致 AOF 文件在重新载入时，无法将数据集恢复成保存时的原样。（举个例子，阻塞命令 BRPOPLPUSH 就曾经引起过这样的 bug 。） 测试套件里为这种情况添加了测试：它们会自动生成随机的、复杂的数据集， 并通过重新载入这些数据来确保一切正常。虽然这种 bug 在 AOF 文件中并不常见， 但是对比来说， RDB 几乎是不可能出现这种 bug 的
 
 ## 7.3 RDB 和 AOF 如何选择
@@ -2225,7 +2305,7 @@ AOF 文件重写并不是对原文件进行重新整理，而是直接读取服�
 
 如果可以承受数分钟以内的数据丢失，那么可以只使用 RDB 持久化。定时生成 RDB 快照（snapshot）非常便于进行数据库备份， 并且 RDB 恢复数据集的速度也要比 AOF 恢复的速度要快 。 
 
-否则就使用 AOF 重写。但是一般情况下建议不要单独使用某一种持久化机制，而是应该两种一起用，在这种情况下,当 redis 重启的时候会优先载入 AOF 文件来恢复原始 的数据，因为在通常情况下 AOF 文件保存的数据集要比 RDB 文件保存的数据集要完整。
+否则就使用 AOF 重写。但是一般情况下建议不要单独使用某一种持久化机制，而是应该两种一起用，在这种情况下当 redis 重启的时候会优先载入 AOF 文件来恢复原始的数据，因为在通常情况下 AOF 文件保存的数据集要比 RDB 文件保存的数据集要完整。
 
 # 8 Redis 与 MongDB
 

@@ -173,9 +173,7 @@ public class String {
 
 ## 4.1 方法区 Method Area
 
-各线程共享的运行时内存区域，在虚拟机启动时创建。
-
-它存储了已被虚拟机加载的`类的结构信息`、常量、静态变量、即时编译器编译后的代码等数据。
+实际而言，方法区（Method Area）和堆一样，是各线程共享的运行时内存区域，在虚拟机启动时创建。它存储了`已被虚拟机加载的类信息`、常量、静态变量、即时编译器编译后的代码等数据。
 
 > Class 文件中除了有类的版本、字段、方法、接口等描述信息外，还有一项信息就是常量池，用于存放编译时期生成的各种字面量和符号引用，这部分内容将在类加载后进入方法区的`运行时常量池`中存放。
 
@@ -240,13 +238,13 @@ Java 堆从 GC 的角度还可以细分为：新生代（Eden区、From Survivor
 
 ### 4.2.2 永久代
 
-实际而言，方法区（Method Area）和堆一样，是各个线程共享的内存区域，它用于存储虚拟机加载的：类信息+普通常量+静态常量+编译器编译后的代码等等，虽然JVM规范将方法区描述为堆的一个逻辑部分，但它却还有一个别名叫做Non-Heap(非堆)，目的就是要和堆分开。
-
-对于HotSpot虚拟机，很多开发者习惯将方法区称之为``“永久代(Parmanent Gen)”`` ，但严格本质上说两者不同，或者说使用永久代来实现方法区而已，永久代是方法区(相当于是一个接口interface)的一个实现，``jdk1.7的版本中，已经将原本放在永久代的字符串常量池移走。``
+对于 HotSpot 虚拟机，很多开发者习惯将方法区称之为``“永久代(Parmanent Gen)”`` ，但严格本质上说两者不同，或者说使用永久代来实现方法区而已，永久代是方法区(相当于是一个接口interface)的一个实现，``jdk1.7的版本中，已经将原本放在永久代的字符串常量池移走。``
 
 ![1599201114802](JVM 基础.assets/1599201114802.png)
 
-永久区(java7之前有)，永久存储区是一个常驻内存区域( 元空间与永久代不同其内存空间直接使用的是本地内存 )，用于存放JDK自身所携带的 Class,Interface 的元数据，也就是说它存储的是运行环境必须的类信息，被装载进此区域的数据是不会被垃圾回收器回收掉的，关闭 JVM 才会释放此区域所占用的内存。
+永久区(jdk1.7 及之前有)，永久存储区是一个常驻内存区域，用于存放JDK自身所携带的 Class,Interface 的元数据，也就是说它存储的是运行环境必须的类信息，被装载进此区域的数据是不会被垃圾回收器回收掉的，关闭 JVM 才会释放此区域所占用的内存。
+
++++++++++++++++++++++++++++++++永久代会发生垃圾回收吗？+++++++++++++++++++++++++++++++++++
 
 ## 4.3 栈 Stack
 
@@ -583,19 +581,15 @@ Exception in thread "main" java.lang.OutOfMemoryError: unable to create new nati
 
 使用 ``java -XX:+PrintFlagsInitial`` 命令查看本机的初始化参数，-XX:MetaspaceSize为 21810376B（约20.8M）
 
-Java8 及之后的版本使用的Metaspace来替代永久代。
+Java8 及之后的版本使用的 Metaspace 来替代永久代。
 
-Metaspace是方法区在HotSpot中的实现，它与永久代最大区别在于：Metaspace并不在虚拟机内存中而是使用本地内存。也即在Java8中，class metadata(the virtual machines internal presentation of Java class)，被存储在叫做Metaspace的native memory。
+Metaspace 是方法区在 HotSpot 中的实现，它与永久代最大区别在于：`Metaspace 并不在虚拟机内存中而是使用本地内存`。也即在 Java 8 中，class metadata(the virtual machines internal presentation of Java class)，被存储在叫做Metaspace 的 native memory。
 
-永久代（Java8后被元空间Metaspace取代）存放以下信息：
-
-* 虚拟机加载的类信息
-
-* 常量池
-
-* 静态变量
-
-* 即时编译后的代码
+> 因此，默认情况下，元空间的大小仅受本地内存限制，但可以通过以下参数来指定元空间的大小：
+>
+> `-XX:MetaspaceSize` 初始空间大小，达到该值就会触发垃圾收集进行类型卸载，同时 GC 会对该值进行调整：如果释放了大量的空间，就适当降低该值；如果释放了很少的空间，那么在不超过 MaxMetaspaceSize 时，适当提高该值
+>
+> `-XX:MaxMetaspaceSize` 最大空间，默认是没有限制的
 
 ```java
 public class MetaspaceOOMTest {
