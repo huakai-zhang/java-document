@@ -301,7 +301,7 @@ Sentinle 的 Raft 算法和 Raft 论文略有不同。
 	sentinel monitor mymaster 127.0.0.1 6379 2  #指定主机IP地址和端口，并且指定当有2台哨兵认为主机挂了，则对主机进行容灾切换
 	sentinel auth-pass mymaster 1234 #当在Redis实例中开启了requirepass，这里就需要提供密码
 	sentinel down-after-milliseconds mymaster 3000 #这里设置了主机多少秒无响应，则认为挂了
-	snetinel parallel-syncs mymaster 1 #主备切换时，最多有多少个slave同时对新的master进行同步，这里设置为默认的1
+	sentinel parallel-syncs mymaster 1 #主备切换时，最多有多少个slave同时对新的master进行同步，这里设置为默认的1
 	sentinel failover-timeout mymaster 180000 #故障转移的超时时间，这里设置为三分钟
 # 启动三个哨兵
 	cd /usr/local/redis-5.0.7/src
