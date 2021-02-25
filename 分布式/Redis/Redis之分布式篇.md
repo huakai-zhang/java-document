@@ -261,6 +261,7 @@ Sentinle 的 Raft 算法和 Raft 论文略有不同。
 	requirepass：1234 #设置 redis 连接密码
 	masterauth：1234  #slave 服务连接 master 的密码
 # 从节点配置
+# 如果程序或者各个 redis 不在同一台机器 replicaof 需配置实际地址，例：192.168.8.203 6379
 	bind：0.0.0.0
 	port：6380
 	protected-mode：no
@@ -378,7 +379,7 @@ spring:
 
 只能单点写，没有解决水平扩容的问题。 
 
-如果数据量非常大，这个时候我们需要多个 master-slave 的 group，把数据分布到 不同的 group 中。 
+如果数据量非常大，这个时候我们需要多个 master-slave 的 group，把数据分布到不同的 group 中。 
 
 问题来了，数据怎么分片？分片之后，怎么实现路由？ 
 
@@ -455,7 +456,181 @@ Redis Cluster 可以看成是由多个 Redis 实例组成的数据集合。客�
 
 ![image-20201108192052014](Redis之分布式篇.assets/image-20201108192052014.png)
 
-### 4.3.2 搭建 // TODO
+### 4.3.2 搭建
+
+```markdown
+# 创建目录并复制redis配置文件
+	cd /usr/local/redis-6.0.5/
+	mkdir cluster
+	cd cluster/
+	mkdir server-7291 server-7292 server-7293 server-7294 server-7295 server-7296
+	cp ../redis.conf server-7291/
+# 修改7291的redis.conf配置文件
+	cd server-7291/
+	vim redis.conf
+# 编辑内容
+	port 7291
+	daemonize yes
+	protected-mode no
+	dir /usr/local/soft/redis-6.0.5/redis-cluster/server-7291/
+	masterauth 1234
+	requirepass 1234
+	cluster-enabled yes
+	cluster-config-file nodes-7291.conf
+	cluster-node-timeout 5000
+	appendonly yes
+	pidfile /var/run/redis_7291.pid
+# 注意，外网集群要添加这个配置
+	# 实际给各节点网卡分配的IP（公网IP）
+	cluster-announce-ip 47.xx.xx.xx
+	# 节点映射端口
+	cluster-announce-port ${PORT}
+	# 节点总线端口
+	cluster-announce-bus-port ${PORT}
+# 把7291下的redis.conf复制到其他5个目录
+	cp redis.conf ../server-7292/
+    cp redis.conf ../server-7293/
+	cp redis.conf ../server-7294/
+	cp redis.conf ../server-7295/
+	cp redis.conf ../server-7296/
+# 批量替换内容
+	cd ..
+	sed -i 's/7291/7292/g' server-7292/redis.conf
+	sed -i 's/7291/7293/g' server-7293/redis.conf 
+	sed -i 's/7291/7294/g' server-7294/redis.conf 
+	sed -i 's/7291/7295/g' server-7295/redis.conf 
+	sed -i 's/7291/7296/g' server-7296/redis.conf 
+# 启动6个Redis节点
+	cd ../src/
+	./redis-server ../cluster/server-7291/redis.conf
+	./redis-server ../cluster/server-7292/redis.conf
+	./redis-server ../cluster/server-7293/redis.conf
+	./redis-server ../cluster/server-7294/redis.conf
+	./redis-server ../cluster/server-7295/redis.conf
+	./redis-server ../cluster/server-7296/redis.conf
+# 是否启动了6个进程
+	ps -ef|grep redis
+```
+
+![image-20210225140221435](Redis之分布式篇.assets/image-20210225140221435.png)
+
+```markdown
+# 创建集群，接用–cluster命令，注意用绝对IP，不要用127.0.0.1
+	./redis-cli --cluster create 192.168.25.128:7291 192.168.25.128:7292 192.168.25.128:7293 192.168.25.128:7294 192.168.25.128:7295 192.168.25.128:7296 --cluster-replicas 1 -a 1234
+# 集群创建完成
+Warning: Using a password with '-a' or '-u' option on the command line interface may not be safe.
+>>> Performing hash slots allocation on 6 nodes...
+Master[0] -> Slots 0 - 5460
+Master[1] -> Slots 5461 - 10922
+Master[2] -> Slots 10923 - 16383
+Adding replica 192.168.25.128:7295 to 192.168.25.128:7291
+Adding replica 192.168.25.128:7296 to 192.168.25.128:7292
+Adding replica 192.168.25.128:7294 to 192.168.25.128:7293
+>>> Trying to optimize slaves allocation for anti-affinity
+[WARNING] Some slaves are in the same host as their master
+M: d9f7e60f3151aecc48c827a0f1ebcc02fe1c121a 192.168.25.128:7291
+   slots:[0-5460] (5461 slots) master
+M: 920cb05e0b24fc6056a27b9fc855850d8e955cfd 192.168.25.128:7292
+   slots:[5461-10922] (5462 slots) master
+M: de808db7ecf6dcda8752c9034268146ba89f24a3 192.168.25.128:7293
+   slots:[10923-16383] (5461 slots) master
+S: ffdc0ef09e065ab3e7ef01535db92d1b3ab842c9 192.168.25.128:7294
+   replicates d9f7e60f3151aecc48c827a0f1ebcc02fe1c121a
+S: ac4cbdaaacb1ef7252fa1558f636445993b785b4 192.168.25.128:7295
+   replicates 920cb05e0b24fc6056a27b9fc855850d8e955cfd
+S: 98bb6c5e99d8f1852b56dbbed74b3f7711848ff7 192.168.25.128:7296
+   replicates de808db7ecf6dcda8752c9034268146ba89f24a3
+Can I set the above configuration? (type 'yes' to accept): yes
+>>> Nodes configuration updated
+>>> Assign a different config epoch to each node
+>>> Sending CLUSTER MEET messages to join the cluster
+Waiting for the cluster to join
+..
+>>> Performing Cluster Check (using node 192.168.25.128:7291)
+M: d9f7e60f3151aecc48c827a0f1ebcc02fe1c121a 192.168.25.128:7291
+   slots:[0-5460] (5461 slots) master
+   1 additional replica(s)
+M: 920cb05e0b24fc6056a27b9fc855850d8e955cfd 192.168.25.128:7292
+   slots:[5461-10922] (5462 slots) master
+   1 additional replica(s)
+S: 98bb6c5e99d8f1852b56dbbed74b3f7711848ff7 192.168.25.128:7296
+   slots: (0 slots) slave
+   replicates de808db7ecf6dcda8752c9034268146ba89f24a3
+S: ac4cbdaaacb1ef7252fa1558f636445993b785b4 192.168.25.128:7295
+   slots: (0 slots) slave
+   replicates 920cb05e0b24fc6056a27b9fc855850d8e955cfd
+S: ffdc0ef09e065ab3e7ef01535db92d1b3ab842c9 192.168.25.128:7294
+   slots: (0 slots) slave
+   replicates d9f7e60f3151aecc48c827a0f1ebcc02fe1c121a
+M: de808db7ecf6dcda8752c9034268146ba89f24a3 192.168.25.128:7293
+   slots:[10923-16383] (5461 slots) master
+   1 additional replica(s)
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+
+# 注意看 slot 的分布
+	7291  [0-5460] (5461个槽) 
+	7292  [5461-10922] (5462个槽) 
+	7293  [10923-16383] (5461个槽)
+# 批量写入值
+	vim setkey.sh
+		#!/bin/bash
+		for ((i=0;i<20000;i++))
+		do
+		echo -en "helloworld" | /usr/local/redis-6.0.5/src/redis-cli -h 192.168.25.128 -p 7291 -a 1234 -c -x set name$i >>redis.log
+		done
+	chmod +x setkey.sh
+	./setkey.sh
+# 每个节点分布的数据
+	127.0.0.1:7291> dbsize
+	(integer) 6652
+	127.0.0.1:7292> dbsize
+	(integer) 6683
+	127.0.0.1:7293> dbsize
+	(integer) 6665
+# 其他命令，比如添加节点、删除节点，重新分布数据
+	redis-cli --cluster help
+```
+
+#### 集群命令
+
+cluster info ：打印集群的信息
+
+cluster nodes ：列出集群当前已知的所有节点（node），以及这些节点的相关信息
+
+cluster meet ：将 ip 和 port 所指定的节点添加到集群当中，让它成为集群的一份子
+
+cluster forget <node_id> ：从集群中移除 node_id 指定的节点(保证空槽道)
+
+cluster replicate <node_id> ：将当前节点设置为 node_id 指定的节点的从节点
+
+cluster saveconfig ：将节点的配置文件保存到硬盘里面
+
+#### 槽 slot 命令
+
+cluster addslots [slot …] ：将一个或多个槽（slot）指派（assign）给当前节点
+
+cluster delslots [slot …] ：移除一个或多个槽对当前节点的指派
+
+cluster flushslots ：移除指派给当前节点的所有槽，让当前节点变成一个没有指派任何槽的节点
+
+cluster setslot node <node_id> ：将槽 slot 指派给 node_id 指定的节点，如果槽已经指派给另一个节点，那么先让另一个节点删除该槽>，然后再进行指派
+
+cluster setslot migrating <node_id> ：将本节点的槽 slot 迁移到 node_id 指定的节点中
+
+cluster setslot importing <node_id> ：从 node_id 指定的节点中导入槽 slot 到本节点
+
+cluster setslot stable ：取消对槽 slot 的导入（import）或者迁移（migrate）
+
+#### 键命令
+
+cluster keyslot ：计算键 key 应该被放置在哪个槽上
+
+cluster countkeysinslot ：返回槽 slot 目前包含的键值对数量
+
+cluster getkeysinslot ：返回 count 个 slot 槽中的键
 
 ### 4.3.3 数据分布
 
@@ -520,7 +695,7 @@ Redis 的每个 master 节点维护一个 16384 位（2048bytes=2KB）的位序�
 查看 key 属于哪个 slot： 
 
 ```shell
-redis> cluster keyslot qingshan 
+127.0.0.1:7291> cluster keyslot qingshan 
 ```
 
 <font color=red>注意：key 与 slot 的关系是永远不会变的，会变的只有 slot 和 Redis 节点的关系。 </font>
@@ -529,9 +704,7 @@ redis> cluster keyslot qingshan
 
 比如有些 multi key 操作是不能跨节点的，如果要让某些数据分布到一个节点上，例如用户 2673 的基本信息和金融信息，怎么办？
 
-在 key 里面加入{hash tag}即可。Redis 在计算槽编号的时候只会获取{}之间的字符串进行槽编号计算，这样由于上面两个不同的键，{}里面的字符串是相同的，因此他们可 
-
-以被计算出相同的槽。 
+在 key 里面加入{hash tag}即可。Redis 在计算槽编号的时候只会获取{}之间的字符串进行槽编号计算，这样由于上面两个不同的键，{}里面的字符串是相同的，因此他们可以被计算出相同的槽。 
 
 user{2673}base=… 
 
@@ -756,7 +929,7 @@ public static void main(String[] args) {
 }
 ```
 
-Jedis 多个线程使用一个连接的时候线程不安全。可以使用连接池，为每个请求创建 不同的连接，基于 Apache common pool 实现。跟数据库一样，可以设置最大连接数 等参数。Jedis 中有多种连接池的子类。
+Jedis 多个线程使用一个连接的时候线程不安全。可以使用连接池，为每个请求创建不同的连接，基于 Apache common pool 实现。跟数据库一样，可以设置最大连接数 等参数。Jedis 中有多种连接池的子类。
 
 ![image-20201112135301180](Redis之分布式篇.assets/image-20201112135301180.png)
 
@@ -1451,23 +1624,23 @@ Redisson 跟 Jedis 定位不同，它不是一个单纯的 Redis 客户端，而
 
 对于数据库的实时性一致性要求不是特别高的场合，比如 T+1 的报表，可以采用定时任务查询数据库数据同步到 Redis 的方案。
 
-由于我们是以数据库的数据为准的，所以给缓存设置一个过期时间，是保证最终一 致性的解决方案。
+由于我们是以数据库的数据为准的，所以给缓存设置一个过期时间，是保证最终一致性的解决方案。
 
 ## 6.3 方案选择
 
 ### 6.3.1 Redis：删除还是更新？
 
-这里我们先要补充一点，当存储的数据发生变化，Redis 的数据也要更新的时候，我 们有两种方案，一种就是直接更新，调用 set；还有一种是直接删除缓存，让应用在下次 查询的时候重新写入。
+这里我们先要补充一点，当存储的数据发生变化，Redis 的数据也要更新的时候，我们有两种方案，一种就是直接更新，调用 set；还有一种是直接删除缓存，让应用在下次查询的时候重新写入。
 
 这两种方案怎么选择呢？这里我们主要考虑更新缓存的代价。 
 
-更新缓存之前，是不是要经过其他表的查询、接口调用、计算才能得到最新的数据。如果不是直接从数据库拿到值的话，建议直接删除缓存，这种方案更加简单， 而且避免了数据库的数据和缓存不一致的情况。在一般情况下，我们也推荐使用删除的方案。 
+更新缓存之前，是不是要经过其他表的查询、接口调用、计算才能得到最新的数据。如果不是直接从数据库拿到值的话(要经过其他表查询...)，建议直接删除缓存，这种方案更加简单， 而且避免了数据库的数据和缓存不一致的情况。在一般情况下，我们也推荐使用删除的方案。 
 
 这一点明确之后，现在我们就剩一个问题： 
 
 1. 到底是先更新数据库，再删除缓存
 
-2. 还是先删除缓存，再更新数据库 我们先看第一种方案
+2. 还是先删除缓存，再更新数据库
 
 ### 6.3.2 先更新数据库，再删除缓存
 
@@ -1662,7 +1835,7 @@ redis-cli -p 6379 monitor | head -n 100000 | ./redis-faina.py
 
 如果我们直接把这些元素的值放到基本的数据结构（List、Map、Tree）里面，比如 一个元素 1 字节的字段，10 亿的数据大概需要 900G 的内存空间，这个对于普通的服务器来说是承受不了的。 
 
-所以，我们存储这几十亿个元素，不能直接存值，我们应该找到一种最简单的最节省空间的数据结构，用来标记这个元素有没有出现。 这个东西我们就把它叫做`位图(BitMap)`，他是一个有序的数组，只有两个值，0 和 1。0 代表 不存在，1 代表存在。
+所以，我们存储这几十亿个元素，不能直接存值，我们应该找到一种最简单的最节省空间的数据结构，用来标记这个元素有没有出现。 这个东西我们就把它叫做`位图(BitMap)`，他是一个有序的数组，只有两个值，0 和 1。0 代表不存在，1 代表存在。
 
 ![image-20201113120421040](Redis之分布式篇.assets/image-20201113120421040.png)
 
@@ -1684,7 +1857,7 @@ redis-cli -p 6379 monitor | head -n 100000 | ./redis-faina.py
 
 这个时候，Tom 和 Mic 经过计算得到的哈希值是一样的，那么再经过位运算得到的下标肯定是一样的，我们把这种情况叫做`哈希冲突或者哈希碰撞`。 
 
-如果发生了哈希碰撞，这个时候对于我们的容器存值肯定是有影响的，我们可以通 过哪些方式去降低哈希碰撞的概率呢？
+如果发生了哈希碰撞，这个时候对于我们的容器存值肯定是有影响的，我们可以通过哪些方式去降低哈希碰撞的概率呢？
 
 第一种就是扩大维数组的长度或者说位图容量。因为我们的函数是分布均匀的，所以，位图容量越大，在同一个位置发生哈希碰撞的概率就越小。 
 
@@ -1718,7 +1891,7 @@ redis-cli -p 6379 monitor | head -n 100000 | ./redis-faina.py
 
 如果经过三次计算得到的下标位置值都是 1，这种情况下，能不能确定 d 元素一定在这个容器里面呢？ 实际上是不能的。比如这张图里面，这三个位置分别是把 a,b,c 存进去的时候置成 1 的，所以即使 d 元素之前没有存进去，也会得到三个 1，判断返回 true。 
 
-所以，这个是布隆过滤器的一个很重要的特性，因为哈希碰撞不可避免，所以它会 存在一定的误判率。这种把本来不存在布隆过滤器中的元素误判为存在的情况，我们把它叫做`假阳性（False Positive Probability，FPP）`。 
+所以，这个是布隆过滤器的一个很重要的特性，因为哈希碰撞不可避免，所以它会存在一定的误判率。这种把本来不存在布隆过滤器中的元素误判为存在的情况，我们把它叫做`假阳性（False Positive Probability，FPP）`。 
 
 我们再来看另一个元素，e 元素。我们要判断它在容器里面是否存在，一样地要用这三个函数去计算。第一个位置是 1，第二个位置是 1，第三个位置是 0。 
 
@@ -1971,7 +2144,7 @@ public class BloomTestsConcurrency {
 
 布隆过滤器解决的问题是什么？如何在海量元素中快速判断一个元素是否存在。所以除了解决缓存穿透的问题之外，我们还有很多其他的用途。 
 
-比如爬数据的爬虫，爬过的 url 我们不需要重复爬，那么在几十亿的 url 里面，怎么 判断一个 url 是不是已经爬过了？
+比如爬数据的爬虫，爬过的 url 我们不需要重复爬，那么在几十亿的 url 里面，怎么判断一个 url 是不是已经爬过了？
 
 还有我们的邮箱服务器，发送垃圾邮件的账号我们把它们叫做 spamer，在这么多的邮箱账号里面，怎么判断一个账号是不是 spamer 等等一些场景，我们都可以用到布隆过滤器。
 
