@@ -324,7 +324,7 @@ typedef struct redisObject {
 
 * int，存储 8 个字节的长整型（long，2^63-1）
 
-* embstr, 代表 embstr 格式的 SDS（Simple Dynamic String 简单动态字符串），<font color=red>存储小于 44 个字节的字符串</font>
+* embstr, 代表 embstr 格式的 `SDS（Simple Dynamic String 简单动态字符串）`，<font color=red>存储小于 44 个字节的字符串</font>
 
 * raw，存储大于 44 个字节的字符串
 
