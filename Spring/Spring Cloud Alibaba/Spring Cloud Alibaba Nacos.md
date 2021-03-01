@@ -331,7 +331,7 @@ class LongPollingRunnable implements Runnable {
                 if (cacheData.getTaskId() == taskId) {
                     cacheDatas.add(cacheData);
                     try {
-                        // 检查本地配置
+                        // 检查本地配置（如果有本地配置则使用本地配置，不再使用线上）
                         // cacheData 当前配置中的某一个配置
                         checkLocalConfig(cacheData);
                       	// 内存缓存设置成功后
@@ -392,15 +392,18 @@ private void checkLocalConfig(CacheData cacheData) {
     final String dataId = cacheData.dataId;
     final String group = cacheData.group;
     final String tenant = cacheData.tenant;
-    // 本地文件缓存
+    // 本地文件
+    // Nacos 优先使用本地配置，如果我们需要在某台机器上使用跟线上环境不同的配置用于调试等场景，可以通过在本地添加配置来达到目的
+    // 同时可做容灾使用
     File path = LocalConfigInfoProcessor.getFailoverFile(agent.getName(), dataId, group, tenant);
-    // 检查内存缓存中是否使用本地缓存标识
+    // 检查内存缓存中是否使用本地配置标识
     // 检查本地文件是否存在
-    // 即是本地文件存在且缓存不存在，因为新配置的配置信息，会先加载在文件中
+    // 存在本地文件且 cacheData 未使用本地配置，则使用加载本地配置
     if (!cacheData.isUseLocalConfigInfo() && path.exists()) {
         // 读取本地文件，放到 cacheData
         String content = LocalConfigInfoProcessor.getFailover(agent.getName(), dataId, group, tenant);
         final String md5 = MD5Utils.md5Hex(content, Constants.ENCODE);
+        // 使用本地配置
         cacheData.setUseLocalConfigInfo(true);
         cacheData.setLocalConfigInfoVersion(path.lastModified());
         cacheData.setContent(content);
@@ -411,7 +414,7 @@ private void checkLocalConfig(CacheData cacheData) {
         return;
     }
 
-    // 内存中存在，但是本地文件没有
+    // 使用本地配置，但是配置文件被删除，设置为不使用本地配置，进行下一次轮询
     if (cacheData.isUseLocalConfigInfo() && !path.exists()) {
         cacheData.setUseLocalConfigInfo(false);
         LOGGER.warn("[{}] [failover-change] failover file deleted. dataId={}, group={}, tenant={}", agent.getName(),
@@ -419,7 +422,7 @@ private void checkLocalConfig(CacheData cacheData) {
         return;
     }
 
-    // 本地内存中都有，但是内存缓存的修改时间和本地缓存不一致
+    // 使用本地配置且文件存在，但是版本不同，同步缓存配置和本地配置
     if (cacheData.isUseLocalConfigInfo() && path.exists() && cacheData.getLocalConfigInfoVersion() != path.lastModified()) {
         String content = LocalConfigInfoProcessor.getFailover(agent.getName(), dataId, group, tenant);
         final String md5 = MD5Utils.md5Hex(content, Constants.ENCODE);
@@ -442,6 +445,7 @@ private void checkLocalConfig(CacheData cacheData) {
 List<String> checkUpdateDataIds(List<CacheData> cacheDatas, List<String> inInitializingCacheList) throws Exception {
     StringBuilder sb = new StringBuilder();
     for (CacheData cacheData : cacheDatas) {
+        // 如果使用本地配置，则不进行远程监控
         if (!cacheData.isUseLocalConfigInfo()) {
             sb.append(cacheData.dataId).append(WORD_SEPARATOR);
             sb.append(cacheData.group).append(WORD_SEPARATOR);
@@ -467,6 +471,7 @@ List<String> checkUpdateConfigStr(String probeUpdateString, boolean isInitializi
     Map<String, String> params = new HashMap<String, String>(2);
     params.put(Constants.PROBE_MODIFY_REQUEST, probeUpdateString);
     Map<String, String> headers = new HashMap<String, String>(2);
+    // 服务端会根据 Long-Pulling-Timeout 判断是否时长轮询
     headers.put("Long-Pulling-Timeout", "" + timeout);
 
     // 告诉服务器如果是新数据初始化，不要挂起(直接返回)
@@ -485,23 +490,10 @@ List<String> checkUpdateConfigStr(String probeUpdateString, boolean isInitializi
         // public static final int CONFIG_LONG_POLL_TIMEOUT = 30000;
         // 默认 30000 ms
         // 实际服务端在 29.5 s 超时，为了保证在网络延迟情况下返回，一般最终时间为 29.5+
+        // 请求路径为 "/v1/cs/configs/listener"
         HttpRestResult<String> result = agent
-            .httpPost(Constants.CONFIG_CONTROLLER_PATH + "/listener", headers, params, agent.getEncode(),
-                      readTimeoutMs);
-        if (result.ok()) {
-            setHealthServer(true);
-            return parseUpdateDataIdResponse(result.getData());
-        } else {
-            setHealthServer(false);
-            LOGGER.error("[{}] [check-update] get changed dataId error, code: {}", agent.getName(),
-                         result.getCode());
-        }
-    } catch (Exception e) {
-        setHealthServer(false);
-        LOGGER.error("[" + agent.getName() + "] [check-update] get changed dataId exception", e);
-        throw e;
-    }
-    return Collections.emptyList();
+            .httpPost(Constants.CONFIG_CONTROLLER_PATH + "/listener", headers, params, agent.getEncode(),readTimeoutMs);
+        ...
 }
 ```
 
@@ -510,26 +502,58 @@ List<String> checkUpdateConfigStr(String probeUpdateString, boolean isInitializi
 长轮询线程拿到服务端发生变化的 dataid 后，会执行 getServerConfig() 方法获取配置信息：
 
 ```java
-public String[] getServerConfig(String dataId, String group, String tenant, long readTimeout)
-        throws NacosException {
-    String[] ct = new String[2];
-    if (StringUtils.isBlank(group)) {
-        group = Constants.DEFAULT_GROUP;
+private String getConfigInner(String tenant, String dataId, String group, long timeoutMs) throws NacosException {
+    group = null2defaultGroup(group);
+    ParamUtils.checkKeyParam(dataId, group);
+    ConfigResponse cr = new ConfigResponse();
+    
+    cr.setDataId(dataId);
+    cr.setTenant(tenant);
+    cr.setGroup(group);
+    
+    // 优先使用本地配置
+    String content = LocalConfigInfoProcessor.getFailover(agent.getName(), dataId, group, tenant);
+    if (content != null) {
+        LOGGER.warn("[{}] [get-config] get failover ok, dataId={}, group={}, tenant={}, config={}", agent.getName(),
+                dataId, group, tenant, ContentUtils.truncateContent(content));
+        cr.setContent(content);
+        configFilterChainManager.doFilter(null, cr);
+        content = cr.getContent();
+        return content;
     }
     
-    HttpRestResult<String> result = null;
     try {
-        Map<String, String> params = new HashMap<String, String>(3);
-        if (StringUtils.isBlank(tenant)) {
-            params.put("dataId", dataId);
-            params.put("group", group);
-        } else {
-            params.put("dataId", dataId);
-            params.put("group", group);
-            params.put("tenant", tenant);
+        String[] ct = worker.getServerConfig(dataId, group, tenant, timeoutMs);
+        cr.setContent(ct[0]);
+        
+        configFilterChainManager.doFilter(null, cr);
+        content = cr.getContent();
+        
+        return content;
+    } catch (NacosException ioe) {
+        // 连接不成功，捕获但不在抛出
+        if (NacosException.NO_RIGHT == ioe.getErrCode()) {
+            throw ioe;
         }
+        LOGGER.warn("[{}] [get-config] get from server error, dataId={}, group={}, tenant={}, msg={}",
+                agent.getName(), dataId, group, tenant, ioe.toString());
+    }
+    
+    LOGGER.warn("[{}] [get-config] get snapshot ok, dataId={}, group={}, tenant={}, config={}", agent.getName(),
+            dataId, group, tenant, ContentUtils.truncateContent(content));
+    // 连接异常，使用快照文件
+    content = LocalConfigInfoProcessor.getSnapshot(agent.getName(), dataId, group, tenant);
+    cr.setContent(content);
+    configFilterChainManager.doFilter(null, cr);
+    content = cr.getContent();
+    return content;
+}
+public String[] getServerConfig(String dataId, String group, String tenant, long readTimeout)
+        throws NacosException {
+    	...
         result = agent.httpGet(Constants.CONFIG_CONTROLLER_PATH, null, params, agent.getEncode(), readTimeout);
     } catch (Exception ex) {
+        // 连接不成功，抛出异常，会在上层捕获
         String message = String
                 .format("[%s] [sub-server] get server config exception, dataId=%s, group=%s, tenant=%s",
                         agent.getName(), dataId, group, tenant);
@@ -539,7 +563,7 @@ public String[] getServerConfig(String dataId, String group, String tenant, long
     
     switch (result.getCode()) {
         case HttpURLConnection.HTTP_OK:
-            // 本地缓存
+            // 保存本地快照
             LocalConfigInfoProcessor.saveSnapshot(agent.getName(), dataId, group, tenant, result.getData());
             ct[0] = result.getData();
             if (result.getHeader().getValue(CONFIG_TYPE) != null) {
@@ -602,19 +626,288 @@ private void safeNotifyListener(final String dataId, final String group, final S
     }
 ```
 
+## 3.8 Nacos 服务端
+
+### 3.8.1 服务端响应客户端 http 请求
+
+客户端会通过长轮询向服务端请求发生变化的 dataId，路径为 /v1/cs/configs/listener。这是一个 http 请求，可以在服务端代码中找到对应的 ConfigController：
+
+```java
+@PostMapping("/listener")
+@Secured(action = ActionTypes.READ, parser = ConfigResourceParser.class)
+public void listener(HttpServletRequest request, HttpServletResponse response)
+        throws ServletException, IOException {
+    ...
+    // do long-polling
+    inner.doPollingConfig(request, response, clientMd5Map, probeModify.length());
+}
+public String doPollingConfig(HttpServletRequest request, HttpServletResponse response,
+        Map<String, String> clientMd5Map, int probeRequestSize) throws IOException {
+    
+    // Long polling.
+    if (LongPollingService.isSupportLongPolling(request)) {
+        longPollingService.addLongPollingClient(request, response, clientMd5Map, probeRequestSize);
+        return HttpServletResponse.SC_OK + "";
+    }
+    ...
+}
+public static boolean isSupportLongPolling(HttpServletRequest req) {
+    // public static final String LONG_POLLING_HEADER = "Long-Pulling-Timeout";
+    return null != req.getHeader(LONG_POLLING_HEADER);
+}
+```
+
+在客户端发起请求时设置了 header LONG_POLLING_HEADER，所以此处会走  longPollingService.addLongPollingClient()：
+
+```java
+public void addLongPollingClient(HttpServletRequest req, HttpServletResponse rsp, Map<String, String> clientMd5Map,
+        int probeRequestSize) {
+    // Long-Pulling-Timeout
+    String str = req.getHeader(LongPollingService.LONG_POLLING_HEADER);
+    // Long-Pulling-Timeout-No-Hangup
+    String noHangUpFlag = req.getHeader(LongPollingService.LONG_POLLING_NO_HANG_UP_HEADER);
+    // Client-AppName
+    String appName = req.getHeader(RequestUtil.CLIENT_APPNAME_HEADER);
+    String tag = req.getHeader("Vipserver-Tag");
+    // 延迟时间默认 500 ms
+    int delayTime = SwitchService.getSwitchInteger(SwitchService.FIXED_DELAY_TIME, 500);
+    
+    // 客户端发送的超时时间 - 延迟时间
+    long timeout = Math.max(10000, Long.parseLong(str) - delayTime);
+    ...
+    // ConfigExecutor.executeLongPolling()实际上就是在线程池中启动线程
+    // private static final ScheduledExecutorService LONG_POLLING_EXECUTOR = ExecutorFactory.Managed.newSingleScheduledExecutorService(ClassUtils.getCanonicalName(Config.class),new NameThreadFactory("com.alibaba.nacos.config.LongPolling"));
+    // LONG_POLLING_EXECUTOR.execute(runnable);
+    ConfigExecutor.executeLongPolling(
+            new ClientLongPolling(asyncContext, clientMd5Map, ip, probeRequestSize, timeout, appName, tag));
+}
+```
+
+所以在里着重看 ClientLongPolling 的 run() 方法，它是 LongPollingService 的一个内部类：
+
+```java
+public void run() {
+    // 延迟指定时间执行，即是 30000 - 500
+    asyncTimeoutFuture = ConfigExecutor.scheduleLongPolling(new Runnable() {
+        @Override
+        public void run() {
+            try {
+                getRetainIps().put(ClientLongPolling.this.ip, System.currentTimeMillis());
+                
+                // Delete subsciber's relations.
+                // 取消订阅
+                allSubs.remove(ClientLongPolling.this);
+                ...
+                    	// 通过 response 返回给客户端
+                        sendResponse(null);
+                ...
+        }
+        
+    }, timeoutTime, TimeUnit.MILLISECONDS);
+    // 订阅一个消息
+    allSubs.add(this);
+}
+```
+
+通过客户端源码分析我们得知，如果服务端配置信息得到修改，服务端无需等待 29500 ms 就提前返回，所以我们需要找到服务端配置修改的代码实现。
+
+### 3.8.2 服务端配置更新通知
+
+```java
+// ConfigController.java
+@PostMapping
+@Secured(action = ActionTypes.WRITE, parser = ConfigResourceParser.class)
+public Boolean publishConfig(...) throws NacosException {
+    ...
+    String betaIps = request.getHeader("betaIps");
+    ConfigInfo configInfo = new ConfigInfo(dataId, group, tenant, appName, content);
+    configInfo.setType(type);
+    if (StringUtils.isBlank(betaIps)) {
+        if (StringUtils.isBlank(tag)) {
+            persistService.insertOrUpdate(srcIp, srcUser, configInfo, time, configAdvanceInfo, true);
+            // 执行完新增或更新操作，进行相关通知
+            ConfigChangePublisher
+                    .notifyConfigChange(new ConfigDataChangeEvent(false, dataId, group, tenant, time.getTime()));
+        }
+        ...
+    } else {
+    ...
+}
+// ConfigChangePublisher.java
+public static void notifyConfigChange(ConfigDataChangeEvent event) {
+    if (PropertyUtil.isEmbeddedStorage() && !EnvUtil.getStandaloneMode()) {
+        return;
+    }
+    NotifyCenter.publishEvent(event);
+}
+// NotifyCenter.java
+private static boolean publishEvent(final Class<? extends Event> eventType, final Event event) {
+    if (ClassUtils.isAssignableFrom(SlowEvent.class, eventType)) {
+        return INSTANCE.sharePublisher.publish(event);
+    }
+    // 非 SlowEvent
+    final String topic = ClassUtils.getCanonicalName(eventType);
+    
+    EventPublisher publisher = INSTANCE.publisherMap.get(topic);
+    if (publisher != null) {
+        return publisher.publish(event);
+    }
+    LOGGER.warn("There are no [{}] publishers for this event, please register", topic);
+    return false;
+}
+// DefaultPublisher.java
+public boolean publish(Event event) {
+    checkIsStart();
+    // 将 evene 添加到队列中
+    boolean success = this.queue.offer(event);
+    if (!success) {
+        receiveEvent(event);
+        return true;
+    }
+    return true;
+}
+```
+
+### 3.8.3 LongPollingService 注册订阅
+
+配置信息更新后，会在队列中添加 event，但是这个队列在哪里消费?
+
+回到 LongPollingService，在其初始化函数中：
+
+```java
+public LongPollingService() {
+    allSubs = new ConcurrentLinkedQueue<ClientLongPolling>();
+    
+    ConfigExecutor.scheduleLongPolling(new StatTask(), 0L, 10L, TimeUnit.SECONDS);
+    
+    // Register LocalDataChangeEvent to NotifyCenter.
+    NotifyCenter.registerToPublisher(LocalDataChangeEvent.class, NotifyCenter.ringBufferSize);
+    
+    // Register A Subscriber to subscribe LocalDataChangeEvent.
+    // 注册订阅
+    NotifyCenter.registerSubscriber(new Subscriber() {
+        
+        @Override
+        public void onEvent(Event event) {
+            if (isFixedPolling()) {
+                // Ignore.
+            } else {
+                if (event instanceof LocalDataChangeEvent) {
+                    LocalDataChangeEvent evt = (LocalDataChangeEvent) event;
+                    ConfigExecutor.executeLongPolling(new DataChangeTask(evt.groupKey, evt.isBeta, evt.betaIps));
+                }
+            }
+        }
+        
+        @Override
+        public Class<? extends Event> subscribeType() {
+            return LocalDataChangeEvent.class;
+        }
+    });
+    
+}
+// NotifyCenter#registerSubscriber -> addSubscriber -> DefaultPulisher#addSubscriber
+protected final ConcurrentHashSet<Subscriber> subscribers = new ConcurrentHashSet<Subscriber>();
+public void addSubscriber(Subscriber subscriber) {
+    subscribers.add(subscriber);
+}
+```
+
+最终将 LongPollingService 中声明的 subscriber 添加到 DefaultPulisher 的 ConcurrentHashSet 中。那么 subscribers 在哪里使用？
+
+### 3.8.4 DefaultPulisher 自旋消费
+
+DefaultPulisher 自身继承自 Thread：
+
+```java
+// NotifyCenter.java
+static {
+    ...
+    INSTANCE.sharePublisher = new DefaultSharePublisher();
+	INSTANCE.sharePublisher.init(SlowEvent.class, shareBufferSize);
+}
+// DefaultPulisher 
+public void init(Class<? extends Event> type, int bufferSize) {
+    setDaemon(true);
+    setName("nacos.publisher-" + type.getName());
+    this.eventType = type;
+    this.queueMaxSize = bufferSize;
+    this.queue = new ArrayBlockingQueue<Event>(bufferSize);
+    // 启动线程
+    start();
+}
+public void run() {
+    openEventHandler();
+}
+void openEventHandler() {
+    try {
+        
+        // This variable is defined to resolve the problem which message overstock in the queue.
+        int waitTimes = 60;
+        // To ensure that messages are not lost, enable EventHandler when
+        // waiting for the first Subscriber to register
+        for (; ; ) {
+            if (shutdown || hasSubscriber() || waitTimes <= 0) {
+                break;
+            }
+            ThreadUtils.sleep(1000L);
+            waitTimes--;
+        }
+        
+        for (; ; ) {
+            if (shutdown) {
+                break;
+            }
+            // 服务端的新增或更新操作会将 evene 添加到队列中
+            // 此处从队列中提取 event
+            final Event event = queue.take();
+            receiveEvent(event);
+            UPDATER.compareAndSet(this, lastEventSequence, Math.max(lastEventSequence, event.sequence()));
+        }
+    } catch (Throwable ex) {
+        LOGGER.error("Event listener exception : {}", ex);
+    }
+}
+void receiveEvent(Event event) {
+    final long currentEventSequence = event.sequence();
+    
+    // Notification single event listener
+    for (Subscriber subscriber : subscribers) {
+        ...
+        // 遍历订阅进行通知 
+        notifySubscriber(subscriber, event);
+    }
+}
+public void notifySubscriber(final Subscriber subscriber, final Event event) {
+    
+    LOGGER.debug("[NotifyCenter] the {} will received by {}", event, subscriber);
+    
+    final Runnable job = new Runnable() {
+        @Override
+        public void run() {
+            subscriber.onEvent(event);
+        }
+    };
+    
+    final Executor executor = subscriber.executor();
+    
+    if (executor != null) {
+        executor.execute(job);
+    } else {
+        try {
+            job.run();
+        } catch (Throwable e) {
+            LOGGER.error("Event callback exception : {}", e);
+        }
+    }
+}
+```
+
 # 4 服务注册发现
 
-# 5 服务端
+# 5 集群选举
 
-ConfigController listener
-
-LongPollingService onEvent
-
-
-
-
-
-集群选举。raft. RaftCore
+raft. RaftCore
 
 
 
