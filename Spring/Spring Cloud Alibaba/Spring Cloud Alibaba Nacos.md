@@ -308,6 +308,8 @@ public CacheData(ConfigFilterChainManager configFilterChainManager, String name,
 
 ## 3.3 创建长轮询线程
 
+> `长轮询` 客户端发起一个请求到服务端，服务端收到客户端的请求后，并不会立刻响应给客户端，而是先把这个请求hold 住，然后服务端会在 hold 住的这段时间检查数据是否有更新，如果有，则响应给客户端，如果一直没有数据变更，则达到一定的时间（长轮训时间间隔）才返回。
+
 回到 checkConfigInfo 的 for 循环代码，其中通过 LongPollingRunnable 创建多个线程对缓存中的配置进行检查。
 
 ```java
@@ -637,9 +639,14 @@ private void safeNotifyListener(final String dataId, final String group, final S
 @Secured(action = ActionTypes.READ, parser = ConfigResourceParser.class)
 public void listener(HttpServletRequest request, HttpServletResponse response)
         throws ServletException, IOException {
-    ...
-    // do long-polling
-    inner.doPollingConfig(request, response, clientMd5Map, probeModify.length());
+    if (LongPollingService.isSupportLongPolling(request)) {
+    	// do long-polling
+    	// 长轮询
+    	inner.doPollingConfig(request, response, clientMd5Map, probeModify.length());
+        return HttpServletResponse.SC_OK + "";
+        // else 兼容短轮询逻辑
+        ...
+    }
 }
 public String doPollingConfig(HttpServletRequest request, HttpServletResponse response,
         Map<String, String> clientMd5Map, int probeRequestSize) throws IOException {
@@ -674,19 +681,36 @@ public void addLongPollingClient(HttpServletRequest req, HttpServletResponse rsp
     
     // 客户端发送的超时时间 - 延迟时间
     long timeout = Math.max(10000, Long.parseLong(str) - delayTime);
-    ...
+    // 当然如果 isFixedPolling=true 的情况下，不会提前返回响应
+    if (isFixedPolling()) {
+        timeout = Math.max(10000, getFixedPollingInterval());
+        // Do nothing but set fix polling timeout.
+    } else {
+    	...
+    }
+    String ip = RequestUtil.getRemoteIp(req);
+    // Must be called by http thread, or send response.
+    // 一定要由HTTP线程调用，否则离开后容器会立即发送响应
+    final AsyncContext asyncContext = req.startAsync();
+    // AsyncContext.setTimeout() is incorrect, Control by oneself
+    // AsyncContext.setTimeout()的超时时间不准，所以只能自己控制
+    asyncContext.setTimeout(0L);
     // ConfigExecutor.executeLongPolling()实际上就是在线程池中启动线程
     // private static final ScheduledExecutorService LONG_POLLING_EXECUTOR = ExecutorFactory.Managed.newSingleScheduledExecutorService(ClassUtils.getCanonicalName(Config.class),new NameThreadFactory("com.alibaba.nacos.config.LongPolling"));
     // LONG_POLLING_EXECUTOR.execute(runnable);
-    ConfigExecutor.executeLongPolling(
-            new ClientLongPolling(asyncContext, clientMd5Map, ip, probeRequestSize, timeout, appName, tag));
+    ConfigExecutor.executeLongPolling(new ClientLongPolling(asyncContext, clientMd5Map, ip, probeRequestSize, timeout, appName, tag));
 }
 ```
 
 所以在里着重看 ClientLongPolling 的 run() 方法，它是 LongPollingService 的一个内部类：
 
 ```java
+/**
+* 长轮询订阅关系
+*/
+final Queue<ClientLongPolling> allSubs;
 public void run() {
+    // 定义一个延迟执行线程
     // 延迟指定时间执行，即是 30000 - 500
     asyncTimeoutFuture = ConfigExecutor.scheduleLongPolling(new Runnable() {
         @Override
@@ -695,7 +719,7 @@ public void run() {
                 getRetainIps().put(ClientLongPolling.this.ip, System.currentTimeMillis());
                 
                 // Delete subsciber's relations.
-                // 取消订阅
+                // allSubs队列移除
                 allSubs.remove(ClientLongPolling.this);
                 ...
                     	// 通过 response 返回给客户端
@@ -704,10 +728,12 @@ public void run() {
         }
         
     }, timeoutTime, TimeUnit.MILLISECONDS);
-    // 订阅一个消息
+    // allSubs队列添加
     allSubs.add(this);
 }
 ```
+
+我们发现有一个 allSubs 的东西，它似乎和发布订阅有关系。那是不是有可能当前的 clientLongPolling 订阅了数据变化的事件呢？
 
 通过客户端源码分析我们得知，如果服务端配置信息得到修改，服务端无需等待 29500 ms 就提前返回，所以我们需要找到服务端配置修改的代码实现。
 
@@ -885,6 +911,7 @@ public void notifySubscriber(final Subscriber subscriber, final Event event) {
     final Runnable job = new Runnable() {
         @Override
         public void run() {
+            // 执行最早定义的 onEvent
             subscriber.onEvent(event);
         }
     };
@@ -903,12 +930,201 @@ public void notifySubscriber(final Subscriber subscriber, final Event event) {
 }
 ```
 
+### 3.8.5 DataChangeTask.run
+
+LongPollingService.onEvent() 方法中在线程池执行 DataChangeTask：
+
+```java
+public void run() {
+    try {
+        ConfigCacheService.getContentBetaMd5(groupKey);
+        for (Iterator<ClientLongPolling> iter = allSubs.iterator(); iter.hasNext(); ) {
+            ClientLongPolling clientSub = iter.next();
+            if (clientSub.clientMd5Map.containsKey(groupKey)) {
+                // If published tag is not in the beta list, then it skipped.
+                // 如果beta发布且不在beta列表直接跳过
+                if (isBeta && !CollectionUtils.contains(betaIps, clientSub.ip)) {
+                    continue;
+                }
+                // If published tag is not in the tag list, then it skipped.
+                // 如果tag发布且不在tag列表直接跳过
+                if (StringUtils.isNotBlank(tag) && !tag.equals(clientSub.tag)) {
+                    continue;
+                }
+                getRetainIps().put(clientSub.ip, System.currentTimeMillis());
+                iter.remove(); // Delete subscribers' relationships.
+                ...
+                // 发送 Response
+                clientSub.sendResponse(Arrays.asList(groupKey));
+            }
+        }
+    } catch (Throwable t) {
+        LogUtil.DEFAULT_LOG.error("data change error: {}", ExceptionUtil.getStackTrace(t));
+    }
+}
+void sendResponse(List<String> changedGroups) {
+    // Cancel time out task.
+    if (null != asyncTimeoutFuture) {
+        // 取消延迟执行线程
+        asyncTimeoutFuture.cancel(false);
+    }
+    generateResponse(changedGroups);
+}
+```
+
 # 4 服务注册发现
 
 # 5 集群选举
 
-raft. RaftCore
+nacos 的集群类似于 zookeeper， 它分为 leader 角色和 follower 角色， 那么从这个角色的名字可以看出来，这个集群存在选举的机制。 因为如果自己不具备选举功能，角色的命名可能就是 master/slave 了， 当然这只是我基于这么多组件的命名的一个猜测。
 
+## 5.1 选举算法
 
+Nacos 集群采用 `raft` 算法来实现，它是相对 zookeeper 的选举算法较为简单的一种。 选举算法的核心在 `RaftCor` 中，包括数据的处理和数据同步。
 
+[raft 算法演示地址](http://thesecretlivesofdata.com/raft/)
+
+在Raft中，节点有三种角色：
+
+`Leader` 负责接收客户端的请求
+
+`Candidate` 用于选举 Leader 的一种角色
+
+`Follower` 负责响应来自 Leader 或者 Candidate 的请求
+
+选举分为两个节点：
+
+* 服务启动的时候
+
+* leader 挂了的时候
+
+所有节点启动的时候，都是 follower 状态。 如果在一段时间内如果没有收到 leader 的心跳（可能是没有 leader，也可能是 leader 挂了），那么 follower 会变成 Candidate。然后发起选举，选举之前，会增加 term，这个 term 和 zookeeper 中的 epoch 的道理是一样的。 
+
+* follower会投自己一票，并且给其他节点发送票据vote，等到其他节点回复
+
+* 在这个过程中，可能出现几种情况：
+
+  - 收到过半的票数通过，则成为leader
+
+  - 被告知其他节点已经成为leader，则自己切换为follower
+
+  - 一段时间内没有收到过半的投票，则重新发起选举
+
+* 约束条件在`任一 term 中，单个节点最多只能投一票`
+
+选举的几种情况：
+
+* 第一种情况，赢得选举之后，leader 会给所有节点发送消息，避免其他节点触发新的选举
+
+* 第二种情况，比如有三个节点 A B C。A B 同时发起选举，而 A 的选举消息先到达 C，C 给 A 投了一 票，当 B 的消息到达 C 时，已经不能满足上面提到的第一个约束，即 C 不会给 B 投票，而 A 和 B 显然都不会给对方投票。A 胜出之后，会给 B C 发心跳消息，节点 B 发现节点 A 的 term 不低于自己的 term， 知道有已经有 Leader 了，于是转换成follower
+
+* 第三种情况，没有任何节点获得majority投票，可能是平票的情况。假如总共有四个节点A B C D，C 和 D 同时成为了candidate，但 A 投了 D 一票，B 投 了 C 一票，这就出现了`平票 split vote` 的情况。这个时候大家都在等啊等，直到超时后重新发起选举。如果出现平票的情况，那么就延长了系统不可用的时间，因此raft引入了randomized election timeouts 来尽量避免平票情况
+
+## 5.2 数据的处理
+
+对于事务操作，请求会转发给leader
+
+非事务操作上，可以任意一个节点来处理
+
+下面这段代码摘自 `RaftCore`， 在发布内容的时候，做了两个事情：
+
+* 如果当前的节点不是 leader，则转发给 leader 节点处理
+
+* 如果是，则向所有节点发送 onPublish
+
+```java
+/**
+ * Raft core code.
+ * @deprecated will remove in 1.4.x
+ * 已不推荐使用
+ */
+@Deprecated
+@DependsOn("ProtocolManager")
+@Component
+public class RaftCore implements Closeable
+ 
+public void signalPublish(String key, Record value) throws Exception {
+    if (stopWork) {
+        throw new IllegalStateException("old raft protocol already stop work");
+    }
+    if (!isLeader()) {
+        ObjectNode params = JacksonUtils.createEmptyJsonNode();
+        params.put("key", key);
+        params.replace("value", JacksonUtils.transferToJsonNode(value));
+        Map<String, String> parameters = new HashMap<>(1);
+        parameters.put("key", key);
+        
+        final RaftPeer leader = getLeader();
+        
+        raftProxy.proxyPostLarge(leader.ip, API_PUB, params.toString(), parameters);
+        return;
+    }
+    
+    OPERATE_LOCK.lock();
+    try {
+        final long start = System.currentTimeMillis();
+        final Datum datum = new Datum();
+        datum.key = key;
+        datum.value = value;
+        if (getDatum(key) == null) {
+            datum.timestamp.set(1L);
+        } else {
+            datum.timestamp.set(getDatum(key).timestamp.incrementAndGet());
+        }
+        
+        ObjectNode json = JacksonUtils.createEmptyJsonNode();
+        json.replace("datum", JacksonUtils.transferToJsonNode(datum));
+        json.replace("source", JacksonUtils.transferToJsonNode(peers.local()));
+        
+        onPublish(datum, peers.local());
+        
+        final String content = json.toString();
+        
+        final CountDownLatch latch = new CountDownLatch(peers.majorityCount());
+        for (final String server : peers.allServersIncludeMyself()) {
+            if (isLeader(server)) {
+                latch.countDown();
+                continue;
+            }
+            final String url = buildUrl(server, API_ON_PUB);
+            HttpClient.asyncHttpPostLarge(url, Arrays.asList("key", key), content, new Callback<String>() {
+                @Override
+                public void onReceive(RestResult<String> result) {
+                    if (!result.ok()) {
+                        Loggers.RAFT
+                                .warn("[RAFT] failed to publish data to peer, datumId={}, peer={}, http code={}",
+                                        datum.key, server, result.getCode());
+                        return;
+                    }
+                    latch.countDown();
+                }
+                
+                @Override
+                public void onError(Throwable throwable) {
+                    Loggers.RAFT.error("[RAFT] failed to publish data to peer", throwable);
+                }
+                
+                @Override
+                public void onCancel() {
+                
+                }
+            });
+            
+        }
+        
+        if (!latch.await(UtilsAndCommons.RAFT_PUBLISH_TIMEOUT, TimeUnit.MILLISECONDS)) {
+            // only majority servers return success can we consider this update success
+            Loggers.RAFT.error("data publish failed, caused failed to notify majority, key={}", key);
+            throw new IllegalStateException("data publish failed, caused failed to notify majority, key=" + key);
+        }
+        
+        long end = System.currentTimeMillis();
+        Loggers.RAFT.info("signalPublish cost {} ms, key: {}", (end - start), key);
+    } finally {
+        OPERATE_LOCK.unlock();
+    }
+}
+```
+
+------
 
