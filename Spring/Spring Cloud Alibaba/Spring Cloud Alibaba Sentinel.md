@@ -66,3 +66,341 @@
 `数据流的速率 小于 令牌流的速率` 通过队列的数据包或者请求只消耗了一部分令牌，剩下的令牌 会在令牌桶里积累下来，直到桶被装满。剩下的令牌可以在突发请求的时候消耗掉
 
 `数据流的速率 大于 令牌流的速率`这意味着桶里的令牌很快就会被耗尽。导致服务中断一段时 间，如果数据包或者请求持续到来,将发生丢包或者拒绝响应
+
+# 2 Sentinel
+
+## 2.1 什么是 Sentinel 
+
+Sentinel 是面向分布式服务架构的流量控制组件，主要以流量为切入点，从限流、流量整形、熔断降级、系统负载保护、热点防护等多个维度来帮助开发者保障微服务的稳定性。
+
+## 2.2 Sentinel 功能和设计理念
+
+### 2.2.1 流量控制
+
+`流量控制`用于调整网络包的发送数据。任意时间到来的请求往往是随机不可控的，而系统的处理能力是有限的。我们需要根据系统的处理能力对流量进行控制。Sentinel 作为一个调配器，可以根据需要把随机的请求调整成合适的形状，如下图所示：
+
+![image-20210302142559021](Spring Cloud Alibaba Sentinel.assets/image-20210302142559021.png)
+
+**流量控制设计理念**
+
+流量控制有以下几个角度:
+
+- 资源的调用关系，例如资源的调用链路，资源和资源之间的关系；
+- 运行指标，例如 QPS、线程池、系统负载等；
+- 控制的效果，例如直接限流、冷启动、排队等。
+
+Sentinel 的设计理念是让用户自由选择控制的角度，并进行灵活组合，从而达到想要的效果。
+
+### 2.2.2 熔断降级
+
+Sentinel 和 Hystrix 的原则是一致的: 当检测到调用链路中某个资源出现不稳定的表现，例如请求响应时间长或异常比例升高的时候，则对这个资源的调用进行限制，让请求快速失败，避免影响到其它的资源而导致级联故障。
+
+**熔断降级设计理念**
+
+在限制的手段上，Sentinel 和 Hystrix 采取了完全不一样的方法。
+
+Hystrix 通过`线程池隔离`的方式，来对依赖（在 Sentinel 的概念中对应资源）进行了隔离。这样做的好处是资源和资源之间做到了最彻底的隔离。缺点是除了增加了线程切换的成本（过多的线程池导致线程数目过多），还需要预先给各个资源做线程池大小的分配。
+
+Sentinel 对这个问题采取了两种手段:
+
+- 通过并发线程数进行限制
+
+和资源池隔离的方法不同，Sentinel 通过限制资源并发线程的数量，来减少不稳定资源对其它资源的影响。这样不但没有线程切换的损耗，也不需要预先分配线程池的大小。当某个资源出现不稳定的情况下，例如响应时间变长，对资源的直接影响就是会造成线程数的逐步堆积。当线程数在特定资源上堆积到一定的数量之后，对该资源的新请求就会被拒绝。堆积的线程完成任务后才开始继续接收请求。
+
+- 通过响应时间对资源进行降级
+
+除了对并发线程数进行控制以外，Sentinel 还可以通过响应时间来快速降级不稳定的资源。当依赖的资源出现响应时间过长后，所有对该资源的访问都会被直接拒绝，直到过了指定的时间窗口之后才重新恢复。
+
+# 3 手动接入 Sentinel
+
+```xml
+<dependency>
+    <groupId>com.alibaba.csp</groupId>
+    <artifactId>sentinel-core</artifactId>
+    <version>1.6.3</version>
+</dependency>
+<!--加入 sentinel 监控所需-->
+<dependency>
+    <groupId>com.alibaba.csp</groupId>
+    <artifactId>sentinel-transport-simple-http</artifactId>
+    <version>1.6.3</version>
+</dependency>
+```
+
+```java
+public class SentinelDemo {
+
+    /**
+     * 定义规则
+     */
+    public static void initFlowRules() {
+        // 限流规则的集合
+        List<FlowRule> ruleList = new ArrayList<>();
+        FlowRule flowRule = new FlowRule();
+        // 资源（方法名称、接口）
+        flowRule.setResource("doTest");
+        // 限流的阈值类型
+        flowRule.setGrade(RuleConstant.FLOW_GRADE_QPS);
+        flowRule.setCount(10);
+        ruleList.add(flowRule);
+        FlowRuleManager.loadRules(ruleList);
+    }
+
+    public static void main(String[] args) {
+        initFlowRules();
+        while (true) {
+            // 定义资源
+            Entry entry = null;
+            try {
+                Thread.sleep(new Random().nextInt(200));
+                entry = SphU.entry("doTest");
+                // 把需要控制流量的代码用 Sentinel API SphU.entry("doTest") 和 entry.exit() 包围起来即可
+                // 这端代码作为资源，用 API 包围起来（埋点）
+                /*业务逻辑 - 开始*/
+                System.out.println("Hello Sentinel");
+                /*业务逻辑 - 结束*/
+            } catch (Exception e) {
+                // 如果被限流了，会抛出异常
+                /*流控逻辑处理 - 开始*/
+                System.out.println("block!");
+                /*流控逻辑处理 - 结束*/
+            } finally {
+                if (entry != null) {
+                    // 释放
+                    entry.exit();
+                }
+            }
+        }
+    }
+}
+```
+
+```markdown
+# 启动 Sentinel Dashboard
+	java -jar sentinel-dashboard.jar
+	# 将 sentinel-dashboard 自身也加入监控
+	java -Dserver.port=8080 -Dcsp.sentinel.dashboard.server=localhost:8080 -Dproject.name=sentinel-dashboard -jar sentinel-dashboard.jar
+# 启动 java 程序
+	-Dcsp.sentinel.dashboard.server=localhost:8080
+```
+
+![image-20210302151318255](Spring Cloud Alibaba Sentinel.assets/image-20210302151318255.png)
+
+# 4 Sentinel 源码分析
+
+以 `SphU.entry()` 为入口：
+
+```java
+// SphU.entry() ===> CtSph.entry() ===> entryWithPriority
+private Entry entryWithPriority(ResourceWrapper resourceWrapper, int count, boolean prioritized, Object... args) throws BlockException {
+    ...
+    // 可以看出，这里是一个责任链
+    ProcessorSlot<Object> chain = lookProcessChain(resourceWrapper);
+    if (chain == null) {
+        return new CtEntry(resourceWrapper, null, context);
+    }
+    Entry e = new CtEntry(resourceWrapper, chain, context);
+    try {
+        chain.entry(context, resourceWrapper, null, count, prioritized, args);
+    } ...
+    return e;
+}
+ProcessorSlot<Object> lookProcessChain(ResourceWrapper resourceWrapper) {
+    ProcessorSlotChain chain = chainMap.get(resourceWrapper);
+    // 双重锁机制
+    if (chain == null) {
+        synchronized (LOCK) {
+            chain = chainMap.get(resourceWrapper);
+            if (chain == null) {
+                // Entry size limit.
+                if (chainMap.size() >= Constants.MAX_SLOT_CHAIN_SIZE) {
+                    return null;
+                }
+                // 生成插槽
+                chain = SlotChainProvider.newSlotChain();
+                Map<ResourceWrapper, ProcessorSlotChain> newMap = new HashMap<ResourceWrapper, ProcessorSlotChain>(
+                    chainMap.size() + 1);
+                newMap.putAll(chainMap);
+                newMap.put(resourceWrapper, chain);
+                chainMap = newMap;
+            }
+        }
+    }
+    return chain;
+}
+```
+
+## 4.1 解析插槽生成器 SPI
+
+```java
+public static ProcessorSlotChain newSlotChain() {
+    if (slotChainBuilder != null) {
+        return slotChainBuilder.build();
+    }
+    // 解析插槽生成器 SPI
+    slotChainBuilder = SpiLoader.of(SlotChainBuilder.class).loadFirstInstanceOrDefault();
+    ...
+    return slotChainBuilder.build();
+}
+// loadFirstInstanceOrDefault ===> load
+public void load() {
+    if (!loaded.compareAndSet(false, true)) {
+        return;
+    }
+	// META-INF/services/com.alibaba.csp.sentinel.slotchain.SlotChainBuilder
+    String fullFileName = SPI_FILE_PREFIX + service.getName();
+	...
+    Enumeration<URL> urls = null;
+    urls = classLoader.getResources(fullFileName);
+   	...
+    while (urls.hasMoreElements()) {
+        URL url = urls.nextElement();
+
+        InputStream in = null;
+        BufferedReader br = null;
+        try {
+            in = url.openStream();
+            br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+            String line;
+            while ((line = br.readLine()) != null) { 
+                // com.alibaba.csp.sentinel.slots.DefaultSlotChainBuilder
+                line = line.trim();
+                ...
+                Class<S> clazz = null;
+                clazz = (Class<S>) Class.forName(line, false, classLoader);
+         	    ...
+                classList.add(clazz);
+            }
+        } catch {...}
+    }
+}
+```
+
+类似于 Dubbo 的 SPI 加载机制，加载文件中记录的类：
+
+```markdown
+# Default slot chain builder
+com.alibaba.csp.sentinel.slots.DefaultSlotChainBuilder
+```
+
+## 4.2 解析插槽 SPI
+
+loadFirstInstanceOrDefault() 方法最终返回的是 `META-INF/services/com.alibaba.csp.sentinel.slotchain.SlotChainBuilder` 文件中记录的 `DefaultSlotChainBuilder`，后续会执行它的 build() 方法：
+
+```java
+public ProcessorSlotChain build() {
+    ProcessorSlotChain chain = new DefaultProcessorSlotChain();
+    // 与解析插槽生成器 SPI 一样的方式解析插槽
+    // 加载位置 META-INF/services/com.alibaba.csp.sentinel.slotchain.ProcessorSlot
+    List<ProcessorSlot> sortedSlotList = SpiLoader.of(ProcessorSlot.class).loadInstanceListSorted();
+    for (ProcessorSlot slot : sortedSlotList) {
+        ...
+        chain.addLast((AbstractLinkedProcessorSlot<?>) slot);
+    }
+    return chain;
+}
+```
+
+```markdown
+# Sentinel default ProcessorSlots
+com.alibaba.csp.sentinel.slots.nodeselector.NodeSelectorSlot
+com.alibaba.csp.sentinel.slots.clusterbuilder.ClusterBuilderSlot
+com.alibaba.csp.sentinel.slots.logger.LogSlot
+com.alibaba.csp.sentinel.slots.statistic.StatisticSlot
+com.alibaba.csp.sentinel.slots.block.authority.AuthoritySlot
+com.alibaba.csp.sentinel.slots.system.SystemSlot
+com.alibaba.csp.sentinel.slots.block.flow.FlowSlot
+com.alibaba.csp.sentinel.slots.block.degrade.DegradeSlot
+```
+
+> 在 Sentinel 里面，所有的资源都对应一个资源名称（`resourceName`），每次资源调用都会创建一个 `Entry` 对象。Entry 可以通过对主流框架的适配自动创建，也可以通过注解的方式或调用 `SphU` API 显式创建。Entry 创建的时候，同时也会创建一系列功能插槽（slot chain），这些插槽有不同的职责，例如:
+>
+> - `NodeSelectorSlot` 负责收集资源的路径，并将这些资源的调用路径，以树状结构存储起来，用于根据调用路径来限流降级；
+> - `ClusterBuilderSlot` 则用于存储资源的统计信息以及调用者信息，例如该资源的 RT, QPS, thread count 等等，这些信息将用作为多维度限流，降级的依据；
+> - `StatisticSlot` 则用于记录、统计不同纬度的 runtime 指标监控信息；
+> - `FlowSlot` 则用于根据预设的限流规则以及前面 slot 统计的状态，来进行流量控制；
+> - `AuthoritySlot` 则根据配置的黑白名单和调用来源信息，来做黑白名单控制；
+> - `DegradeSlot` 则通过统计信息以及预设的规则，来做熔断降级；
+> - `SystemSlot` 则通过系统的状态，例如 load1 等，来控制总的入口流量；
+
+![img](Spring Cloud Alibaba Sentinel.assets/69955207-1e5d3c00-1538-11ea-9ab2-297efff32809.png)
+
+Sentinel 将 `ProcessorSlot` 作为 SPI 接口进行扩展（1.7.2 版本以前 `SlotChainBuilder` 作为 SPI），使得 Slot Chain 具备了扩展的能力。可以自行加入自定义的 slot 并编排 slot 间的顺序，从而可以给 Sentinel 添加自定义的功能。
+
+## 4.3 ProcessorSlotChain
+
+DefaultSlotChainBuilder.build() 方法中，最开始初始化了一个 ProcessorSlotChain，指向 `DefaultProcessorSlotChain`：
+
+```java
+public class DefaultProcessorSlotChain extends ProcessorSlotChain {
+    AbstractLinkedProcessorSlot<?> first = new AbstractLinkedProcessorSlot<Object>() {
+        ...
+    };
+    // 设置 end = first
+    AbstractLinkedProcessorSlot<?> end = first;
+	
+    public void addLast(AbstractLinkedProcessorSlot<?> protocolProcessor) {
+    	end.setNext(protocolProcessor);
+    	end = protocolProcessor;
+        // 第一次循环 end.next = first.next = NodeSelectorSlot
+        //           end = NodeSelectorSlot
+        // 第二次循环 end.next = NodeSelectorSlot.next = first.next.next = ClusterBuilderSlot
+        // 			end = ClusterBuilderSlot
+        // ...
+	}
+}
+// AbstractLinkedProcessorSlot.java
+private AbstractLinkedProcessorSlot<?> next = null;
+public void setNext(AbstractLinkedProcessorSlot<?> next) {
+    this.next = next;
+}
+```
+
+![image-20210302171729382](Spring Cloud Alibaba Sentinel.assets/image-20210302171729382.png)
+
+## 4.4 执行 ProcessorSlot
+
+创建完插槽后，回到 CtSph.entryWithPriority() 执行，整个链路的第一个节点即是在 `DefaultProcessorSlotChain` 中创建的 first：
+
+```java
+// chain.entry(context, resourceWrapper, null, count, prioritized, args)
+// DefaultProcessorSlotChain.first#entry ===> AbstractLinkedProcessorSlot#fireEntry ===> transformEntry()
+// AbstractLinkedProcessorSlot.java
+void transformEntry(Context context, ResourceWrapper resourceWrapper, Object o, int count, boolean prioritized, Object... args)
+    throws Throwable {
+    T t = (T)o;
+    entry(context, resourceWrapper, t, count, prioritized, args);
+}
+// 这里来到第一个插槽 NodeSelectorSlot
+public void entry(Context context, ResourceWrapper resourceWrapper, Object obj, int count, boolean prioritized, Object... args) throws Throwable {
+    ...
+    // 依次调用整个链路
+    fireEntry(context, resourceWrapper, node, count, prioritized, args);
+}
+```
+
+## 4.5 StatisticSlot
+
+`StatisticSlot` 是 Sentinel 的核心功能插槽之一，用于统计实时的调用数据。
+
+- `clusterNode`：资源唯一标识的 ClusterNode 的实时统计
+- `origin`：根据来自不同调用者的统计信息
+- `defaultnode`: 根据入口上下文区分的资源 ID 的 runtime 统计
+- 入口流量的统计
+
+Sentinel 底层采用高性能的滑动窗口数据结构 `LeapArray` 来统计实时的秒级指标数据，可以很好地支撑写多于读的高并发场景。
+
+![image-20210302180205624](Spring Cloud Alibaba Sentinel.assets/image-20210302180205624.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
