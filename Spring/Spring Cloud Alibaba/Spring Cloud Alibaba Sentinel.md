@@ -392,11 +392,44 @@ Sentinel 底层采用高性能的滑动窗口数据结构 `LeapArray` 来统计�
 
 ![image-20210302180205624](Spring Cloud Alibaba Sentinel.assets/image-20210302180205624.png)
 
+```java
+public void entry(Context context, ResourceWrapper resourceWrapper, DefaultNode node, int count,
+                  boolean prioritized, Object... args) throws Throwable {
+    try {
+        // Do some checking.
+        fireEntry(context, resourceWrapper, node, count, prioritized, args);
+        // Request passed, add thread count and pass count.
+        // 请求已通过，添加线程计数和通过计数
+        node.increaseThreadNum();
+        node.addPassRequest(count);
+        ...
+    catch () {....}
+}
+public void addPassRequest(int count) {
+    super.addPassRequest(count);
+    this.clusterNode.addPassRequest(count);
+}
+public void addPassRequest(int count) {
+    rollingCounterInSecond.addPass(count);
+    rollingCounterInMinute.addPass(count);
+}
+```
 
+**rollingCounterInSecond 和 rollingCounterInMinute**
 
-
-
-
+```java
+/**
+ * 保存最近 INTERVAL 毫秒的统计信息，划分给定的 sampleCount 个时间跨度
+ * INTERVAL 默认 1000
+ * sampleCount 默认 2
+ */
+private transient volatile Metric rollingCounterInSecond = new ArrayMetric(SampleCountProperty.SAMPLE_COUNT,
+    IntervalProperty.INTERVAL);
+/**
+ * Holds statistics of the recent 60 seconds. The windowLengthInMs is deliberately set to 1000 milliseconds, meaning each bucket per second, in this way we can get accurate statistics of each second.
+ */
+private transient Metric rollingCounterInMinute = new ArrayMetric(60, 60 * 1000, false);
+```
 
 
 
