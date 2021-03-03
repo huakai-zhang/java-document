@@ -426,12 +426,91 @@ public void addPassRequest(int count) {
 private transient volatile Metric rollingCounterInSecond = new ArrayMetric(SampleCountProperty.SAMPLE_COUNT,
     IntervalProperty.INTERVAL);
 /**
- * Holds statistics of the recent 60 seconds. The windowLengthInMs is deliberately set to 1000 milliseconds, meaning each bucket per second, in this way we can get accurate statistics of each second.
+ * 保存最近60秒的统计信息。windowLengthInMs故意设置为1000毫秒，也就是说每一个bucket每秒，这样我们就可以得到每一秒的准确统计数据
  */
 private transient Metric rollingCounterInMinute = new ArrayMetric(60, 60 * 1000, false);
 ```
 
+以 `rollingCounterInSecond` 为例：
 
+```java
+// ArrayMetric.java
+public ArrayMetric(int sampleCount, int intervalInMs) {
+    // OccupiableBucketLeapArray extends LeapArray
+    this.data = new OccupiableBucketLeapArray(sampleCount, intervalInMs);
+}
+public void addPass(int count) {
+    WindowWrap<MetricBucket> wrap = data.currentWindow();
+    wrap.value().addPass(count);
+}
+// LeapArray.java
+public WindowWrap<T> currentWindow(long timeMillis) {
+    if (timeMillis < 0) {
+        return null;
+    }
+    // timeMillis 当前时间毫秒数
+    // (int)(timeMillis / windowLengthInMs % array.length())
+    int idx = calculateTimeIdx(timeMillis);
+    // timeMillis - timeMillis % windowLengthInMs
+    long windowStart = calculateWindowStart(timeMillis);
+    // 每100ms发一次请求 
+    //   timeMillis	   idx	windowStart	  
+    // 1614768657946L   1  1614768657500  1
+    // 1614768658046L   0  1614768658000  2
+    // ...   2，3，5
+    // 1614768658446L   0  1614768658000  6
+    // 1614768658546L   1  1614768658500  7
+    while (true) {
+        WindowWrap<T> old = array.get(idx);
+        // 1，2请求 old==null，返回新创建的 WindowWrap
+        if (old == null) {
+            WindowWrap<T> window = new WindowWrap<T>(windowLengthInMs, windowStart, newEmptyBucket(timeMillis));
+            if (array.compareAndSet(idx, null, window)) {
+                // Successfully updated, return the created bucket.
+                return window;
+            } else {
+                // Contention failed, the thread will yield its time slice to wait for bucket available.
+                Thread.yield();
+            }
+        } 
+        // 3,4,5,6 windowStart == 2.windowStart，返回 请求 2 创建的 WindowWrap
+        else if (windowStart == old.windowStart()) {
+            return old;
+        } 
+        // 7 windowStart > 1.windowStart
+        else if (windowStart > old.windowStart()) {
+            if (updateLock.tryLock()) {
+                try {
+                    // Successfully get the update lock, now we reset the bucket.
+                    // 成功获得锁，现在重置bucket
+                    return resetWindowTo(old, windowStart);
+                } finally {
+                    updateLock.unlock();
+                }
+            } else {
+                // Contention failed, the thread will yield its time slice to wait for bucket available.
+                Thread.yield();
+            }
+        } else if (windowStart < old.windowStart()) {
+            // Should not go through here, as the provided time is already behind.
+            return new WindowWrap<T>(windowLengthInMs, windowStart, newEmptyBucket(timeMillis));
+        }
+    }
+}
+// OccupiableBucketLeapArray.java
+protected WindowWrap<MetricBucket> resetWindowTo(WindowWrap<MetricBucket> w, long time) {
+    // Update the start time and reset value.
+    w.resetTo(time);
+    MetricBucket borrowBucket = borrowArray.getWindowValue(time);
+    if (borrowBucket != null) {
+        w.value().reset();
+        w.value().addPass((int)borrowBucket.pass());
+    } else {
+        w.value().reset();
+    }
+    return w;
+}
+```
 
 
 
