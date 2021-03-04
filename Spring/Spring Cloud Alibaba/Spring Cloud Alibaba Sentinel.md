@@ -73,9 +73,7 @@
 
 Sentinel 是面向分布式服务架构的流量控制组件，主要以流量为切入点，从限流、流量整形、熔断降级、系统负载保护、热点防护等多个维度来帮助开发者保障微服务的稳定性。
 
-## 2.2 Sentinel 功能和设计理念
-
-### 2.2.1 流量控制
+## 2.2 流量控制
 
 `流量控制`用于调整网络包的发送数据。任意时间到来的请求往往是随机不可控的，而系统的处理能力是有限的。我们需要根据系统的处理能力对流量进行控制。Sentinel 作为一个调配器，可以根据需要把随机的请求调整成合适的形状，如下图所示：
 
@@ -91,7 +89,23 @@ Sentinel 是面向分布式服务架构的流量控制组件，主要以流量�
 
 Sentinel 的设计理念是让用户自由选择控制的角度，并进行灵活组合，从而达到想要的效果。
 
-### 2.2.2 熔断降级
+### 流量控制规则 (FlowRule)
+
+重要属性：
+
+| Field           | 说明                                                         | 默认值                        |
+| --------------- | ------------------------------------------------------------ | ----------------------------- |
+| resource        | 资源名，资源名是限流规则的作用对象                           |                               |
+| count           | 限流阈值                                                     |                               |
+| grade           | 限流阈值类型，QPS 模式（1）或并发线程数模式（0）             | QPS 模式                      |
+| limitApp        | 流控针对的调用来源                                           | `default`，代表不区分调用来源 |
+| strategy        | 调用关系限流策略：直接、链路、关联                           | 根据资源本身（直接）          |
+| controlBehavior | 流控效果（直接拒绝/WarmUp/匀速+排队等待），不支持按调用关系限流 | 直接拒绝                      |
+| clusterMode     | 是否集群限流                                                 | 否                            |
+
+同一个资源可以同时有多个限流规则，检查规则时会依次检查。
+
+## 2.3 熔断降级
 
 Sentinel 和 Hystrix 的原则是一致的: 当检测到调用链路中某个资源出现不稳定的表现，例如请求响应时间长或异常比例升高的时候，则对这个资源的调用进行限制，让请求快速失败，避免影响到其它的资源而导致级联故障。
 
@@ -101,15 +115,31 @@ Sentinel 和 Hystrix 的原则是一致的: 当检测到调用链路中某个资
 
 Hystrix 通过`线程池隔离`的方式，来对依赖（在 Sentinel 的概念中对应资源）进行了隔离。这样做的好处是资源和资源之间做到了最彻底的隔离。缺点是除了增加了线程切换的成本（过多的线程池导致线程数目过多），还需要预先给各个资源做线程池大小的分配。
 
-Sentinel 对这个问题采取了两种手段:
+Sentinel 对这个问题采取了两种手段:通过`并发线程数`进行限制和通过`响应时间`对资源进行降级
 
-- 通过并发线程数进行限制
+### 熔断策略
 
-和资源池隔离的方法不同，Sentinel 通过限制资源并发线程的数量，来减少不稳定资源对其它资源的影响。这样不但没有线程切换的损耗，也不需要预先分配线程池的大小。当某个资源出现不稳定的情况下，例如响应时间变长，对资源的直接影响就是会造成线程数的逐步堆积。当线程数在特定资源上堆积到一定的数量之后，对该资源的新请求就会被拒绝。堆积的线程完成任务后才开始继续接收请求。
+Sentinel 提供以下几种熔断策略：
 
-- 通过响应时间对资源进行降级
+- 慢调用比例 (`SLOW_REQUEST_RATIO`)：选择以慢调用比例作为阈值，需要设置允许的慢调用 RT（即最大的响应时间），请求的响应时间大于该值则统计为慢调用。当单位统计时长（`statIntervalMs`）内请求数目大于设置的最小请求数目，并且慢调用的比例大于阈值，则接下来的熔断时长内请求会自动被熔断。经过熔断时长后熔断器会进入探测恢复状态（HALF-OPEN 状态），若接下来的一个请求响应时间小于设置的慢调用 RT 则结束熔断，若大于设置的慢调用 RT 则会再次被熔断。
+- 异常比例 (`ERROR_RATIO`)：当单位统计时长（`statIntervalMs`）内请求数目大于设置的最小请求数目，并且异常的比例大于阈值，则接下来的熔断时长内请求会自动被熔断。经过熔断时长后熔断器会进入探测恢复状态（HALF-OPEN 状态），若接下来的一个请求成功完成（没有错误）则结束熔断，否则会再次被熔断。异常比率的阈值范围是 `[0.0, 1.0]`，代表 0% - 100%。
+- 异常数 (`ERROR_COUNT`)：当单位统计时长内的异常数目超过阈值之后会自动进行熔断。经过熔断时长后熔断器会进入探测恢复状态（HALF-OPEN 状态），若接下来的一个请求成功完成（没有错误）则结束熔断，否则会再次被熔断。
 
-除了对并发线程数进行控制以外，Sentinel 还可以通过响应时间来快速降级不稳定的资源。当依赖的资源出现响应时间过长后，所有对该资源的访问都会被直接拒绝，直到过了指定的时间窗口之后才重新恢复。
+### 熔断降级规则 (DegradeRule)
+
+熔断降级规则包含下面几个重要的属性：
+
+| Field              | 说明                                                         | 默认值     |
+| ------------------ | ------------------------------------------------------------ | ---------- |
+| resource           | 资源名，即规则的作用对象                                     |            |
+| grade              | 熔断策略，支持慢调用比例/异常比例/异常数策略                 | 慢调用比例 |
+| count              | 慢调用比例模式下为慢调用临界 RT（超出该值计为慢调用）；异常比例/异常数模式下为对应的阈值 |            |
+| timeWindow         | 熔断时长，单位为 s                                           |            |
+| minRequestAmount   | 熔断触发的最小请求数，请求数小于该值时即使异常比率超出阈值也不会熔断（1.7.0 引入） | 5          |
+| statIntervalMs     | 统计时长（单位为 ms），如 60*1000 代表分钟级（1.8.0 引入）   | 1000 ms    |
+| slowRatioThreshold | 慢调用比例阈值，仅慢调用比例模式有效（1.8.0 引入）           |            |
+
+同一个资源可以同时有多个降级规则。
 
 # 3 手动接入 Sentinel
 
@@ -500,6 +530,7 @@ public WindowWrap<T> currentWindow(long timeMillis) {
 // OccupiableBucketLeapArray.java
 protected WindowWrap<MetricBucket> resetWindowTo(WindowWrap<MetricBucket> w, long time) {
     // Update the start time and reset value.
+    // 设置 windowStart 为最新的
     w.resetTo(time);
     MetricBucket borrowBucket = borrowArray.getWindowValue(time);
     if (borrowBucket != null) {
@@ -510,7 +541,199 @@ protected WindowWrap<MetricBucket> resetWindowTo(WindowWrap<MetricBucket> w, lon
     }
     return w;
 }
+// MetricBucket.java
+public MetricBucket reset() {
+    // 将 counters 中每个位置都置为 0
+    for (MetricEvent event : MetricEvent.values()) {
+        // MetricEvent 是枚举类型
+        // MetricEvent..ordinal() 此方法返回枚举常量的序数，0 表示第一个
+        counters[event.ordinal()].reset();
+    }
+    initMinRt();
+    return this;
+}
 ```
+
+回到 addPass(int count) 方法的第二步：
+
+```java
+// WindowWrap<MetricBucket> wrap
+// wrap.value().addPass(count);
+// wrap.value() ===> MetricBucket
+// MetricBucket.java
+public void addPass(int n) {
+    add(MetricEvent.PASS, n);
+}
+public MetricBucket add(MetricEvent event, long n) {
+    // MetricEvent.PASS 为枚举类第一个
+    // counters[0].add(1);
+    counters[event.ordinal()].add(n);
+    return this;
+}
+```
+
+# 5 Sentinel 整合 Dubbo 限流实战
+
+基于 dubbo-springboot 项目进行改造：
+
+```xml
+<!-- server-boot-provider 添加依赖 -->
+<dependency>
+    <groupId>com.alibaba.csp</groupId>
+    <artifactId>sentinel-apache-dubbo-adapter</artifactId>
+    <version>1.8.1</version>
+</dependency>
+<dependency>
+    <groupId>com.alibaba.csp</groupId>
+    <artifactId>sentinel-transport-simple-http</artifactId>
+    <version>1.8.1</version>
+</dependency>
+```
+
+```java
+// 通过注解方式配置dubbo，注释掉properties中的配置
+@Configuration
+@DubboComponentScan("com.spring")
+public class DubboConfig {
+
+    @Bean
+    public ApplicationConfig applicationConfig() {
+        ApplicationConfig applicationConfig = new ApplicationConfig();
+        applicationConfig.setName("dubbo-sentinel");
+        applicationConfig.setOwner("Spring");
+        return applicationConfig;
+    }
+
+    @Bean
+    public RegistryConfig registryConfig() {
+        RegistryConfig registryConfig = new RegistryConfig();
+        registryConfig.setAddress("zookeeper://192.168.25.128:2181");
+        return registryConfig;
+    }
+
+    @Bean
+    public ProtocolConfig protocolConfig() {
+        ProtocolConfig protocolConfig = new ProtocolConfig();
+        protocolConfig.setName("dubbo");
+        protocolConfig.setPort(20880);
+        return protocolConfig;
+    }
+}
+@SpringBootApplication
+public class DubboSpringBootApplication {
+    public static void main(String[] args) {
+        initFlowRules();
+        SpringApplication.run(DubboSpringBootApplication.class, args);
+    }
+
+    //初始化规则
+    private static void initFlowRules() {
+        //限流规则的集合
+        List<FlowRule> rules = new ArrayList<>();
+        FlowRule flowRule = new FlowRule();
+        //资源(方法名称、接口）
+        flowRule.setResource("com.spring.service.ISayHelloService:sayHello()");
+        //限流阈值 qps=10
+        flowRule.setCount(10);
+        //限流阈值类型（QPS 或并发线程数）
+        flowRule.setGrade(RuleConstant.FLOW_GRADE_QPS);
+        //流量控制手段（直接拒绝、Warm Up、匀速排队）
+        flowRule.setControlBehavior(RuleConstant.CONTROL_BEHAVIOR_DEFAULT);
+        //流控针对的调用来源，若为 default 则不区分调用来源
+        flowRule.setLimitApp("dubbo-springboot-client");
+        rules.add(flowRule);
+        FlowRuleManager.loadRules(rules);
+    }
+}
+```
+
+```xml
+<!-- 客户端依赖 -->
+<dependency>
+    <groupId>com.alibaba.csp</groupId>
+    <artifactId>sentinel-apache-dubbo-adapter</artifactId>
+    <version>1.8.1</version>
+</dependency>
+```
+
+```java
+@RestController
+public class DubboController {
+
+    @Reference(timeout = 3000, check = false)//cluster = "failfast", mock = "com.spring.mock.SayHelloServiceMock")// loadbalance = "random",
+    ISayHelloService sayHelloService;
+
+    @GetMapping("/sayHello")
+    public String sayHello() {
+        // 如果不引入 Sentinel Apache Dubbo Adapter，需要手动配置 Attachment，针对单个服务的限流才能生效
+        //RpcContext.getContext().setAttachment("dubboApplication","dubbo-springboot-client");
+        return sayHelloService.sayHello();
+    }
+
+}
+```
+
+使用 `-Dproject.name=server-boot-provider -Dcsp.sentinel.dashboard.server=192.168.25.128:8080` 启动。
+
+使用 jemeter 进行压测：
+
+![image-20210304182708351](Spring Cloud Alibaba Sentinel.assets/image-20210304182708351.png)
+
+另一方面启动了 Sentinel-Dashboard 可以通过控制台查看：
+
+
+
+## 5.1 参数解释
+
+### Resource
+
+限流粒度可以是服务接口和服务方法两种粒度。若希望整个服务接口的 QPS 不超过一定数值，则可以为对应服务接口资源（resourceName 为接口全限定名）配置 QPS 阈值；若希望服务的某个方法的 QPS 不超过一定数值，则可以为对应服务方法资源（resourceName 为接口全限定名:方法签名）配置 QPS 阈值
+
+### LimitApp
+
+很多场景下，根据调用方来限流也是非常重要的。比如有两个服务 A 和 B 都向 Service Provider 发起调用请求，我们希望只对来自服务 B 的请求进行限流，则可以设置`限流规则的 limitApp` 为服务 B 的名称。`Sentinel Apache Dubbo Adapter` 会<font color=red>自动解析 Dubbo 消费者（调用方）的 application name 作为调用方名称（origin）</font>，在进行资源保护的时候都会带上调用方名称。若限流规则未配置调用方（default），则该限流规则对所有调用方生效。若限流规则配置了调用方则限流规则将仅对指定调用方生效。
+
+> 注：Dubbo 默认通信不携带对端 application name 信息，因此需要开发者在调用端手动将 applicationname 置入 attachment 中，provider 端进行相应的解析。Sentinel Apache Dubbo Adapter 实现了一个 Filter 用于<font color=red>自动从 consumer 端向 provider 端透传 application name</font>。若调用端未引入 sentinel-apache-dubbo-adapter，又希望根据调用端限流，可以在调用端手动将 application name 置入 attachment 中，key 为 dubboApplication.
+
+### ControlBehavior
+
+当 QPS 超过某个阈值的时候，则采取措施进行流量控制。流量控制的手段包括以下几种：直接拒绝、 Warm Up、匀速排队，对应 FlowRule 中的 controlBehavior 字段。
+
+`直接拒绝（RuleConstant.CONTROL_BEHAVIOR_DEFAULT）`方式是默认的流量控制方式，当QPS超过任意规则的阈值后，新的请求就会被立即拒绝，拒绝方式为抛出FlowException。这种方式适用于对系统处理能力确切已知的情况下，比如通过压测确定了系统的准确水位时
+
+`Warm Up（RuleConstant.CONTROL_BEHAVIOR_WARM_UP）`方式，即预热/冷启动方式，当系统长期处于低并发的情况下，流量突然增加到 qps 的最高峰值，可能会造成系统的瞬间流量过大把系统压垮。所以warmup，相当于处理请求的数量是缓慢增加，经过一段时间以后，到达系统处理请求个数的最大值
+
+`匀速排队（RuleConstant.CONTROL_BEHAVIOR_RATE_LIMITER）`方式会严格控制请求通过的间隔时间，也即是让请求以均匀的速度通过，对应的是漏桶算法
+
+> 它的原理是，以固定的间隔时间让请求通过。当请求过来的时候，如果当前请求距离上个通过的请求通过的时间间隔不小于预设值，则让当前请求通过；否则，计算当前请求的预期通过时间，如果该请求的预期通过时间小于规则预设的 timeout 时间，则该请求会等待直到预设时间到来通过；反之，则马上抛出阻塞异常。 
+>
+> 可以设置一个最长排队等待时间： 
+>
+> ```java
+> // 最长排队等待时间：5s
+> flowRule.setMaxQueueingTimeMs(5 * 1000); 
+> ```
+>
+> 这种方式主要用于处理间隔性突发的流量，例如消息队列。想象一下这样的场景，在某一秒有大量的请求到来，而接下来的几秒则处于空闲状态，我们希望系统能够在接下来的空闲期间逐渐处理这些请求， 而不是在第一秒直接拒绝多余的请求。
+
+5.2 分布式限流
+
+为什么要使用集群流控呢？假设我们希望给某个用户限制调用某个 API 的总 QPS 为 50，但机器数可能很多（比如有 100 台）。这时候我们很自然地就想到，找一个 server 来专门来统计总的调用量，其它的实例都与这台 server 通信来判断是否可以调用。这就是最基础的集群流控的方式。
+
+另外集群流控还可以解决流量不均匀导致总体限流效果不佳的问题。假设集群中有 10 台机器，我们给每台机器设置单机限流阈值为 10 QPS，理想情况下整个集群的限流阈值就为 100 QPS。不过实际情况下流量到每台机器可能会不均匀，会导致总量没有到的情况下某些机器就开始限流。因此仅靠单机维度去限制的话会无法精确地限制总体流量。而集群流控可以精确地控制整个集群的调用总量，结合单机限流兜底，可以更好地发挥流量控制的效果。
+
+集群流控中共有两种身份：
+
+- Token Client：集群流控客户端，用于向所属 Token Server 通信请求 token。集群限流服务端会返回给客户端结果，决定是否限流。
+- Token Server：即集群流控服务端，处理来自 Token Client 的请求，根据配置的集群规则判断是否应该发放 token（是否允许通过）。
+
+要想使用集群流控功能，我们需要在应用端配置动态规则源，并通过 Sentinel 控制台实时进行推送。如下图所示：
+
+![image-20210304184501813](Spring Cloud Alibaba Sentinel.assets/image-20210304184501813.png)
+
+
+
+
 
 
 
