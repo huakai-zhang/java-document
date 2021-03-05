@@ -1,25 +1,27 @@
-## 什么是Docker
+1 什么是 Docker
 
-Docker：an open source project to pack,ship and run any application as a lightweight container. 将任何应用以轻量级的形式来打包，发布和运行
+Docker 将任何应用以轻量级的形式来打包，发布和运行，可以被粗糙地理解为轻量级的虚拟机。 
 
+Docker 利用 Host OS 里面的 namespace，controlgroup 来做到将应用程序分离，因为 Docker 没有 hypervisor 虚拟层，它会比虚拟机轻量很多，包括程序的启动速度以及存储的需求等等。
 
-Docker可以被粗糙地理解为轻量级的虚拟机。 ![img](https://img-blog.csdnimg.cn/20181031114648948.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
+容器是一个标准的软件单元，它将代码及其所有依赖项打包起来，以便应用程序从一个计算环境快速可靠地运行到另一个计算环境。Docker 容器镜像是一个轻量级的、独立的、可执行的软件包，包括运行应用程序所需的一切：代码、运行时、系统工具、系统库和设置。
 
-Docker利用Host OS里面的namespace，controlgroup来做到将应用程序分离，因为Docker没有hypervisor虚拟层，它会比虚拟机轻量很多，包括程序的启动速度以及存储的需求等等。
+![img](Docker基础.assets/docker-containerized-appliction-blue-border_2.png)
 
-## 安装Docker
+2 安装 Docker
 
-#### windows
+2.1 Docker Desktop
 
+Docker Desktop 是一个用于 MacOS 和 Windows 机器的应用程序，用于构建和共享容器化应用程序和微服务。
 
-1.前往 [Docker官网](https://www.docker.com/)下载Docker 2.安装 ![img](https://img-blog.csdnimg.cn/20181031145933647.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
+[下载 Docker Desktop](https://www.docker.com/products/docker-desktop) 
 
+![image-20210305191303913](Docker基础.assets/image-20210305191303913.png)
 
-3.命令行运行Docker ![img](https://img-blog.csdnimg.cn/20181031150141825.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
+2.2 Linux
 
-#### Linux centos7.3
+```shell
 
-```java
 # O-是大写的o和减号，-q标识输出要简单，O-标识标准输出，而不是输出到文件
 sudo wget -qO- https://get.docker.com | sh
 # 把xxx用户添加到docker用户组中
@@ -30,11 +32,13 @@ service docker start
 sudo chkconfig docker on
 ```
 
-## 术语
+3 使用 Docker
 
-## Docker命令
+3.1 Docker 命令
 
-## Dockerfile
+
+
+3.2 Dockerfile
 
 通过编写简单的文件自创docker镜像。 1.创建文件Dockerfile，内容为
 
