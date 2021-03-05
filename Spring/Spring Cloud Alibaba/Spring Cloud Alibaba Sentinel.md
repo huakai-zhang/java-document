@@ -141,6 +141,26 @@ Sentinel 提供以下几种熔断策略：
 
 同一个资源可以同时有多个降级规则。
 
+```java
+public static void initDegradeRules() {
+    List<DegradeRule> rules=new ArrayList<>();
+    DegradeRule rule=new DegradeRule();
+    // 指定被保护的资源
+    rule.setResource("com.spring.service.ISayHelloService");
+    // 下面这个配置的意思是，当1s内持续进入2个请求，平均响应时间都超过count(10ms)
+    // 那么在接下来的timewindow(10s)内，对这个方法的调用都会自动熔断，抛出异常:degradeException
+    rule.setMinRequestAmount(2);
+    //阈值
+    rule.setCount(10);
+    //降级模式, RT（平均响应时间）、异常比例(DEGRADE_GRADE_EXCEPTION_RATIO)/异常数量
+    rule.setGrade(RuleConstant.DEGRADE_GRADE_RT);
+    //降级的时间单位, 单位为s
+    rule.setTimeWindow(10);
+    rules.add(rule);
+    DegradeRuleManager.loadRules(rules);
+}
+```
+
 # 3 手动接入 Sentinel
 
 ```xml
@@ -607,7 +627,7 @@ public class DubboConfig {
     @Bean
     public RegistryConfig registryConfig() {
         RegistryConfig registryConfig = new RegistryConfig();
-        registryConfig.setAddress("zookeeper://192.168.25.128:2181");
+        registryConfig.setAddress("zookeeper://localhost:2181");
         return registryConfig;
     }
 
@@ -673,7 +693,7 @@ public class DubboController {
 }
 ```
 
-使用 `-Dproject.name=server-boot-provider -Dcsp.sentinel.dashboard.server=192.168.25.128:8080` 启动。
+使用 `-Dproject.name=server-boot-provider -Dcsp.sentinel.dashboard.server=localhost:8080` 启动。
 
 使用 jemeter 进行压测：
 
@@ -681,13 +701,15 @@ public class DubboController {
 
 另一方面启动了 Sentinel-Dashboard 可以通过控制台查看：
 
-
+![image-20210305122144299](Spring Cloud Alibaba Sentinel.assets/image-20210305122144299.png)
 
 ## 5.1 参数解释
 
 ### Resource
 
-限流粒度可以是服务接口和服务方法两种粒度。若希望整个服务接口的 QPS 不超过一定数值，则可以为对应服务接口资源（resourceName 为接口全限定名）配置 QPS 阈值；若希望服务的某个方法的 QPS 不超过一定数值，则可以为对应服务方法资源（resourceName 为接口全限定名:方法签名）配置 QPS 阈值
+Service Provider 用于向外界提供服务，处理各个消费者的调用请求。为了保护 Provider 不被激增的流 量拖垮影响稳定性，可以给 Provider 配置 QPS 模式的限流，这样当每秒的请求量超过设定的阈值时会 自动拒绝多的请求。
+
+限流粒度可以是`服务接口`和`服务方法`两种粒度。若希望整个服务接口的 QPS 不超过一定数值，则可以为对应服务接口资源（resourceName 为接口全限定名）配置 QPS 阈值；若希望服务的某个方法的 QPS 不超过一定数值，则可以为对应服务方法资源（resourceName 为接口全限定名:方法签名）配置 QPS 阈值。
 
 ### LimitApp
 
@@ -716,7 +738,7 @@ public class DubboController {
 >
 > 这种方式主要用于处理间隔性突发的流量，例如消息队列。想象一下这样的场景，在某一秒有大量的请求到来，而接下来的几秒则处于空闲状态，我们希望系统能够在接下来的空闲期间逐渐处理这些请求， 而不是在第一秒直接拒绝多余的请求。
 
-5.2 分布式限流
+## 5.2 分布式限流
 
 为什么要使用集群流控呢？假设我们希望给某个用户限制调用某个 API 的总 QPS 为 50，但机器数可能很多（比如有 100 台）。这时候我们很自然地就想到，找一个 server 来专门来统计总的调用量，其它的实例都与这台 server 通信来判断是否可以调用。这就是最基础的集群流控的方式。
 
@@ -731,11 +753,175 @@ public class DubboController {
 
 ![image-20210304184501813](Spring Cloud Alibaba Sentinel.assets/image-20210304184501813.png)
 
+### 5.2.1 搭建 Token-Server
 
+```xml
+<dependency>
+    <groupId>com.alibaba.csp</groupId>
+    <artifactId>sentinel-cluster-server-default</artifactId>
+    <version>1.8.1</version>
+</dependency>
+<dependency>
+    <groupId>com.alibaba.csp</groupId>
+    <artifactId>sentinel-datasource-nacos</artifactId>
+    <version>1.8.1</version>
+</dependency>
+<dependency>
+    <groupId>com.alibaba.csp</groupId>
+    <artifactId>sentinel-transport-simple-http</artifactId>
+    <version>1.8.1</version>
+</dependency>
+```
 
+```java
+public class NacosDataSourceInitFunc implements InitFunc {
+    //nacos 配置中心的服务host
+    private final String remoteAddress="localhost:8848";
+    private final String groupId="SENTINEL_GROUP";
+    //dataid（names+postfix）
+    private final String FLOW_POSTFIX="-flow-rules";
 
+    /**
+     * 意味着当前的token-server会从nacos上获得限流的规则
+     * @throws Exception
+     */
+    @Override
+    public void init() {
+        ClusterFlowRuleManager.setPropertySupplier(namespace ->{
+            ReadableDataSource<String, List<FlowRule>> rds=
+                    new NacosDataSource<>(remoteAddress, groupId, namespace + FLOW_POSTFIX,
+                            source -> JSON.parseObject(source, new TypeReference<List<FlowRule>>() {
+                            }));
+            return rds.getProperty();
+        });
+    }
+}
+// -Dproject.name=server-boot-provider -Dcsp.sentinel.dashboard.server=localhost:8080
+public class ClusterServer {
+    public static void main(String[] args) throws Exception {
+        ClusterTokenServer tokenServer=new SentinelDefaultTokenServer();
+        ClusterServerConfigManager.loadGlobalTransportConfig(
+                new ServerTransportConfig().setIdleSeconds(600).setPort(9999));
+        //设置成动态
+        ClusterServerConfigManager.loadServerNamespaceSet(Collections.singleton("server-boot-provider"));
+        tokenServer.start();
+    }
+}
+```
 
+然后需要在 resources/META-INF/services 下添加拓展点文件 com.alibaba.csp.sentinel.init.InitFunc：
 
+```
+com.spring.NacosDataSourceInitFunc
+```
 
+### 5.2.2 nacos 配置
 
+```json
+// Data Id: server-boot-provider-flow-rules
+// group: SENTINEL_GROUP
+[
+    {
+        "resource":"com.spring.service.ISayHelloService:sayHello()",
+        "grade":1, //限流模式 qps
+        "count":10, // 限流总阈值
+        "clusterMode":true, //集群模式 true
+        "clusterConfig":{
+            "flowId":100001,//全局唯一ID
+            "thresholdType":1,//阈值模式，全局阈值
+            "fallbackToLocalWhenFail":true //client连接失败使用本地限流模式
+        }
+    }
+]
+```
+
+服务启动之后，在 $user.home$/logs/csp/ 可以找到 sentinel-record.log.xxx.0 文件，如果看到日志文件中获取到了远程服务的信息，说明 token-server 启动成功了，也可以通过 Sentinel Dashboard 看到注册的列表：
+
+```
+Cluster flow rules loaded for namespace <server-boot-provider>: {100001=FlowRule{resource=com.spring.service.ISayHelloService:sayHello(), limitApp=default, grade=1, count=10.0, strategy=0, refResource=null, controlBehavior=0, warmUpPeriodSec=10, maxQueueingTimeMs=500, clusterMode=true, clusterConfig=ClusterFlowConfig{flowId=100001, thresholdType=1, fallbackToLocalWhenFail=true, strategy=0, sampleCount=10, windowIntervalMs=1000, resourceTimeout=2000, resourceTimeoutStrategy=0, acquireRefuseStrategy=0, clientOfflineTime=2000}, controller=null}}
+```
+
+### 5.2.3 provider 改造
+
+```xml
+<dependency>
+    <groupId>com.alibaba.csp</groupId>
+    <artifactId>sentinel-cluster-client-default</artifactId>
+    <version>1.8.1</version>
+</dependency>
+<dependency>
+    <groupId>com.alibaba.csp</groupId>
+    <artifactId>sentinel-datasource-nacos</artifactId>
+    <version>1.8.1</version>
+</dependency>
+```
+
+```java
+public class NacosDataSourceInitFunc implements InitFunc {
+    private final String CLUSTER_SERVER_HOST="localhost"; //token-server的地址
+    private final int CLUSTER_SERVER_PORT=9999;
+    private final int REQUEST_TIME_OUT=200000; //请求超时时间
+
+    private final String APP_NAME="server-boot-provider"; //namespace
+
+    //nacos的配置()
+    private final String remoteAddress="localhost:8848"; //nacos 配置中心的服务host
+    private final String groupId="SENTINEL_GROUP";
+    private final String FLOW_POSTFIX="-flow-rules"; //dataid（names+postfix）
+
+    //意味着当前的token-server会从nacos上获得限流的规则
+    @Override
+    public void init() throws Exception {
+        //加载集群-信息
+        loadClusterClientConfig();
+
+        registryClusterFlowRuleProperty();
+    }
+
+    private void loadClusterClientConfig(){
+        ClusterClientAssignConfig assignConfig=new ClusterClientAssignConfig();
+        assignConfig.setServerHost(CLUSTER_SERVER_HOST);
+        assignConfig.setServerPort(CLUSTER_SERVER_PORT);
+        ClusterClientConfigManager.applyNewAssignConfig(assignConfig);
+
+        ClusterClientConfig clientConfig=new ClusterClientConfig();
+        clientConfig.setRequestTimeout(REQUEST_TIME_OUT);
+        ClusterClientConfigManager.applyNewConfig(clientConfig);
+    }
+
+    //注册动态数据源
+    private void registryClusterFlowRuleProperty(){
+        ReadableDataSource<String, List<FlowRule>> rds=
+                new NacosDataSource<>(remoteAddress, groupId, APP_NAME + FLOW_POSTFIX,
+                        source -> JSON.parseObject(source, new TypeReference<List<FlowRule>>() {
+                        }));
+        FlowRuleManager.register2Property(rds.getProperty());
+    }
+}
+// -Dproject.name=server-boot-provider -Dcsp.sentinel.dashboard.server=localhost:8080
+@SpringBootApplication
+public class DubboSpringBootApplication {
+    public static void main(String[] args) {
+        //表示当前的节点是集群客户端
+        ClusterStateManager.applyState(ClusterStateManager.CLUSTER_CLIENT);
+        SpringApplication.run(DubboSpringBootApplication.class, args);
+    }
+}
+```
+
+然后需要在 resources/META-INF/services 下添加拓展点文件 com.alibaba.csp.sentinel.init.InitFunc：
+
+```
+com.spring.NacosDataSourceInitFunc
+```
+
+由于要实现分布式限流，也就是需要`部署集群服务`，可以利用 IDEA 添加一个启动类：
+
+```
+-Dproject.name=server-boot-provider -Dcsp.sentinel.dashboard.server=localhost:8080 -Ddubbo.protocol.port=20881
+```
+
+![image-20210305121755377](Spring Cloud Alibaba Sentinel.assets/image-20210305121755377.png)
+
+------
 
