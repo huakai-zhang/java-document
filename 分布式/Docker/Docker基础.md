@@ -1,4 +1,4 @@
-1 什么是 Docker
+# 1 什么是 Docker
 
 Docker 将任何应用以轻量级的形式来打包，发布和运行，可以被粗糙地理解为轻量级的虚拟机。 
 
@@ -8,9 +8,9 @@ Docker 利用 Host OS 里面的 namespace，controlgroup 来做到将应用程�
 
 ![img](Docker基础.assets/docker-containerized-appliction-blue-border_2.png)
 
-2 安装 Docker
+# 2 安装 Docker
 
-2.1 Docker Desktop
+## 2.1 Docker Desktop
 
 Docker Desktop 是一个用于 MacOS 和 Windows 机器的应用程序，用于构建和共享容器化应用程序和微服务。
 
@@ -18,10 +18,9 @@ Docker Desktop 是一个用于 MacOS 和 Windows 机器的应用程序，用于�
 
 ![image-20210305191303913](Docker基础.assets/image-20210305191303913.png)
 
-2.2 Linux
+## 2.2 Linux
 
 ```shell
-
 # O-是大写的o和减号，-q标识输出要简单，O-标识标准输出，而不是输出到文件
 sudo wget -qO- https://get.docker.com | sh
 # 把xxx用户添加到docker用户组中
@@ -32,46 +31,69 @@ service docker start
 sudo chkconfig docker on
 ```
 
-3 使用 Docker
+# 3 使用 Docker
 
-3.1 Docker 命令
+## 3.1 Docker 命令
 
+```shell
+# Docker Desktop 官方示例
+# 从github官网clone一个名为alpine/git的容器(亦安装git)并将其启动，并将容器重命名为repo，同时执行 git clone 命令
+docker run --name repo alpine/git clone https://github.com/docker/getting-started.git
+# docker run --name repo alpine/git --version
 
+# 将容器repo的/git/getting-started/的目录拷贝到主机的.目录中
+docker cp repo:/git/getting-started/ .
 
-3.2 Dockerfile
+# 如果本地装有 git，则不需要上面步骤(本地 git clone getting-started.git)，直接进入 getting-started 目录中
+cd getting-started
 
-通过编写简单的文件自创docker镜像。 1.创建文件Dockerfile，内容为
+# 使用当前目录的 Dockerfile 创建镜像，标签为 docker-tutorial
+docker build -t docker-tutorial .
 
-```java
+# 使用镜像docker-tutorial，以后台模式启动一个容器并将容器命名为docker-tutorial，将容器的80端口映射到主机的80端口
+# -d: 后台运行容器，并返回容器ID
+# -p: 指定端口映射，格式为：主机(宿主)端口:容器端口
+docker run -d -p 80:80 --name hello-docker docker-tutorial
+
+# 访问 localhost
+```
+
+![image-20210306220522141](Docker基础.assets/image-20210306220522141.png)
+
+## 3.2 Dockerfile
+
+通过编写简单的文件自创 docker 镜像：
+
+```dockerfile
+# 创建文件 Dockerfile
 FROM alpine:latest
+# MAINTAINER 作者
 MAINTAINER spring
 CMD echo "Hello Docker!"
 ```
 
-alpine为专门为Docker设计的一款体积很小的linux，MAINTAINER 作者
+> alpine 为专门为 Docker 设计的一款体积很小的 linux
+>
 
-2.运行Dockerfile -t 表示给一个标签叫做hello_docker，. 表示路径名，将该路径下所有文件都送给Docker engine
-
-```java
-docker build -t hello_docker .
+```shell
+# 运行 Dockerfile
+# -t 表示给一个标签叫做 my_docker
+# . 表示路径名，将该路径下所有文件都送给 Docker engine
+docker build -t my_docker .
 ```
 
 
-![img](https://img-blog.csdnimg.cn/20181031160129474.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
+![image-20210306222520888](Docker基础.assets/image-20210306222520888.png)
 
-```java
-docker images hello_docker
+```shell
+docker images my_docker
+# REPOSITORY   TAG       IMAGE ID       CREATED       SIZE
+# my_docker    latest    771a467779a5   2 weeks ago   5.61MB
+docker run my_docker
+# Hello Docker!
 ```
 
-REPOSITORY TAG IMAGE ID CREATED SIZE hello_docker latest 77ca1e37168e 13 seconds ago 4.413 MB
-
-```java
-docker run hello_docker
-```
-
-Hello Docker!
-
-#### 复杂的Dockerfile
+### 复杂的 Dockerfile
 
 ```java
 FROM ubuntu
