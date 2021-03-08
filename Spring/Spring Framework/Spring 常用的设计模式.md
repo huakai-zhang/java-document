@@ -1019,7 +1019,89 @@ public class TestPrototype {
 
 # 8 适配器模式
 
+`适配器模式（Adapter Pattern）`是作为两个不兼容的接口之间的桥梁。这种类型的设计模式属于结构型模式，它结合了两个独立接口的功能。
 
+根据适配器类与适配者类的关系不同，适配器模式可分为对象适配器和类适配器两种，在`对象适配器模式`中，适配器与适配者之间是`关联`关系；在`类适配器模式`中，适配器与适配者之间是`继承（或实现）`关系。
+
+**使用场景：**有动机地修改一个正常运行的系统的接口
+
+```java
+/**
+* 进口笔记本电脑需要的三项电源，和只提供的二项电源冲突
+*/
+// 插头二项供电 Adaptee 适配者类(原有的类) 被适配的角色
+public class TwoPower {
+    public void powerByTwo() {
+        System.out.println("提供二项供电");
+    }
+}
+// 插头提供三项供电 Target 目标抽象类 定义客户所需接口，可以是一个抽象类、接口或具体类
+public interface ThreePower {
+    void powerByThree();
+}
+// 二项转三项的适配器  组合的方式对象适配器 Adapter适配器类 对 Adaptee 和 Target 进行适配
+public class TwoToThreeAdapter implements ThreePower {
+    /**
+     * 使用委托来完成适配
+     */
+    private TwoPower twoPower;
+
+    public TwoToThreeAdapter(TwoPower twoPower) {
+        this.twoPower = twoPower;
+    }
+
+
+    @Override
+    public void powerByThree() {
+        System.out.println("借助组合适配器转化二项电");
+        twoPower.powerByTwo();
+    }
+}
+// 二项转三项的适配器  继承的方式  类
+public class TwoToThreeAdapter2 extends TwoPower implements ThreePower {
+    @Override
+    public void powerByThree() {
+        System.out.println("借助继承适配器转化二项电");
+        this.powerByTwo();
+    }
+}
+public class NoteBook {
+    /**
+     * 期望的三项供电接口
+     */
+    private ThreePower threePower;
+
+    public NoteBook(ThreePower threePower) {
+        this.threePower = threePower;
+    }
+    public static void main(String[] args) {
+        // 继承方式的适配器使用 类适配器
+        ThreePower threePower1 = new TwoToThreeAdapter2();
+        NoteBook noteBook1 = new NoteBook(threePower1);
+        noteBook1.recharge();
+        noteBook1.work();
+
+        // 组合方式的适配器使用 对象适配器
+        // 现在只有二项供电
+        TwoPower twoPower = new TwoPower();
+        ThreePower threePower = new TwoToThreeAdapter(twoPower);
+        NoteBook noteBook = new NoteBook(threePower);
+        // 1. 充电
+        noteBook.recharge();
+        // 2. 工作
+        noteBook.work();
+    }
+
+    public void work() {
+        System.out.println("笔记本电脑开始工作!");
+    }
+
+    public void recharge() {
+        // 使用三项充电
+        threePower.powerByThree();
+    }
+}
+```
 
 9 装饰器模式
 
