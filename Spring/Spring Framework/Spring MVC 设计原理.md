@@ -13,15 +13,21 @@ MVC的核心思想是业务数据抽取业务数据呈现相分离 MVC，Model-V
 
 ### 2.1 Spring MVC 请求处理流程
 
-引用 Spring in Action 上的一张图来说明了 SpringMVC 的核心组件和请求处理流程：  ![img](Spring MVC 设计原理.assets/20200401103111107.png) 
+引用 Spring in Action 上的一张图来说明了 SpringMVC 的核心组件和请求处理流程：  
 
-(1) `DispatcherServlet`（实现``Awaer``接口，能够得到ApplicationContext）是springmvc中的前端控制器(front controller)，负责接收request并将request转发给对应的处理组件
+![img](Spring MVC 设计原理.assets/20200401103111107.png) 
 
- (2) ``HanlerMapping``是springmvc中完成url到controller映射的组件，DispatcherServlet接收request，然后从HandlerMapping查找处理request的controller
+(1) `DispatcherServlet`（实现``Awaer``接口，能够得到 ApplicationContext）是 SpringMVC 中的前端控制器(Front Controller)，负责接收 request 并将 request 转发给对应的处理组件，客户端（浏览器）发送请求，直接请求到 `DispatcherServlet`
 
- (3) Controller处理request，并返回ModelAndView对象，Controller是springmvc中负责处理request的组件，ModelAndView是封装结果视图的组件 
+ (2) ``HandlerMapping``是 SpringMVC 中完成 url 到 controller 映射的组件，DispatcherServlet 接收 request，然后从HandlerMapping 解析请求对应的 `Handler`
 
-(4) (5) (6)视图解析器解析ModelAndView对象返回对应的视图给客户端
+ (3) 解析到对应的 `Handler`（也就是我们平常说的 `Controller` 控制器）后，开始由 `HandlerAdapter` 适配器处理，`HandlerAdapter` 会根据 `Handler `来调用真正的处理器来处理请求，并处理相应的业务逻辑
+
+(4) 处理器处理完业务后，会返回一个 `ModelAndView` 对象，Controller 是 SpringMVC 中负责处理 request 的组件，ModelAndView 是封装结果视图的组件 
+
+(5) `ViewResolver` 会根据逻辑 `View` 查找实际的 `View`
+
+(6) `DispaterServlet` 把返回的 `Model` 传给 `View`（视图渲染），把 `View` 返回给请求者（浏览器）
 
 ### 2.2 Spring MVC 工作机制
 

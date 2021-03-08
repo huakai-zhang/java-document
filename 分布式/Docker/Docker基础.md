@@ -95,7 +95,7 @@ docker run my_docker
 
 ### 复杂的 Dockerfile
 
-```java
+```dockerfile
 FROM ubuntu
 MAINTAINER spring
 # 采用国内镜像下载地址
@@ -108,140 +108,148 @@ ENTRYPOINT ["/usr/sbin/nginx", "-g", "daemon off;"]
 EXPOSE 80
 ```
 
-同目录下创建一个index.html
+同目录下创建一个 index.html
 
-```java
+```shell
 docker build -t hello_nginx .
 docker run -d -p 80:80 hello_nginx
 curl http://localhost
 ```
 
-#### Dockerfile语法
+## 3.3 镜像分层
 
-#### 镜像分层
+Dickerfile 中的每一行都产生一个新层
 
+![img](Docker基础.assets/20181031163719657.png)
 
-Dickerfile中的每一行都产生一个新层 ![img](https://img-blog.csdnimg.cn/20181031163719657.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
+已经存在的 image 里面的层是只读的，一旦一个 image 被运行成为一个容器的话，会产生一个新层，这一次是可读可写的。 分层的好处：多个image可以共享分层，这样存储压力就小很多。
 
-已经存在的image里面的层是只读的，一旦一个image被运行成为一个容器的话，会产生一个新层，这一次是可读可写的。 分层的好处：多个image可以共享分层，这样存储压力就小很多。
-
-## Volume
+## 3.4 Volume
 
 提供独立于容器之外的持久化存储
 
-```java
+```bash
+# Centos7 下运行
+# 会将 容器 /usr/share/nginx/html 内容复制并挂载到宿主机某路径下
 docker run -d --name nginx -v /usr/share/nginx/html nginx
 docker inspect nginx
 ```
 
+![image-20210308115603426](Docker基础.assets/image-20210308115603426.png)
 
-![img](https://img-blog.csdnimg.cn/20181031172037754.png)
+这个路径，容器的宿主机里面，不是在容器里面
 
-这个路径，Alpal的主机里面，不是在容器里面
-
-```java
-cd    /var/lib/docker/volumes/8e02ff6ffec3441a4812212bdbbb6b69aaf69fcdba72855a55c65686b80ff51d/_data
+```bash
+# 在运行 Docker 的 Centos7 下运行执行
+cd /var/lib/docker/volumes/d8764999a1f7f270c8639d62043faf8d6d216006dbeb30fa1c9d421407c7250f/_data
 ls
+# 50x.html  index.html
 cat index.html
-echo "it's 2018" > index.html
+echo "it's 2021" > index.html
 ```
 
-在容器里面查看：
-
-```java
+```shell
+# 进入容器里面查看
 docker exec -it nginx /bin/bash
 cd /usr/share/nginx/html/
 cat index.html
+# it's 2021
 ```
 
-#### 将本地目录挂载到容器里面的数据卷
+**将本地目录挂载到容器里面的数据卷**
 
 将目录html挂载到容器
 
-```java
-# /html为绝对路径，windows下如果文件在E盘下，需要写E:/html
+```shell
+# /html为绝对路径，windows 下如果文件在E盘下，需要写 E:/html
 docker run -p 80:80 -d -v /html:/usr/share/nginx/html nginx
 ```
 
+**创建一个仅有数据的容器并将该容器挂载到其他容器中**
 
-问题： 1.windows下运行如果出错：docker: Error response from daemon: E: drive is not shared. Please share it in Docker for Windows Settings. 需要右键点击任务栏Docker图标选择Setting： ![img](https://img-blog.csdnimg.cn/20181101104716514.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
-
-2.共享磁盘可能会出现 Firewall detected A firewall is blocking file sharing between Windows and the containers. See documentation for more info. Windows防火墙阻止Docker共享目录解决方案： （1）进入网络和共享中心； （2）选择“VEthernet (DockerNAT) ”适配器； （3）选择“属性” （4）卸载“Microsoft 网络的文件和打印机共享” （5）重新安装“Microsoft 网络的文件和打印机共享”，点击“安装”，选择“服务”，点击“添加”，选择“Microsoft”-&gt;“Microsoft 网络的文件和打印机共享”，点击“确定” （6）安装完成后，重新配置驱动盘即可。
-
-#### 创建一个仅有数据的容器并将该容器挂载到其他容器中
-
-```java
+```bash
 docker create -v E:/data:/var/mydata --name data_container ubuntu
 docker run -it --volumes-from data_container ubuntu /bin/bash
+# 自动进入到启动的容器 ubuntu 内
 mount
 ```
 
-会发现一个mydata的文件夹
+会发现一个 mydata 的文件夹
 
-```java
+```bash
 ca /var/mydata
 touch whatever.txt
 ```
 
-在本地会发现一个whatever.txt文件
+在本地会发现一个 whatever.txt 文件
 
-## Registry镜像仓库
+## 3.5 Registry 镜像仓库
 
-```java
+```shell
 # 搜索镜像
 docker search whalesay
 # 拉取下来
 docker pull whalesay
-# 将自己镜像push到仓库
+# 将自己镜像 push 到仓库
 docker push myname/whalesay
 ```
 
-#### 国内仓库
+### 国内仓库
 
 daocloud 时速云 阿里云
 
-```java
+```bash
 docker search whalesay
 docker pull docker/whalesay
 docker run docker/whalesay cowsay Docker很好玩！
 ```
 
 
-![img](https://img-blog.csdnimg.cn/20181101113231638.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
+![img](Docker基础.assets/20181101113231638.png)
 
-```java
+```bash
 # 创建自己的tag
-docker tag docker/whalesay spring/whalesay
-# 上传到仓库
-docker push spring/whalesay
-```
-
-如果提示unauthorized: authentication required，需要登录自己的Docker帐号。
-
-```java
+# 在 build 自己的镜像的时候添加 tag 时必须在前面加上自己的 dockerhub 的 username
+docker tag docker/whalesay huakai1995/whalesay
+# 需要登录自己的Docker帐号
 docker login
-Username:
+Username: huakai1995
 Password:
+# 上传到仓库
+docker push huakai1995/whalesay
 ```
 
+上传成功后，在 Docker 官网可以看到自己上传的镜像： 
 
-上传成功后，在Docker官网可以看到自己上传的镜像： ![img](https://img-blog.csdnimg.cn/2018110111420991.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
+![image-20210308135114541](Docker基础.assets/image-20210308135114541.png)
 
-## compose
+## 3.6 Docker Compose
 
-Mac和Windows的Docker中已带有compose，Linux需要单独安装。
+Compose 是用于定义和运行多容器 Docker 应用程序的工具。通过 Compose，您可以使用 YML 文件来配置应用程序需要的所有服务。然后，使用一个命令，就可以从 YML 文件配置中创建并启动所有服务。
 
-```java
+Mac 和 Windows 的 Docker 中已带有 compose，Linux 需要单独安装
+
+```bash
+# 安装 Docker Compose 可以通过下面命令自动下载适应版本的 Compose
 curl -L https://github.com/docker/compose/releases/download/1.9.0/docker-compose-$(uname -s )-$(uname -m) > /usr/local/bin/docker-compose
-# 给与可执行权限
+# 为安装脚本添加执行权限
 chmod a+x /usr/local/bin/docker-compose
+# 查看安装是否成功
+docker-compose -v
 ```
 
-#### ghost配置
+### ghost 配置
 
-Docker:
+```bash
+mkdir ghost
+cd ghost
+vim Dockerfile
+vim config.production.json
+```
 
-```java
+Dockerfile
+
+```dockerfile
 FROM ghost
 COPY ./config.production.json /var/lib/ghost/content/config.production.json
 EXPOSE 2368
@@ -250,7 +258,7 @@ EXPOSE 2368
 
 config.production.json
 
-```java
+```json
 {
     "url": "http://localhost:2368/",
     "server": {
@@ -284,19 +292,27 @@ config.production.json
 }
 ```
 
-#### nginx配置
+### nginx 配置
 
-Dockerfile：
+```bash
+cd ..
+mkdir nginx
+cd nginx
+vim Dockerfile
+vim nginx.conf
+```
 
-```java
+Dockerfile
+
+```dockerfile
 FROM nginx
 COPY nginx.conf /etc/nginx/nginx.conf
 EXPOSE 80
 ```
 
-nginx.conf:
+nginx.conf
 
-```java
+```
 worker_processes 4;
 events {worker_connections 1024;}
 http {
@@ -309,9 +325,15 @@ http {
 }
 ```
 
-#### docker-compose.yml
+### docker-compose.yml
 
-```java
+```bash
+cd ..
+vim docker-compose.yml
+docker-compose up -d
+```
+
+```yml
 version: '2'
 networks:
   ghost:
@@ -346,18 +368,37 @@ services:
       - "3307:3307"
 ```
 
+![image-20210308143514743](Docker基础.assets/image-20210308143514743.png)
 
-![img](https://img-blog.csdnimg.cn/20181101150227556.png)
+### docker-compose 常用命令
 
-
-![img](https://img-blog.csdnimg.cn/20181101163730966.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
-
-#### docker-compose.yml常用命令
-
-```java
-docker-compost stop     #停止容器   
-docker-compose rm            #删除容器
-docker-compose build         #重新建立
-docker-compose up -d        #启动运行
+```markdown
+# 停止容器  
+	docker-compost stop
+# 删除容器
+	docker-compose rm       
+# 重新建立
+	docker-compose build
+# 启动运行
+	docker-compose up -d
 ```
+
+# 4 Spring Boot & Docker
+
+将 Spring Boot 项目打包好成 jar 包，同时准备好 Dorkerfile :
+
+```dockerfile
+FROM java:8
+MAINTAINER huakai
+ADD hello-docker-0.0.1-SNAPSHOT.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java","-jar","app.jar"]
+```
+
+```bash
+docker build -t hello/docker .
+docker run -d --name demo -p 8080:8080 hello/docker
+```
+
+------
 

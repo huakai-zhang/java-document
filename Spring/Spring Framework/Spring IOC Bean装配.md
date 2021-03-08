@@ -267,7 +267,7 @@ beanImplTwo com.imooc.beanannotation.multibean.BeanImplTwo
 
 也就是说Order只能影响list的顺序，只有list先执行了有Order(1)的BeanImplTwo，而Map没有受到影响。
 
-### @Qualifier
+## @Qualifier
 
 按类型自动装配可能多个bean实例的情况，可以使用Spring的@Qulifier注解缩小范围（或指定唯一），也可以用于指定单独的构造器参数或方法参数 。
 
@@ -826,24 +826,34 @@ Initialization/destruction method 初始化和销毁的方法
 
 ## Bean的作用域
 
-singleton：单例，指一个Bean容器中存在一份 
+`singleton 单例` 指一个Bean容器中存在一份 
 
-prototype：每次请求创建新的实例，destroy方式不生效 
+`prototype` 每次请求创建新的实例，destroy方式不生效 
 
-request：每次http请求创建一个实例且仅在当前request内有效 
+`request` 每次http请求创建一个实例且仅在当前request内有效 
 
-session：同上，每次http请求创建，当前session内有效 
+`session` 同上，每次http请求创建，当前session内有效 
 
-global session：基于portlet的web中有效(portlet定义了globalsession)，如果实在web中，同session
+`global session` 基于portlet的web中有效(portlet定义了globalsession)，如果实在web中，同session
 
 ## Bean的生命周期
 
-生命周期
-
 - 定义 
+  - 如果涉及到一些属性值利用 `set()`方法设置一些属性值
+  - 如果 Bean 实现了 `BeanNameAware` 接口，调用 `setBeanName()`方法，传入Bean的名字
+  - 如果 Bean 实现了 `BeanClassLoaderAware` 接口，调用 `setBeanClassLoader()`方法，传入 `ClassLoader`对象的实例
+  - 与上面的类似，如果实现了其他 `*.Aware`接口，就调用相应的方法
 - 初始化 
+  - 如果有和加载这个 Bean 的 Spring 容器相关的 `BeanPostProcessor` 对象，执行`postProcessBeforeInitialization()` 方法
+  - 如果Bean实现了`InitializingBean`接口，执行`afterPropertiesSet()`方法。
+  - 如果 Bean 在配置文件中的定义包含 init-method 属性，执行指定的方法。
+  - 如果有和加载这个 Bean的 Spring 容器相关的 `BeanPostProcessor` 对象，执行`postProcessAfterInitialization()` 方法
 - 使用 
 - 销毁
+  - 当要销毁 Bean 的时候，如果 Bean 实现了 `DisposableBean` 接口，执行 `destroy()` 方法
+  - 当要销毁 Bean 的时候，如果 Bean 在配置文件中的定义包含 `destroy-method` 属性，执行指定的方法
+
+![image-20210308155032008](Spring IOC Bean装配.assets/image-20210308155032008.png)
 
 ### 初始化
 
