@@ -557,9 +557,9 @@ public class ReadWriteLockDemo {
 
 从使用层面来说，AQS 的功能分为两种：独占和共享
 
-独占锁，每次只能有一个线程持有锁，比如前面给大家演示的 ReentrantLock 就是以独占方式实现的互斥锁
+`独占锁` 每次只能有一个线程持有锁，比如前面给大家演示的 ReentrantLock 就是以独占方式实现的互斥锁
 
-共享锁 ，允许多个线程同时获取锁，并发访问共享资源，比如 ReentrantReadWriteLock。
+`共享锁` 允许多个线程同时获取锁，并发访问共享资源，比如 ReentrantReadWriteLock。
 
 ## 4.3 AQS 的内部实现
 
@@ -568,53 +568,51 @@ AQS 队列内部维护的是一个 FIFO 的双向链表，这种结构的特点�
 ![image-20201228171812471](JUC.assets/image-20201228171812471.png)
 
 ```java
-public abstract class AbstractQueuedSynchronizer
-    extends AbstractOwnableSynchronizer
-    implements java.io.Serializable {
+public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchronizer implements java.io.Serializable {
 	private transient volatile Node head;
 	private transient volatile Node tail;
-static final class Node {
-    static final Node SHARED = new Node();
-    static final Node EXCLUSIVE = null;
-    static final int CANCELLED =  1;
-    static final int SIGNAL    = -1;
-    static final int CONDITION = -2;
-    static final int PROPAGATE = -3;
+    static final class Node {
+        static final Node SHARED = new Node();
+        static final Node EXCLUSIVE = null;
+        static final int CANCELLED =  1;
+        static final int SIGNAL    = -1;
+        static final int CONDITION = -2;
+        static final int PROPAGATE = -3;
 
-    volatile int waitStatus;
-	// 前驱节点
-    volatile Node prev;
-    // 后维节点
-    volatile Node next;
-    // 当前线程
-    volatile Thread thread;
-	// 存储在condition队列中的后维节点
-    Node nextWaiter;
-	// 是否为共享锁
-    final boolean isShared() {
-        return nextWaiter == SHARED;
-    }
+        volatile int waitStatus;
+        // 前驱节点
+        volatile Node prev;
+        // 后维节点
+        volatile Node next;
+        // 当前线程
+        volatile Thread thread;
+        // 存储在condition队列中的后维节点
+        Node nextWaiter;
+        // 是否为共享锁
+        final boolean isShared() {
+            return nextWaiter == SHARED;
+        }
 
-    final Node predecessor() throws NullPointerException {
-        Node p = prev;
-        if (p == null)
-            throw new NullPointerException();
-        else
-            return p;
+        final Node predecessor() throws NullPointerException {
+            Node p = prev;
+            if (p == null)
+                throw new NullPointerException();
+            else
+                return p;
+        }
+        Node() {    // Used to establish initial head or SHARED marker
+        }
+        // 将线程构造成一个Node，添加到等待队列
+        Node(Thread thread, Node mode) {     // Used by addWaiter
+            this.nextWaiter = mode;
+            this.thread = thread;
+        }
+        // 这个方法会在Condition队列使用
+        Node(Thread thread, int waitStatus) { // Used by Condition
+            this.waitStatus = waitStatus;
+            this.thread = thread;
+        }
     }
-    Node() {    // Used to establish initial head or SHARED marker
-    }
-    // 将线程构造成一个Node，添加到等待队列
-    Node(Thread thread, Node mode) {     // Used by addWaiter
-        this.nextWaiter = mode;
-        this.thread = thread;
-    }
-    // 这个方法会在Condition队列使用
-    Node(Thread thread, int waitStatus) { // Used by Condition
-        this.waitStatus = waitStatus;
-        this.thread = thread;
-    }
-}
 }
 ```
 
@@ -648,7 +646,7 @@ head 节点表示获取锁成功的节点，当头结点在释放同步状态时
 
 调用 ReentrantLock 中的 lock()方法，源码的调用过程我使用了时序图来展现。
 
-？？？
+![image-20210310153202330](JUC.assets/image-20210310153202330.png)
 
 **ReentrantLock.lock()**
 
@@ -696,9 +694,9 @@ protected final boolean compareAndSetState(int expect, int update) {
 
 通过 cas 乐观锁的方式来做比较并替换，这段代码的意思是，如果当前内存中的 state 的值和预期值 expect 相等，则替换为 update。更新成功返回 true，否则返回 false。
 
-这个操作是原子的，不会出现线程安全问题，这里面涉及到Unsafe这个类的操作， 以及涉及到 state 这个属性的意义。 
+这个操作是原子的，不会出现线程安全问题，这里面涉及到Unsafe这个类的操作，以及涉及到 state 这个属性的意义。 
 
-state 是 AQS 中的一个属性，它在不同的实现中所表达的含义不一样，对于重入 锁的实现来说，表示一个同步状态。它有两个含义的表示 
+state 是 AQS 中的一个属性，它在不同的实现中所表达的含义不一样，对于重入锁的实现来说，表示一个同步状态。它有两个含义的表示 
 
 1. 当 state=0 时，表示无锁状态 
 2. 当 state>0 时，表示已经有线程获得了锁，也就是 state=1，但是因为 ReentrantLock 允许重入，所以同一个线程多次获得同步锁的时候，state 会递增， 比如重入 5 次，那么 state=5。而在释放锁的时候，同样需要释放 5 次直到 state=0 其他线程才有资格获得锁
@@ -817,7 +815,7 @@ private Node addWaiter(Node mode) {
     Node pred = tail;
     //tail 不为空的情况下，说明队列中存在节点
     if (pred != null) {
-        //把当前线程的 Node 的 prev 指向 tail
+        //把当前线程的 Node 的 prev 指向 旧 tail
         node.prev = pred;
         //通过 cas 把 node 加入到 AQS 队列，也就是设置为 tail
         if (compareAndSetTail(pred, node)) {
@@ -842,6 +840,7 @@ private Node enq(final Node node) {
         Node t = tail;
         if (t == null) { // Must initialize
             // 如果目前tail为null，则通过 CAS 将 new Node() 作为 Head 同时设置为tail
+            // head = tail = new Node()
             if (compareAndSetHead(new Node()))
                 tail = head;
         } else {
@@ -902,8 +901,7 @@ final boolean acquireQueued(final Node node, int arg) {
                 return interrupted;
             }
             //ThreadA 可能还没释放锁，使得 ThreadB 在执行 tryAcquire 时会返回 false
-            if (shouldParkAfterFailedAcquire(p, node) &&
-                parkAndCheckInterrupt())
+            if (shouldParkAfterFailedAcquire(p, node) && parkAndCheckInterrupt())
                 //并且返回当前线程在等待过程中有没有中断过
                 interrupted = true;
         }
@@ -924,19 +922,19 @@ final boolean acquireQueued(final Node node, int arg) {
 
 Node 有 5 中状态，分别是：CANCELLED（1），SIGNAL（-1）、CONDITION（- 2）、PROPAGATE(-3)、默认状态(0) 
 
-CANCELLED: 在同步队列中等待的线程等待超时或被中断，需要从同步队列中取消该 Node 的结点, 其结点的 waitStatus 为 CANCELLED，即结束状态，进入该状 态后的结点将不会再变化 
+`CANCELLED` 在同步队列中等待的线程等待超时或被中断，需要从同步队列中取消该 Node 的结点, 其结点的 waitStatus 为 CANCELLED，即结束状态，进入该状态后的结点将不会再变化 
 
-SIGNAL: 只要前置节点释放锁，就会通知标识为 SIGNAL 状态的后续节点的线程 
+`SIGNAL` 只要前置节点释放锁，就会通知标识为 SIGNAL 状态的后续节点的线程 
 
-CONDITION： 和 Condition 有关系，后续会讲解 
+`CONDITION` 和 Condition 有关系，后续会讲解 
 
-PROPAGATE：共享模式下，PROPAGATE 状态的线程处于可运行状态 
+`PROPAGATE` 共享模式下，PROPAGATE 状态的线程处于可运行状态 
 
-0:初始状态 
+`0 初始状态`
 
-这个方法的主要作用是，通过 Node 的状态来判断，ThreadA 竞争锁失败以后是否应该被挂起。 
+这个方法的主要作用是，通过 Node 的状态来判断，ThreadB 竞争锁失败以后是否应该被挂起。 
 
-1. 如果 ThreadA 的 pred 节点状态为 SIGNAL，那就表示可以放心挂起当前线程 
+1. 如果 ThreadB 的 pred 节点状态为 SIGNAL，那就表示可以放心挂起当前线程 
 2. 通过循环扫描链表把 CANCELLED 状态的节点移除 
 3. 修改 pred 节点的状态为 SIGNAL,返回 false
 
@@ -947,6 +945,7 @@ private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
     //前置节点的waitStatus
     int ws = pred.waitStatus;
     //如果前置节点为 SIGNAL，意味着只需要等待其他前置节点的线程被释放
+    // 初始的 new Node().waitStatus = 0
     if (ws == Node.SIGNAL)
         //返回 true，意味着可以直接放心的挂起了
         return true;
@@ -959,6 +958,8 @@ private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
         pred.next = node;
     } else {
        //利用 cas 设置 prev 节点的状态为 SIGNAL(-1)
+        // 第一次自旋设置 new Node().waitStatus = -1
+        // 第二次自旋设置 Thread2.waitStatus = -1
         compareAndSetWaitStatus(pred, ws, Node.SIGNAL);
     }
     return false;
@@ -1133,11 +1134,12 @@ final boolean acquireQueued(final Node node, int arg) {
     ...
 }
 private void setHead(Node node) {
+    // 设置当前 node 为 head
     head = node;
-  	// 将 thread 设置为null
+    // 设置 thread 为 null
     node.thread = null;
     node.prev = null;
-}  
+}
 ```
 
 ![image-20201229140625492](JUC.assets/image-20201229140625492.png)
@@ -1179,6 +1181,17 @@ protected final boolean tryAcquire(int acquires) {
 ```
 
 这个方法与 nonfairTryAcquire(int acquires) 比较，不同的地方在于判断条件多了 `hasQueuedPredecessors()` 方法，也就是加入了`同步队列中当前节点是否有前驱节点`的判断，如果该方法返回 true，则表示有线程比当前线程更早地请求获取锁， 因此需要等待前驱线程获取并释放锁之后才能继续获取锁。
+
+## 4.7 synchronized 和 ReentrantLock 的区别
+
+1. 两者都是可重入锁
+
+2. synchronized 依赖于 JVM 而 ReentrantLock 依赖于 API(需要 lock() 和 unlock() 方法配合 try/finally 语句块来完成)
+
+3. ReentrantLock 比 synchronized 增加了一些高级功能，主要来说主要有三点：
+   * 等待可中断 lockInterruptibly()、tryLock(long time, TimeUnit unit)
+   * 可实现公平锁
+   * 可实现选择性通知（锁可以绑定多个条件）Condition
 
 # 5 BlockingQueueDemo 阻塞队列
 
