@@ -590,8 +590,6 @@ public class Item implements Comparable<Item> {
 
 在Java SE 6引入了Deque接口，并由ArrayDeque和LinkedList类实现，这两个类都提供了双端队列，而且在必要时可以增加队列长度。
 
-&nbsp;
-
 ### 优先级队列
 
 优先级队列（priority queue）中的元素可以按照任意的顺序插入，却总是按照排序的顺序进行检索。无论如何调用remove方法，总会获得当前优先级队列中最小的元素。
@@ -977,8 +975,6 @@ enum Weekday {
 ```
 
 EnumMap 是一个键类型为枚举类型的映射。它可以直接且高效地用一个值数组实现。在使用时， 需要在构造器中指定键类型： EnumMap&lt; Weekday, Employee &gt; personlnCharge = new EnumMapo(Weekday.class);
-
-&nbsp;
 
 ### 标识散列映射
 

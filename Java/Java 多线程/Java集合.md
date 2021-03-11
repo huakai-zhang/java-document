@@ -106,7 +106,7 @@ Set<String> set = new CopyOnWriteArraySet<>();//线程安全
 
 HashMap
 
- 但HashSet的add是放一个值，而HashMap是放K、V键值对 
+但HashSet的add是放一个值，而HashMap是放K、V键值对 
 
 ```java
 public HashSet() {

@@ -258,17 +258,17 @@ B+Tree 的几个主要特点：
 
  新建一个索引，索引上只会有一个leaf节点，取名为Node A，不断的向这个leaf节点中插入数据后，直到这个节点满，这个过程如下图（绿色表示新建/空闲状态，红色表示节点没有空余空间）：
 
-<img src="mysql高级.assets/image-20200922213046483.png" alt="image-20200922213046483" style="zoom:50%;" />
+<img src="mysql 高级.assets/image-20200922213046483.png" alt="image-20200922213046483" style="zoom:50%;" />
 
 当Node A满之后，我们再向表中插入一条记录，此时索引就需要做拆分处理：会新分配两个数据块NodeB & C，如果新插入的值，大于当前最大值，则将Node A中的值全部插入Node B中，将新插入的值放到Node C中；否则按照5-5比例，将已有数据分别插入到NodeB与C中。
 
 无论采用哪种分割方式，之前的leaf节点A，将变成一个root节点，保存两个范围条目，指向B与C，结构如下图（按第一种拆分形式）：
 
-<img src="mysql高级.assets/image-20200922213654297.png" alt="image-20200922213654297" style="zoom:50%;" />
+<img src="mysql 高级.assets/image-20200922213654297.png" alt="image-20200922213654297" style="zoom:50%;" />
 
 当Node C满之后，此时 Node A仍有空余空间存放条目，所以不需要再拆分，而只是新分配一个数据块Node D，将在Node A中创建指定到Node D的条目：
 
-<img src="mysql高级.assets/image-20200922214412535.png" alt="image-20200922214412535" style="zoom:50%;" />
+<img src="mysql 高级.assets/image-20200922214412535.png" alt="image-20200922214412535" style="zoom:50%;" />
 
 如果当根节点Node A也满了，则需要进一步拆分：新建Node E&F&G，将Node A中范围条目拆分到E&F两个节点中，并建立E&F到BCD节点的关联，向Node G插入索引值。此时E&F为branch节点，G为leaf节点，A为Root节点：
 
@@ -290,7 +290,7 @@ B+Tree 的几个主要特点：
 
 我们知道当``表中的数据删除后，索引上对应的索引值是不会删除的``，特别是在一性次删除大批量数据后，会造成大量的dead leaf挂到索引树上。考虑以下示例，如果表100以上的数据会部被删除了，但这些记录仍在索引中存在，此时若对该列取max()：
 
-<img src="mysql高级.assets/image-20200922220342708.png" alt="image-20200922220342708" style="zoom: 50%;" />
+<img src="mysql 高级.assets/image-20200922220342708.png" alt="image-20200922220342708" style="zoom: 50%;" />
 
 通过与之前相同演算，找到了索引树上最大的数据块，按照记录最大的值应该在这里，但发现这数据块里的数据已经被清空了，与是利用Btree索引的另一个特点：leaves节点是一个双向列表，若数据没有找到就去临近的一个数据块中看看，在这个数据块中发现了最大值99。
 
@@ -370,7 +370,7 @@ BUFFER POOL AND MEMORY
 
 MyISAM 的 B+Tree 里面，叶子节点存储的是数据文件对应的磁盘地址。所以从索引文件 MYI 中找到键值后，会到数据文件 MYD 中获取相应的数据记录。
 
-在 MyISAM 里面，辅助索引也在这个 MYI 文件里面。一样是在索引文件 里面找到磁盘地址，然后到数据文件里面获取数据。
+在 MyISAM 里面，辅助索引也在这个 MYI 文件里面。一样是在索引文件里面找到磁盘地址，然后到数据文件里面获取数据。
 
 ![img](MySQL 索引.assets/myisam_index.png)
 

@@ -267,7 +267,7 @@ protected Class<?> getSpringFactoriesLoaderFactoryClass() {
 }
 ```
 
-从名字来看，可以猜到它是基于 ImportSelector 来实现基于动态 bean 的加载功能。之前我们讲过 Springboot @Enable*注解的工作原理 ImportSelector 接口 selectImports 返回的数组（类的全类名）都会被纳入到 spring 容器中。 
+从名字来看，可以猜到它是基于 ImportSelector 来实现基于动态 bean 的加载功能。之前我们讲过 Springboot @Enable 注解的工作原理 ImportSelector 接口 selectImports 返回的数组（类的全类名）都会被纳入到 spring 容器中。 
 
 那么可以猜想到这里的实现原理也一定是一样的，定位到 AutoConfigurationImportSelector 这个类中的 selectImports 方法本质上来说，其实 EnableAutoConfiguration 会帮助 springboot 应用把所有符合@Configuration 配置都加载到当前 SpringBoot 创建的 IoC 容器，而这里面借助了 Spring 框架提供的一个工具类 SpringFactoriesLoader 的支持。以及用到了 Spring 提供的条件注解 @Conditional，选择性的针对需要加载的 bean 进行条件过滤。
 

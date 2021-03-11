@@ -94,7 +94,7 @@ public class LazyDoubleLock {
 }
 ```
 
-双重检查模式，进行了两次的判断，`第一次是为了避免不要的实例`，`第二次是为了进行同步，避免多线程问题`。由于singleton=new Singleton()对象的创建在JVM中可能会进行重排序，在多线程访问下存在风险，使用volatile修饰signleton实例变量有效，解决该问题。
+双重检查模式，进行了两次的判断，`外层判断是为了进行同步，避免多线程问题`，`内层判断是为了避免不要的实例`。由于singleton=new Singleton()对象的创建在JVM中可能会进行重排序，在多线程访问下存在风险，使用volatile修饰signleton实例变量有效，解决该问题。
 
 >`volatile`
 >
