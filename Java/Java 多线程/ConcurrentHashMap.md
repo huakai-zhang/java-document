@@ -37,7 +37,7 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
     if (key == null || value == null) throw new NullPointerException();
     // 计算hash值
     int hash = spread(key.hashCode());
-    // 用来计算链表长度
+    // 用来计算链表长度，同时表示是否需要检查扩容
     int binCount = 0;
     //自旋操作，当出现线程竞争时不断自旋
     for (Node<K,V>[] tab = table;;) {
@@ -68,7 +68,7 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
 
 -1 代表正在初始化 
 
--N 代表有 N-1 有二个线程正在进行扩容操作，这里不是简单的理解成 n 个线程，sizeCtl 就是-N，这块后续在讲扩容的时候会说明
+-N 代表有 N-1 个线程正在进行扩容操作，这里不是简单的理解成 n 个线程，sizeCtl 就是-N，这块后续在讲扩容的时候会说明
 
 0 标识 Node 数组还没有被初始化，正数代表初始化或者下一次扩容的大小
 
@@ -271,7 +271,7 @@ if (check >= 0) {
         if (sc < 0) {
 //sc<0，也就是 sizeCtl<0，说明已经有别的线程正在扩容了
 //这 5 个条件只要有一个条件为 true，说明当前线程不能帮助进行此次的扩容，直接跳出循环
-//sc >>> RESIZE_STAMP_SHIFT!=rs 表示比较高 RESIZE_STAMP_BITS 位生成戳和 rs 是否相等，相同
+//sc >>> RESIZE_STAMP_SHIFT!=rs 表示比较高 RESIZE_STAMP_BITS 位生成戳和 rs 是否相等，不相同，则不能参与扩容
 //sc=rs+1 表示扩容结束
 //sc==rs+MAX_RESIZERS 表示帮助线程线程已经达到最大值了
 //nt=nextTable -> 表示扩容已经结束
@@ -284,7 +284,10 @@ if (check >= 0) {
                 //当前线程尝试帮助此次扩容，如果成功，则调用 transfer
                 transfer(tab, nt);
         }
-        // 如果当前没有在扩容，那么 rs 肯定是一个正数，通过 rs<<RESIZE_STAMP_SHIFT 将 sc 设置为一个负数，+2 表示有一个线程在执行扩容
+        // 如果当前没有在扩容，那么 rs 肯定是一个正数，通过 rs<<RESIZE_STAMP_SHIFT 将 sizeCtl 设置为一个负数，+2 表示有一个线程在执行扩容(SIZECTL 表示 sizeCtl 在对象中的偏移量，期望值为 sc)
+        // sizeCtl (n = 16 扩容开始)
+        // -2145714174
+		// 10000000000110110000000000000010
         else if (U.compareAndSwapInt(this, SIZECTL, sc,
                                      (rs << RESIZE_STAMP_SHIFT) + 2))
             transfer(tab, null);
@@ -299,7 +302,10 @@ if (check >= 0) {
 这块逻辑要理解起来，也有一点复杂。 resizeStamp 用来生成一个和扩容有关的扩容戳，具体有什么作用呢？我们基于它的实现来做一个分析
 
 ```java
+// 返回用于调整大小为 n 的表的大小的标记
+// 保证左移时必须为负
 static final int resizeStamp(int n) {
+    // 1 << 15 左移 15 位，保证第十六位一定为 1，在后续计算在左移 16 位中保证首位位1，即为负数
     return Integer.numberOfLeadingZeros(n) | (1 << (RESIZE_STAMP_BITS - 1));
 }
 ```
@@ -310,7 +316,33 @@ static final int resizeStamp(int n) {
 
 那么这个方法返回的值就是 28 
 
-根据 resizeStamp 的运算逻辑，我们来推演一下，假如 n=16，那么 resizeStamp(16)=32796 转化为二进制是 [0000 0000 0000 0000 1000 0000 0001 1100] 
+根据 resizeStamp 的运算逻辑，我们来推演一下，假如 n=16，那么 resizeStamp(16)=32795 转化为二进制是 [0000 0000 0000 0000 1000 0000 0001 1011] 
+
+> `>>`表示右移，如果该数为正，则高位补 0，若为负数，则高位补 1
+>
+> `>>>` 表示无符号右移，也叫逻辑右移，即若该数为正，则高位补 0，而若该数为负数，则右移后高位同样补 0
+>
+> 注：负值的二进制表示为正值的二进制的反码 + 1，即是补码
+>
+> 以 sc >>> RESIZE_STAMP_SHIFT ===》 -2145714174 >>> 16 = 32795 = resizeStamp(16) 为例：
+>
+> 原码：0111 1111 1110 0100 1111 1111 1111 1110
+>
+> 反码：1000 0000 0001 1011 0000 0000 0000 0001
+>
+> 补码：1000 0000 0001 1011 0000 0000 0000 0010
+>
+> 逻辑右移 16 位：0000 0000 0000 0000 1000 0000 0001 1011
+>
+> 32795 二进制：1000 0000 0001 1011
+>
+> ```java
+> // Integer.java
+> // radix 进制转十进制
+> public static int parseInt(String s, int radix)
+> // 十进制转二进制
+> public static String toBinaryString(int i)
+> ```
 
 接着再来看，当第一个线程尝试进行扩容的时候，会执行下面这段代码 
 
@@ -318,9 +350,9 @@ static final int resizeStamp(int n) {
 U.compareAndSwapInt(this, SIZECTL, sc, (rs << RESIZE_STAMP_SHIFT) + 2) 
 ```
 
-rs 左移 16 位，相当于原本的二进制低位变成了高位 1000 0000 0001 1100 0000 0000 0000 0000 
+rs 左移 16 位，相当于原本的二进制低位变成了高位 1000 0000 0001 1011 0000 0000 0000 0000 
 
-然后再+2 =1000 0000 0001 1100 0000 0000 0000 0000+10=1000 0000 0001 1100 0000 0000 0000 0010
+然后再+2 =1000 0000 0001 1100 0000 0000 0000 0000+10=1000 0000 0001 1011 0000 0000 0000 0010
 
 高 16 位代表`扩容的标记`
 
@@ -432,10 +464,12 @@ private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
             // sizeCtl 在迁移前会设置为 (rs << RESIZE_STAMP_SHIFT) + 2
 			// 然后，每增加一个线程参与迁移就会将 sizeCtl 加 1，
 			// 这里使用 CAS 操作对 sizeCtl 的低 16 位进行减 1，代表做完了属于自己的任务
+            // 此处的 sc 只是从全局取到 sizeCtl 并未-1，-1的操作被赋值给了 sizeCtl
             if (U.compareAndSwapInt(this, SIZECTL, sc = sizeCtl, sc - 1)) {
                 //第一个扩容的线程，执行 transfer 方法之前，会设置 sizeCtl =(resizeStamp(n) << RESIZE_STAMP_SHIFT) + 2)后续帮其扩容的线程，执行 transfer 方法之前，会设置 sizeCtl = sizeCtl+1每一个退出 transfer 的方法的线程，退出之前，会设置 sizeCtl = sizeCtl-1那么最后一个线程退出时：必然有sc == (resizeStamp(n) << RESIZE_STAMP_SHIFT) + 2)，即 (sc - 2)== resizeStamp(n) << RESIZE_STAMP_SHIFT
 				// 如果 sc - 2 不等于标识符左移 16 位。如果他们相等了，说明没有线程在帮助他们扩容了。也就是说，扩容结束了。
-                if ((sc - 2) != resizeStamp(n) << RESIZE_STAMP_SHIFT)
+                // 不相等代表仍有线程在进行扩容，直接返回
+                if ((sc - 2) != resizeStamp(n) << RESIZE_STAMP_SHIFT)// -2 与第一次开始扩容-2相呼应
                     return;
                 // 如果相等，扩容结束了，更新 finising 变量
                 finishing = advance = true;
@@ -482,7 +516,7 @@ if (U.compareAndSwapInt(this, SIZECTL, sc = sizeCtl, sc - 1)) {
 
 每存在一个线程执行完扩容操作，就通过 cas 执行 sc-1。
 
-接着判断(sc-2) !=resizeStamp(n) << RESIZE_STAMP_SHIFT ; 如果相等，表示当前为整个扩容操作的 最后一个线程，那么意味着整个扩容操作就结束了；如果不想等，说明还得继续。
+接着判断(sc-2) !=resizeStamp(n) << RESIZE_STAMP_SHIFT ; 如果相等，表示当前为整个扩容操作的 最后一个线程，那么意味着整个扩容操作就结束了；如果不相等，说明还得继续。
 
 这么做的目的，一方面是防止不同扩容之间出现相同的 sizeCtl，另外一方面，还可以避免 sizeCtl 的 ABA 问题导致的扩容重叠的情况。
 
@@ -493,52 +527,52 @@ if (U.compareAndSwapInt(this, SIZECTL, sc = sizeCtl, sc - 1)) {
 ```java
 //对数组该节点位置加锁，开始处理数组该位置的迁移工作
 synchronized (f) {
-  									//再做一次校验
-                    if (tabAt(tab, i) == f) {
-                      //ln 表示低位， hn 表示高位;接下来这段代码的作用是把链表拆分成两部分，0 在低位，1 在高位
-                        Node<K,V> ln, hn;
-                        if (fh >= 0) {
-                            int runBit = fh & n;
-                            Node<K,V> lastRun = f;
-                          //遍历当前 bucket 的链表，目的是尽量重用 Node 链表尾部的一部分
-                            for (Node<K,V> p = f.next; p != null; p = p.next) {
-                                int b = p.hash & n;
-                                if (b != runBit) {
-                                    runBit = b;
-                                    lastRun = p;
-                                }
-                            }
-                          //如果最后更新的 runBit 是 0，设置低位节点
-                            if (runBit == 0) {
-                                ln = lastRun;
-                                hn = null;
-                            }
-                          //否则，设置高位节点
-                            else {
-                                hn = lastRun;
-                                ln = null;
-                            }
-                          //否则，设置高位节点
-                            for (Node<K,V> p = f; p != lastRun; p = p.next) {
-                                int ph = p.hash; K pk = p.key; V pv = p.val;
-                                if ((ph & n) == 0)
-                                    ln = new Node<K,V>(ph, pk, pv, ln);
-                                else
-                                    hn = new Node<K,V>(ph, pk, pv, hn);
-                            }
-                          //将低位的链表放在 i 位置也就是不动
-                            setTabAt(nextTab, i, ln);
-                          //将高位链表放在 i+n 位置
-                            setTabAt(nextTab, i + n, hn);
-                           // 把旧 table 的 hash 桶中放置转发节点，表明此 hash 桶已经被处理
-                            setTabAt(tab, i, fwd);
-                            advance = true;
-                        }
-                        else if (f instanceof TreeBin) {
-                            ...
-                        }
-                    }
+    //再做一次校验
+    if (tabAt(tab, i) == f) {
+        //ln 表示低位， hn 表示高位;接下来这段代码的作用是把链表拆分成两部分，0 在低位，1 在高位
+        Node<K,V> ln, hn;
+        if (fh >= 0) {
+            int runBit = fh & n;
+            Node<K,V> lastRun = f;
+            //遍历当前 bucket 的链表，目的是尽量重用 Node 链表尾部的一部分
+            for (Node<K,V> p = f.next; p != null; p = p.next) {
+                int b = p.hash & n;
+                if (b != runBit) {
+                    runBit = b;
+                    lastRun = p;
                 }
+            }
+            //如果最后更新的 runBit 是 0，设置低位节点
+            if (runBit == 0) {
+                ln = lastRun;
+                hn = null;
+            }
+            //否则，设置高位节点
+            else {
+                hn = lastRun;
+                ln = null;
+            }
+            //否则，设置高位节点
+            for (Node<K,V> p = f; p != lastRun; p = p.next) {
+                int ph = p.hash; K pk = p.key; V pv = p.val;
+                if ((ph & n) == 0)
+                    ln = new Node<K,V>(ph, pk, pv, ln);
+                else
+                    hn = new Node<K,V>(ph, pk, pv, hn);
+            }
+            //将低位的链表放在 i 位置也就是不动
+            setTabAt(nextTab, i, ln);
+            //将高位链表放在 i+n 位置
+            setTabAt(nextTab, i + n, hn);
+            // 把旧 table 的 hash 桶中放置转发节点，表明此 hash 桶已经被处理
+            setTabAt(tab, i, fwd);
+            advance = true;
+        }
+        else if (f instanceof TreeBin) {
+            ...
+        }
+    }
+}
 ```
 
 **高低位原理分析**

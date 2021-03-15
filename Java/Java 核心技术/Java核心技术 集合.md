@@ -783,6 +783,10 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
 
 假设一种情况，线程A进入后还未进行数据插入时挂起，而线程B正常执行，从而正常插入数据，然后线程A获取CPU时间片，此时线程A不用再进行hash判断了，问题出现：线程A会把线程B插入的数据给覆盖，发生线程不安全。
 
+**ConcurrentModificationException**
+
+???
+
 #### HashMap 的Hash函数
 
 利用Key的HashCode值来做位运算。``Hash(Key) = HashCode（Key） & （Length - 1）``
