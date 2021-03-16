@@ -65,7 +65,7 @@ public synchronized boolean add( E  e) {
 
 ### 写时复制
 
-不加锁性能提升出错误，加锁数据一致性能下降。
+不加锁 性能提升 出错误，加锁 数据一致 性能下降。
 
 > A thread-safe variant of ArrayList in which all mutative operations (add, set, and so on) are implemented by making a fresh copy of the underlying array. 
 
