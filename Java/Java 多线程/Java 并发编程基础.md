@@ -270,7 +270,7 @@ public enum State {
 
 ## 2.4 线程的启动
 
-启动一个线程为什么是调用 start 方法，而不是 run 方法，这做一个简单 的分析，先简单看一下 start 方法的定义：
+启动一个线程为什么是调用 start 方法，而不是 run 方法，这做一个简单的分析，先简单看一下 start 方法的定义：
 
 ```java
 public synchronized void start() {
@@ -330,7 +330,7 @@ static JNINativeMethod methods[] = {
 
  **JVM_StartThread **
 
-从这段代码可以看出 ， start0() 实际会执行 JVM_StartThread 方法，这个方法是干嘛的呢？ 从名字上 来看，似乎是在 JVM 层面去启动一个线程，如果真的是这 样，那么在 JVM 层面，一定会调用 Java 中定义的 run 方 法。那接下来继续去找找答案。我们找到 jvm.cpp 这个文 件；这个文件需要下载 hotspot 的源码才能找到。
+从这段代码可以看出 ， start0() 实际会执行 JVM_StartThread 方法，这个方法是干嘛的呢？ 从名字上来看，似乎是在 JVM 层面去启动一个线程，如果真的是这样，那么`在 JVM 层面，一定会调用 Java 中定义的 run 方法`。那接下来继续去找找答案。我们找到 jvm.cpp 这个文 件；这个文件需要下载 hotspot 的源码才能找到。
 
 ```c
 JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
@@ -348,7 +348,7 @@ JVM_END
 
 **JavaThread**
 
-JVM_ENTRY 是用来定义 JVM_StartThread 函数的，在这 个函数里面创建了一个真正和平台有关的本地线程。本着打破砂锅查到底的原则，继续看看 newJavaThread 做了什 么事情，继续寻找 JavaThread 的定义 在 hotspot 的源码中 thread.cpp 文件中 1558 行的位置可以找到如下代码：
+JVM_ENTRY 是用来定义 JVM_StartThread 函数的，在这个函数里面创建了一个真正和平台有关的本地线程。本着打破砂锅查到底的原则，继续看看 newJavaThread 做了什 么事情，继续寻找 JavaThread 的定义 在 hotspot 的源码中 thread.cpp 文件中 1558 行的位置可以找到如下代码：
 
 ```c
 JavaThread::JavaThread(ThreadFunction entry_point, size_t stack_sz) :
@@ -372,7 +372,7 @@ JavaThread::JavaThread(ThreadFunction entry_point, size_t stack_sz) :
 }
 ```
 
-这个方法有两个参数，第一个是函数名称，线程创建成功之后会根据这个函数名称调用对应的函数；第二个是当前进程内已经有的线程数量。最后我们重点关注与一下 os::create_thread,实际就是调用平台创建线程的方法来创建线程。 
+这个方法有两个参数，第一个是函数名称，线程创建成功之后会根据这个函数名称调用对应的函数；第二个是当前进程内已经有的线程数量。最后我们重点关注与一下 os::create_thread，实际就是调用平台创建线程的方法来创建线程。 
 
 **os_linux -> os::create_thread**
 
@@ -484,7 +484,7 @@ interrupt() 方法用于中断线程
 isInterrupted()  获取线程的打断标记 ,调用后不会修改线程的打断标记
 
 ```java
-// 打断正常线程 ，线程不会真正被中断
+// 打断正常线程 ，线程不会真正被中断（打断状态为 true，但线程依然运行）
 public class InterruptionInJava {
     public static void main(String[] args) throws InterruptedException {
         Thread testThread = new Thread(() -> {
@@ -520,7 +520,7 @@ public class InterruptionInJava {
         System.out.println("main end");
     }
 }
-// 使用 interrupt() + InterruptedException来中断线程
+// 使用 interrupt() + InterruptedException 来中断线程
 public class InterruptionInJava01 {
     public static void main(String[] args) throws InterruptedException {
         Thread testThread = new Thread(() -> {
@@ -657,9 +657,9 @@ set_interrupted(true)实际上就是调用 osThread.hpp 中的 set_interrupted()
 
 你会发现这几个方法有一个共同点，都是属于阻塞的方法。
 
-而阻塞方法的释放会取决于一些外部的事件，但是阻塞方法可能因为等不到外部的触发事件而导致无法终止，所以 它允许一个线程请求自己来停止它正在做的事情。当一个方法抛出 InterruptedException 时，它是在告诉调用者如果执行该方法的线程被中断，它会尝试停止正在做的事情并且通过抛出 InterruptedException 表示提前返回。 
+而阻塞方法的释放会取决于一些外部的事件，但是阻塞方法可能因为等不到外部的触发事件而导致无法终止，所以它允许一个线程请求自己来停止它正在做的事情。当一个方法抛出 InterruptedException 时，它是在告诉调用者如果执行该方法的线程被中断，它会尝试停止正在做的事情并且通过抛出 InterruptedException 表示提前返回。 
 
-所以，这个异常的意思是表示一个阻塞被其他线程中断了。 然后 ，由于线程调用了 interrupt() 中断方法 ， 那么 Object.wait、Thread.sleep 等被阻塞的线程被唤醒以后会通过 is_interrupted 方法判断中断标识的状态变化，如果发现中断标识为 true，则先清除中断标识，然后抛出 InterruptedException。
+所以，这个异常的意思是表示`一个阻塞被其他线程中断了`。 然后 ，由于线程调用了 interrupt() 中断方法 ， 那么 Object.wait、Thread.sleep 等被阻塞的线程被唤醒以后会通过 is_interrupted 方法判断中断标识的状态变化，如果发现中断标识为 true，则先清除中断标识，然后抛出 InterruptedException。
 
 需要注意的是，InterruptedException 异常的抛出并不意味着线程必须终止，而是提醒当前线程有中断的操作发生， 至于接下来怎么处理取决于线程本身，比如：
 
@@ -795,9 +795,11 @@ Thread-2End------
 
    * 线程唤醒后需要竞争到锁（monitor）。
 
-#### 验证 notify 或interrupt 后的线程状态
+#### 验证 notify 或 interrupt 后的线程状态
 
 ```java
+// 注释 t1.interrupt()，打开 this.notifyAll() 表示 notify 后 t1 的线程状态
+// 注释 this.notifyAll()，打开 t1.interrupt() 表示 interrupt 后 t1 的线程状态
 public class Uninterruptible {
 
     public synchronized void test() {
@@ -831,16 +833,14 @@ public class Uninterruptible {
 
         Thread.sleep(1000);
         System.out.println(t1.getState());
-        System.out.println(t2.getState());
     }
 }
 //Thread-0进入同步代码块
 //Thread-1进入同步代码块
 //BLOCKED
-//TIMED_WAITING
 ```
 
-notify 或interrupt 后的线程t1均变为 BLOCKED 状态。
+`notify 或 interrupt 后的线程 t1` 均变为 `BLOCKED` 状态。
 
 ### Thread.sleep(long millis)
 

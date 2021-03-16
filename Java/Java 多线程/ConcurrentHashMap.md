@@ -337,11 +337,16 @@ static final int resizeStamp(int n) {
 > 32795 二进制：1000 0000 0001 1011
 >
 > ```java
-> // Integer.java
-> // radix 进制转十进制
-> public static int parseInt(String s, int radix)
-> // 十进制转二进制
-> public static String toBinaryString(int i)
+> System.out.println(Integer.toBinaryString(32795));
+> System.out.println(0B1000000000011011);
+> System.out.println(Integer.toBinaryString(Integer.MIN_VALUE));
+> System.out.println(0b10000000000000000000000000000000);
+> System.out.println(0b01111111111111111111111111111111);
+> // 1000000000011011
+> // 32795
+> // 10000000000000000000000000000000
+> // -2147483648
+> // 2147483647
 > ```
 
 接着再来看，当第一个线程尝试进行扩容的时候，会执行下面这段代码 
