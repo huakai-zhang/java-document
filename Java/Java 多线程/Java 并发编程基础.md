@@ -827,6 +827,9 @@ public class Uninterruptible {
         Thread.sleep(1000);
         Thread t2 = new Thread(() -> {
             //t1.interrupt();
+            // 中断 t1 之后需要一个线程占用cpu，否则 t1 会进入锁池队列后然后直接获得锁，然后占用cpu运行，报错然后结束任务
+            // 也即是需要 t2 获得锁，让 t1 暂时阻塞在锁池队列
+            // notify 同理
             u.test1();
         });
         t2.start();
