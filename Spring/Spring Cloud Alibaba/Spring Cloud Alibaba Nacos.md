@@ -974,6 +974,226 @@ void sendResponse(List<String> changedGroups) {
 
 # 4 服务注册发现
 
+## 4.1 服务注册
+
+Maven 配置的 spring-cloud-starter-alibaba-nacos-discovery 依赖会根据 spring.factories 配置来完成相关类的自动注册：
+
+```
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+  ...
+  com.alibaba.cloud.nacos.registry.NacosServiceRegistryAutoConfiguration,\
+```
+
+NacosServiceRegistryAutoConfiguration 中注册并管理了几个 bean：
+
+`NacosServiceRegistry` 完成服务注册，实现ServiceRegistry
+
+`NacosRegistration` 用来注册时存储 nacos 服务端的相关信息
+
+`NacosAutoServiceRegistration` 继承 Spring 中的AbstractAutoServiceRegistration，AbstractAutoServiceRegistration继承 `ApplicationListener<WebServerInitializedEvent>`，通过事件监听来发起服务注册，到时候会调用NacosServiceRegistry.register(registration)
+
+```java
+// WebServerInitializedEvent 字面意思理解就是在web服务初始化时候的时间监听
+public abstract class AbstractAutoServiceRegistration<R extends Registration> implements AutoServiceRegistration, ApplicationContextAware, ApplicationListener<WebServerInitializedEvent> {
+    public void onApplicationEvent(WebServerInitializedEvent event) {
+		bind(event);
+	}
+    public void bind(WebServerInitializedEvent event) {
+		ApplicationContext context = event.getApplicationContext();
+		if (context instanceof ConfigurableWebServerApplicationContext) {
+			if ("management".equals(((ConfigurableWebServerApplicationContext) context)
+					.getServerNamespace())) {
+				return;
+			}
+		}
+		this.port.compareAndSet(0, event.getWebServer().getPort());
+		this.start();
+	}
+    public void start() {
+		...
+		// only initialize if nonSecurePort is greater than 0 and it isn't already running
+		// because of containerPortInitializer below
+		if (!this.running.get()) {
+			this.context.publishEvent(
+					new InstancePreRegisteredEvent(this, getRegistration()));
+			register();
+			if (shouldRegisterManagement()) {
+				registerManagement();
+			}
+			this.context.publishEvent(
+					new InstanceRegisteredEvent<>(this, getConfiguration()));
+			this.running.compareAndSet(false, true);
+		}
+	}
+    protected void register() {
+		this.serviceRegistry.register(getRegistration());
+	}
+}
+```
+
+```java
+// NacosServiceRegistryAutoConfiguration
+@Bean
+public NacosServiceRegistry nacosServiceRegistry(
+    NacosDiscoveryProperties nacosDiscoveryProperties) {
+    return new NacosServiceRegistry(nacosDiscoveryProperties);
+}
+@Bean
+@ConditionalOnBean(AutoServiceRegistrationProperties.class)
+public NacosAutoServiceRegistration nacosAutoServiceRegistration(NacosServiceRegistry registry, AutoServiceRegistrationProperties autoServiceRegistrationProperties, NacosRegistration registration){
+    // 初始化时设置的是 NacosServiceRegistry
+    return new NacosAutoServiceRegistration(registry, autoServiceRegistrationProperties, registration);
+}
+```
+
+所以可以看到具体的注册实现在 `NacosServiceRegistry` 中：
+
+```java
+@Override
+public void register(Registration registration) {
+    //...
+   	NamingService namingService = namingService();
+   	String serviceId = registration.getServiceId();
+   	String group = nacosDiscoveryProperties.getGroup();
+
+   	Instance instance = getNacosInstanceFromRegistration(registration);
+   	namingService.registerInstance(serviceId, group, instance);
+	//...
+}
+// NamingService.java
+public void registerInstance(String serviceName, String groupName, Instance instance) throws NacosException {
+    NamingUtils.checkInstanceIsLegal(instance);
+    String groupedServiceName = NamingUtils.getGroupedName(serviceName, groupName);
+    if (instance.isEphemeral()) {
+        BeatInfo beatInfo = beatReactor.buildBeatInfo(groupedServiceName, instance);
+        // 添加心跳检测
+        beatReactor.addBeatInfo(groupedServiceName, beatInfo);
+    }
+    // 完成服务注册
+    serverProxy.registerService(groupedServiceName, groupName, instance);
+}
+// BeatReactor.java
+public void addBeatInfo(String serviceName, BeatInfo beatInfo) {
+    NAMING_LOGGER.info("[BEAT] adding beat: {} to beat map.", beatInfo);
+    String key = buildKey(serviceName, beatInfo.getIp(), beatInfo.getPort());
+    BeatInfo existBeat = null;
+    //fix #1733
+    if ((existBeat = dom2Beat.remove(key)) != null) {
+        existBeat.setStopped(true);
+    }
+    dom2Beat.put(key, beatInfo);
+    // ScheduledExecutorService executorService
+    // schedule 创建并执行在给定延迟后启用的单次操作
+    executorService.schedule(new BeatTask(beatInfo), beatInfo.getPeriod(), TimeUnit.MILLISECONDS);
+    MetricsMonitor.getDom2BeatSizeMonitor().set(dom2Beat.size());
+}
+public BeatInfo buildBeatInfo(String groupedServiceName, Instance instance) {
+    BeatInfo beatInfo = new BeatInfo();
+    // ...
+    beatInfo.setPeriod(instance.getInstanceHeartBeatInterval());
+    return beatInfo;
+}
+// Instance.java
+public long getInstanceHeartBeatInterval() {
+    // HEART_BEAT_INTERVAL = "preserved.heart.beat.interval";
+    // DEFAULT_HEART_BEAT_INTERVAL = TimeUnit.SECONDS.toMillis(5) = 5000
+    return getMetaDataByKeyWithDefault(PreservedMetadataKeys.HEART_BEAT_INTERVAL, Constants.DEFAULT_HEART_BEAT_INTERVAL);
+}
+```
+
+心跳执行的任务 `BeatTask`：
+
+```java
+class BeatTask implements Runnable {
+    
+    BeatInfo beatInfo;
+    
+    public BeatTask(BeatInfo beatInfo) {
+        this.beatInfo = beatInfo;
+    }
+    
+    @Override
+    public void run() {
+        if (beatInfo.isStopped()) {
+            return;
+        }
+        long nextTime = beatInfo.getPeriod();
+        try {
+            // 向nacos服务发起心跳检测
+            JsonNode result = serverProxy.sendBeat(beatInfo, BeatReactor.this.lightBeatEnabled);
+            long interval = result.get("clientBeatInterval").asLong();
+            boolean lightBeatEnabled = false;
+            if (result.has(CommonParams.LIGHT_BEAT_ENABLED)) {
+                lightBeatEnabled = result.get(CommonParams.LIGHT_BEAT_ENABLED).asBoolean();
+            }
+            BeatReactor.this.lightBeatEnabled = lightBeatEnabled;
+            if (interval > 0) {
+                nextTime = interval;
+            }
+            int code = NamingResponseCode.OK;
+            if (result.has(CommonParams.CODE)) {
+                code = result.get(CommonParams.CODE).asInt();
+            }
+            if (code == NamingResponseCode.RESOURCE_NOT_FOUND) {
+                Instance instance = new Instance();
+                instance.setPort(beatInfo.getPort());
+                instance.setIp(beatInfo.getIp());
+                instance.setWeight(beatInfo.getWeight());
+                instance.setMetadata(beatInfo.getMetadata());
+                instance.setClusterName(beatInfo.getCluster());
+                instance.setServiceName(beatInfo.getServiceName());
+                instance.setInstanceId(instance.getInstanceId());
+                instance.setEphemeral(true);
+                try {
+                    // 未注册 先完成注册
+                    serverProxy.registerService(beatInfo.getServiceName(),
+                            NamingUtils.getGroupName(beatInfo.getServiceName()), instance);
+                } catch (Exception ignore) {
+                }
+            }
+        } catch (NacosException ex) {
+            NAMING_LOGGER.error("[CLIENT-BEAT] failed to send beat: {}, code: {}, msg: {}",
+                    JacksonUtils.toJson(beatInfo), ex.getErrCode(), ex.getErrMsg());
+            
+        }
+        // 发起下一次心跳检测
+        executorService.schedule(new BeatTask(beatInfo), nextTime, TimeUnit.MILLISECONDS);
+    }
+}
+```
+
+服务提供者向 Nacos Server 发起服务注册前，先向 Nacos Server 建立起心跳检测机制，Nacos Server 那边也有一个心跳检测，服务提供者不停的向 Nacos Server 发起心跳检测 告知自己的健康状态，Nacos Server 发现该服务心跳检测时间超时会发布超时事件来告知服务消费者：
+
+![image-20210317192943277](Spring Cloud Alibaba Nacos.assets/image-20210317192943277.png)
+
+4.2 服务发现
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # 5 集群选举
 
 nacos 的集群类似于 zookeeper， 它分为 leader 角色和 follower 角色， 那么从这个角色的名字可以看出来，这个集群存在选举的机制。 因为如果自己不具备选举功能，角色的命名可能就是 master/slave 了， 当然这只是我基于这么多组件的命名的一个猜测。
