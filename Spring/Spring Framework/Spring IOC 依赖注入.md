@@ -495,7 +495,7 @@ protected BeanWrapper instantiateBean(final String beanName, final RootBeanDefin
 }
 ```
 
-经过对上面的代码分析，可以看出对使用工厂方法和自动装配特性的Bean的实例化相当清楚，调用相应的工厂方法或参数匹配的构造方法即可完成实例化对象的工作，但是对于最常使用的默认无参构造方法就需要使用相应的初始化策略(JDK的反射机制或者CGLib)来初始化，在方法getInstantiationStrategy().instantiate中就具体实现类使用初始策略实例化对象。
+经过对上面的代码分析，可以看出对使用工厂方法和自动装配特性的Bean的实例化相当清楚，调用相应的工厂方法或参数匹配的构造方法即可完成实例化对象的工作，但是对于最常使用的默认无参构造方法就需要使用相应的初始化策略(`JDK的反射机制`或者`CGLib`)来初始化，在方法getInstantiationStrategy().instantiate中就具体实现类使用初始策略实例化对象。
 
 ## 1.5 执行 Bean 实例化
 
@@ -505,8 +505,9 @@ protected BeanWrapper instantiateBean(final String beanName, final RootBeanDefin
 //使用初始化策略实例化Bean对象
 public Object instantiate(RootBeanDefinition beanDefinition, String beanName, BeanFactory owner) {
    // Don't override the class with CGLIB if no overrides.
-   //如果Bean定义中没有方法覆盖，则就不需要CGLIB父类类的方法
-  // 如果有需要覆盖或者动态替换的方法则当然需要使用 cglib 进行动态代理，因为可以在创建代理的同时将动态方法织入类中，但是如果没有需要动态改变的方法，为了方便直接反射就可以了
+   // 如果Bean定义中没有方法覆盖，则就不需要CGLIB父类类的方法
+   // 如果有需要覆盖或者动态替换的方法则当然需要使用 cglib 进行动态代理，因为可以在创建代理的同时将动态方法织入类中
+   // 但是如果没有需要动态改变的方法，为了方便直接反射就可以了
    if (beanDefinition.getMethodOverrides().isEmpty()) {
       Constructor<?> constructorToUse;
       synchronized (beanDefinition.constructorArgumentLock) {
@@ -553,7 +554,8 @@ public Object instantiate(RootBeanDefinition beanDefinition, String beanName, Be
 <font color=red>如果Bean定义中没有方法覆盖，则就不需要CGLIB父类类的方法。</font>
 
 那么是什么条件才会触发这个方法覆盖`MethodOverrides`呢？
-其实是Spring配置文件中的 `lookup-method` 和 `replace-method`，这其实是两个方法级别的注入，和一般的属性(Property)注入是不一样的，它们注入的是方法(Method)。
+
+其实就是用户没有使用 replace 或者 lookup 的配置方法(Spring配置文件中的 `lookup-method` 和 `replace-method`)，这是两个方法级别的注入，和一般的属性(Property)注入是不一样的，它们注入的是方法(Method)。
 
 instantiateWithMethodInjection方法调用了SimpleInstantiationStrategy的子类CglibSubclassingInstantiationStrategy使用CGLIB来进行初始化：
 
@@ -579,8 +581,6 @@ public Object instantiate(Constructor ctor, Object[] args) {
 ```
 
 CGLIB是一个常用的字节码生成器的类库，它提供了一系列API实现java字节码的生成和转换功能。
-
-JDK的动态代理只能针对接口，如果一个类没有实现任何接口，要对其进行动态代理只能使用CGLIB。
 
 ## 1.6 准备依赖注入
 

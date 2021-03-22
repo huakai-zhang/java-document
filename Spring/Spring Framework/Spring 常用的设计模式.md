@@ -562,6 +562,8 @@ public class VolkswagenFactory extends AbstractFactory {
 
 ## 3.1 JDK动态代理
 
+> JDK 动态代理只能针对接口，如果一个类没有实现任何接口，要对其进行动态代理只能使用 CGLIB
+
 ```java
 /**
  * 代理对象，房地产经纪人，中介
@@ -611,11 +613,13 @@ public class ProxyTest {
 
 ### 原理
 
-1. 拿到被代理对象的引用，然后获取它的接口 
-2. JDK代理重新生成一个类，同时实现我们给的代理对象所实现的接口 
-3. 把被代理对象的引用也拿到了 
-4. 重新动态生成一个class字节码 
-5. 然后编译 获取代理类字节码内容：
+1. 通过实现 `InvocationHandler` 接口创建自己的调用处理器，拿到被代理对象的引用，然后获取它的接口 
+2. 通过为 Proxy 类指定 ClassLoader 对象和一组 interface(代理对象所实现的接口) 来创建动态代理
+3. 通过反射机制获取动态代理类的构造函数，其唯一参数类型就是调用处理器接口类型
+4. 重新动态生成一个 class 字节码 
+5. 然后编译
+
+获取代理类字节码内容：
 
 ```java
 byte[] data = ProxyGenerator.generateProxyClass("$Proxy0", new Class[]{Tenant.class});
@@ -692,10 +696,15 @@ public final class $Proxy0 extends Proxy implements Tenant {
 
 ## 3.2 Cglib代理
 
+> 由于 cglib 是基于继承的方式实现类的动态代理，无法覆写 final 方法。
+
 ```java
 public class Mic {
     public void rentingRoom() {
         System.out.println("一室一厅，2000元以下！");
+    }
+    public final void test() {
+        System.out.println("final 方法测试");
     }
 }
 public class Realtor implements MethodInterceptor {
@@ -725,6 +734,7 @@ public class ProxyTest {
     public static void main(String[] args) {
         Mic obj = (Mic)new Realtor().getInstance(Mic.class);
         obj.rentingRoom();
+        // obj.test(); // 无法执行代理内容，只能正常调用
     }
 }
 ```

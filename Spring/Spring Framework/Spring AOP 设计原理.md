@@ -485,6 +485,8 @@ public class DefaultAopProxyFactory implements AopProxyFactory, Serializable {
 
 	@Override
 	public AopProxy createAopProxy(AdvisedSupport config) throws AopConfigException {
+        // hasNoUserSuppliedProxyInterfaces(字面意思：没有用户提供的代理接口) 判断有无实现接口
+        // config.isProxyTargetClass() 是否强制使用 CGLIB 代理
 		if (config.isOptimize() || config.isProxyTargetClass() || hasNoUserSuppliedProxyInterfaces(config)) {
 			Class<?> targetClass = config.getTargetClass();
 			if (targetClass == null) {
@@ -509,13 +511,19 @@ public class DefaultAopProxyFactory implements AopProxyFactory, Serializable {
 }
 ```
 
+> 如果希望强制使用 CGLIB 代理，需要考虑其无法通知被代理类的 final 方法，因为它们不能被覆写。
+>
+> ```xml
+> <aop:config proxy-target-class="true">...</aop:config>
+> ```
+
 ## 3.4 调用代理方法
 
 分析调用逻辑之前先上类图，看看 Spring 中主要的 AOP 组件： 
 
 ![image-20201121173632494](Spring AOP 设计原理.assets/image-20201121173632494.png)
 
-Spring提供了两种方式生成代理对象：JDKProxy和CGLib，具体使用哪种方式生成由AopProxyFactory根据AdvisedSupport对象的配置来决定。默认的策略是如果目标类是接口，则使用JDK动态代理技术，否则使用CGLib来生成代理。下面研究Spring如何使用JDK来生成代理对象，具体生成代码在JdkDynamicAopProxy这个类中：
+Spring提供了两种方式生成代理对象：JDKProxy和CGLib，具体使用哪种方式生成由AopProxyFactory根据AdvisedSupport对象的配置来决定。`默认的策略是如果被代理的目标对象实现了至少一个接口，则使用JDK动态代理技术(所有该目标对象实现的接口都将被代理)，否则使用CGLib来生成代理`。下面研究Spring如何使用JDK来生成代理对象，具体生成代码在JdkDynamicAopProxy这个类中：
 
 ```java
 /**
@@ -628,7 +636,7 @@ public Object invoke(Object proxy, Method method, Object[] args) throws Throwabl
 }
 ```
 
-主流程可以简述为：获取可以应用到此方法上的通知链(Interceptor Chain)，如果有，则应用通知，并执行joinpoint；如果没有，则直接反射执行joinpoint。而这里的关键是通知链是如何获取的以及它又是如何执行的。 首先，从上面代码可以看到，通知链是通过Advised.getInterceptorAndDynamicInterceptionAdvice()这个方法来获取的：
+主流程可以简述为：获取可以应用到此方法上的通知链(Interceptor Chain)，如果有，则应用通知，并执行joinpoint；如果没有，则直接反射调用 method.invoke。而这里的关键是通知链是如何获取的以及它又是如何执行的。 首先，从上面代码可以看到，通知链是通过Advised.getInterceptorAndDynamicInterceptionAdvice()这个方法来获取的：
 
 ```java
 public List<Object> getInterceptorsAndDynamicInterceptionAdvice(Method method, Class targetClass) {

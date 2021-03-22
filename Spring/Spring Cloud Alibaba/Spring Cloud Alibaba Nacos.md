@@ -1168,31 +1168,184 @@ class BeatTask implements Runnable {
 
 4.2 服务发现
 
+服务发现由 NacosWatch 完成，它实现了 Spring 的 Lifecycle 接口，容器启动和销毁时会调用对应的 start() 和 stop() 方法：
 
+```java
+public void start() {
+    // cas设置运行状态为true
+    if (this.running.compareAndSet(false, true)) {
+      // ...
+      namingService.subscribe(properties.getService(), properties.getGroup(),
+						Arrays.asList(properties.getClusterName()), eventListener);
+      // 30s 执行一个服务发现事件
+      this.watchFuture = this.taskScheduler.scheduleWithFixedDelay(
+            this::nacosServicesWatch, this.properties.getWatchDelay());
+   }
+}
+public void nacosServicesWatch() {
+	// nacos 不提供监视，而是每 30 秒发布一个事件
+	this.publisher.publishEvent(
+			new HeartbeatEvent(this, nacosWatchIndex.getAndIncrement()));
+}
+```
 
+服务订阅：
 
+```java
+// NacosNamingService.java
+public void subscribe(String serviceName, String groupName, List<String> clusters, EventListener listener)
+        throws NacosException {
+    hostReactor.subscribe(NamingUtils.getGroupedName(serviceName, groupName), StringUtils.join(clusters, ","),
+            listener);
+}
+// HostReactor.java
+public void subscribe(String serviceName, String clusters, EventListener eventListener) {
+    notifier.registerListener(serviceName, clusters, eventListener);
+    getServiceInfo(serviceName, clusters);
+}
+public ServiceInfo getServiceInfo(final String serviceName, final String clusters) {
+    
+    NAMING_LOGGER.debug("failover-mode: " + failoverReactor.isFailoverSwitch());
+    String key = ServiceInfo.getKey(serviceName, clusters);
+    if (failoverReactor.isFailoverSwitch()) {
+        return failoverReactor.getService(key);
+    }
+    
+    ServiceInfo serviceObj = getServiceInfo0(serviceName, clusters);
+    // 在用户发起首次调用服务时，如果 serviceInfoMap 找不到，回去 nacos server 中获取
+    if (null == serviceObj) {
+        serviceObj = new ServiceInfo(serviceName, clusters);
+        
+        serviceInfoMap.put(serviceObj.getKey(), serviceObj);
+        
+        updatingMap.put(serviceName, new Object());
+        updateServiceNow(serviceName, clusters);
+        updatingMap.remove(serviceName);
+        
+    } else if (updatingMap.containsKey(serviceName)) {
+        // ...
+    }
+    
+    scheduleUpdateIfAbsent(serviceName, clusters);
+    
+    return serviceInfoMap.get(serviceObj.getKey());
+}
+public void scheduleUpdateIfAbsent(String serviceName, String clusters) {
+    if (futureMap.get(ServiceInfo.getKey(serviceName, clusters)) != null) {
+        return;
+    }
+    
+    synchronized (futureMap) {
+        // futureMap 存放已建立 taks 任务的服务
+        if (futureMap.get(ServiceInfo.getKey(serviceName, clusters)) != null) {
+            return;
+        }
+        
+        ScheduledFuture<?> future = addTask(new UpdateTask(serviceName, clusters));
+        futureMap.put(ServiceInfo.getKey(serviceName, clusters), future);
+    }
+}
+```
 
+服务消费者订阅后会执行一个轮询任务（每 10s 执行一次）用来拉取最新的服务提供者信息并实时更新，实现在 HostReactor 中的 `UpdateTask` 完成：
 
+```java
+public void run() {
+    // 1000 ms 
+    long delayTime = DEFAULT_DELAY;
+    
+    try {
+        // 拿到当前的服务信息
+        ServiceInfo serviceObj = serviceInfoMap.get(ServiceInfo.getKey(serviceName, clusters));
+        // 为空 拉取最新的服务列表随后更新
+        if (serviceObj == null) {
+            updateService(serviceName, clusters);
+            return;
+        }
+        if (serviceObj.getLastRefTime() <= lastRefTime) {
+            // 当前服务未及时更新 进行更新操作
+            updateService(serviceName, clusters);
+            serviceObj = serviceInfoMap.get(ServiceInfo.getKey(serviceName, clusters));
+        } else {
+            // if serviceName already updated by push, we should not override it
+            // since the push data may be different from pull through force push
+            refreshOnly(serviceName, clusters);
+        }
+	    // 设置服务最新的更新时间
+        lastRefTime = serviceObj.getLastRefTime();
+	    // 订阅被取消
+        if (!notifier.isSubscribed(serviceName, clusters) && !futureMap
+            .containsKey(ServiceInfo.getKey(serviceName, clusters))) {
+            // abort the update task
+            NAMING_LOGGER.info("update task is stopped, service:" + serviceName + ", clusters:" + clusters);
+            return;
+        }
+        if (CollectionUtils.isEmpty(serviceObj.getHosts())) {
+            incFailCount();
+            return;
+        }
+        // 10000ms
+        delayTime = serviceObj.getCacheMillis();
+        resetFailCount();
+    } finally {
+        // 10 s
+        executor.schedule(this, Math.min(delayTime << failCount, DEFAULT_DELAY * 60), TimeUnit.MILLISECONDS);
+    }
+}
+```
 
+Nacos Client 这边在 Spring 容器启动后执行一个服务订阅操作的延时任务，这个任务执行时先拉取 Nacos Server 那边最新的服务列表，然后与本地缓存的服务列表进行比较，取消订阅下线的服务，然后向 Nacos Server 发起订阅操作，订阅所有服务。
 
+![image-20210318143827949](Spring Cloud Alibaba Nacos.assets/image-20210318143827949.png)
 
+上面服务注册时我们说过，服务提供者注册时 nacos 服务端也有一个相应的心跳检测，当心跳检测超时也就是未及时收到服务提供者的心跳包，nacos server 判定该服务状态异常。随后通过 UDP 推送服务信息用来告知对应服务消费者，服务消费者通过 PushReceiver 来处理 udp 协议，HostReactor.processServiceJson(String json) 来更新本地服务列表：
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+```java
+// PushReceiver.java
+public void run() {
+    while (!closed) {
+        try {
+            
+            // byte[] is initialized with 0 full filled by default
+            byte[] buffer = new byte[UDP_MSS];
+            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+            
+            udpSocket.receive(packet);
+            
+            String json = new String(IoUtils.tryDecompress(packet.getData()), UTF_8).trim();
+            NAMING_LOGGER.info("received push data: " + json + " from " + packet.getAddress().toString());
+            
+            PushPacket pushPacket = JacksonUtils.toObj(json, PushPacket.class);
+            String ack;
+            if ("dom".equals(pushPacket.type) || "service".equals(pushPacket.type)) {
+                // 处理变更信息
+                hostReactor.processServiceJson(pushPacket.data);
+                
+                // send ack to server
+                ack = "{\"type\": \"push-ack\"" + ", \"lastRefTime\":\"" + pushPacket.lastRefTime + "\", \"data\":"
+                        + "\"\"}";
+            } else if ("dump".equals(pushPacket.type)) {
+                // dump data to server
+                ack = "{\"type\": \"dump-ack\"" + ", \"lastRefTime\": \"" + pushPacket.lastRefTime + "\", \"data\":"
+                        + "\"" + StringUtils.escapeJavaScript(JacksonUtils.toJson(hostReactor.getServiceInfoMap()))
+                        + "\"}";
+            } else {
+                // do nothing send ack only
+                ack = "{\"type\": \"unknown-ack\"" + ", \"lastRefTime\":\"" + pushPacket.lastRefTime
+                        + "\", \"data\":" + "\"\"}";
+            }
+            
+            udpSocket.send(new DatagramPacket(ack.getBytes(UTF_8), ack.getBytes(UTF_8).length,
+                    packet.getSocketAddress()));
+        } catch (Exception e) {
+            if (closed) {
+                return;
+            }
+            NAMING_LOGGER.error("[NA] error while receiving push data", e);
+        }
+    }
+}
+```
 
 # 5 集群选举
 

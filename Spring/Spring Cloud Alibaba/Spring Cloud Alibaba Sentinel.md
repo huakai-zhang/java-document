@@ -499,6 +499,7 @@ public WindowWrap<T> currentWindow(long timeMillis) {
         return null;
     }
     // timeMillis 当前时间毫秒数
+    // windowLengthInMs = intervalInMs / sampleCount = 1000 / 2
     // (int)(timeMillis / windowLengthInMs % array.length())
     int idx = calculateTimeIdx(timeMillis);
     // timeMillis - timeMillis % windowLengthInMs
@@ -507,7 +508,7 @@ public WindowWrap<T> currentWindow(long timeMillis) {
     //   timeMillis	   idx	windowStart	  
     // 1614768657946L   1  1614768657500  1
     // 1614768658046L   0  1614768658000  2
-    // ...   2，3，5
+    // ...   3，4，5
     // 1614768658446L   0  1614768658000  6
     // 1614768658546L   1  1614768658500  7
     while (true) {

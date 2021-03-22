@@ -826,17 +826,11 @@ channel.basicConsume(queueName, true, new DefaultConsumer(channel){
 
 ![image-20200320095743935](RabbitMQ.assets/image-20200320095743935.png)
 
-```markdown
-
-```
-
-![image-20200320095827688](RabbitMQ.assets/image-20200320095827688.png)
-
-![image-20200320095843370](RabbitMQ.assets/image-20200320095843370.png)
+`查看从节点都同步这个消息`
 
 #### 关闭 node1 节点
 
-执行如下命令，查看 node2 和 node3
+执行如下命令，然后查看 node2 和 node3
 
 ```markdown
 rabbitmqctl stop_app
@@ -846,7 +840,7 @@ rabbitmqctl stop_app
 
 ![image-20200320100010968](RabbitMQ.assets/image-20200320100010968.png)
 
----
+`主节点宕机，从节点服务也失效，没有高可用效果`
 
 ## 6.3 镜像集群
 

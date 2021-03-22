@@ -357,7 +357,10 @@ private void ensureCapacityInternal(int minCapacity) {
 }
 private void ensureExplicitCapacity(int minCapacity) {
     modCount++;
-    // overflow-conscious code
+    //若minCapacity 大于 elementData的长度，则增加elementData的length
+	/* 第一种情况：elementData初始化时是空的数组，在第一次add的时候，minCapacity=size+1，即minCapacity=1，在上一个方法(确定内部容量ensureCapacityInternal)就会判断出是空的数组，就将minCapacity=10，到这一步为止，还没有改变elementData的大小。
+	/* 第二种情况：elementData不是空数组了，在add的时候，minCapacity=size+1，也就是minCapacity代表着elementData中增加之后的实际数据个数，拿它判断elementData的length是否够用，不够用要扩容，否则会溢出。
+	*/
     if (minCapacity - elementData.length > 0)
         grow(minCapacity);
 }
@@ -384,21 +387,31 @@ LinkeList 由于使用了链表的结构，因此不需要维护容量的大小�
 
 ```java
 public void add(int index, E element) {
+    // 检查 index 也就是插入的位置是否合理
     rangeCheckForAdd(index);
+    // 确保数组有足够的空间
     ensureCapacityInternal(size + 1);
-    System.arraycopy(elementData, index, elementData, index + 1,
-                     size - index);
+    // 在插入元素之前，要将index之后的元素都往后移一位
+    System.arraycopy(elementData, index, elementData, index + 1, size - index);
+    // 在目标位置上存放元素
     elementData[index] = element;
     size++;
 }
+private void rangeCheckForAdd(int index) {
+    // 插入的位置肯定不能大于size 和小于0，否则越界异常
+    if (index > size || index < 0)
+        throw new IndexOutOfBoundsException(outOfBoundsMsg(index));
+}
 public E remove(int index) {
+    // 检查 index 的合理性
     rangeCheck(index);
     modCount++;
+    // 通过索引直接直接找元素
     E oldValue = elementData(index);
     int numMoved = size - index - 1;
+    // 如果有需要左移，移动后就会覆盖
     if (numMoved > 0)
-        System.arraycopy(elementData, index+1, elementData, index,
-                         numMoved);
+        System.arraycopy(elementData, index+1, elementData, index, numMoved);
     elementData[--size] = null; // clear to let GC do its work
     return oldValue;
 }
@@ -406,7 +419,7 @@ public E remove(int index) {
 
 可以看到``每次插入或删除操作，都会进行一次数组复制。``而插入操作在增加元素到List尾端的时候是不存在的，大量的数组重组操作会导致系统性能低下。``并且插入或删除元素在List中的位置越是靠前，数组重组的开销也越大。``
 
-对LinkedList来说，在List的尾端插入或删除数据与在任意位置插入数据是一样的，不会因为位置靠前而导致插入的方法性能降低。
+对 LinkedList 来说，在List的尾端插入或删除数据与在任意位置插入数据是一样的，不会因为位置靠前而导致插入的方法性能降低。
 
 **遍历列表**
 
