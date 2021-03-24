@@ -16,13 +16,15 @@
 
 **基于session的认证方式**
 
-它的交互流程是，用户认证成功后，在服务端生成用户相关的数据保存在session(当前会话)中，发给客户端的 sesssion_id 存放到 cookie 中，这样用户客户端请求时带上 session_id 就可以验证服务器端是否存在 session 数据，以此完成用户的合法校验，当用户退出系统或session过期销毁时,客户端的session_id也就无效了。![image-20200831212350130](Spring Security.assets/image-20200831212350130.png)
+它的交互流程是，用户认证成功后，在服务端生成用户相关的数据保存在session(当前会话)中，发给客户端的 sesssion_id 存放到 cookie 中，这样用户客户端请求时带上 session_id 就可以验证服务器端是否存在 session 数据，以此完成用户的合法校验，当用户退出系统或session过期销毁时,客户端的session_id也就无效了。
+
+<img src="Spring Security.assets/image-20200831212350130.png" alt="image-20200831212350130" style="zoom:50%;" />
 
 **基于token方式**
 
 它的交互流程是，用户认证成功后，服务端生成一个token发给客户端，客户端可以放到 cookie 或 localStorage 等存储中，每次请求时带上 token，服务端收到token通过验证后即可确认用户身份。 
 
-![image-20200831212822344](Spring Security.assets/image-20200831212822344.png)
+<img src="Spring Security.assets/image-20200831212822344.png" alt="image-20200831212822344" style="zoom:50%;" />
 
 基于 session 的认证方式由 Servlet 规范定制，服务端要存储 session 信息需要占用内存资源，客户端需要支持 cookie；基于token的方式则一般不需要服务端存储token，并且不限制客户端的存储方式。如今移动互联网时代更多类型的客户端需要接入系统，系统多是采用前后端分离的架构进行实现，所以基于token的方式更适合。 
 
@@ -46,7 +48,7 @@ Who，即``主体（Subject）``，主体一般是指用户，也可以是程序
 
 主体、资源、权限关系如下图： 
 
-![image-20200831214057861](Spring Security.assets/image-20200831214057861.png)
+<img src="Spring Security.assets/image-20200831214057861.png" alt="image-20200831214057861" style="zoom:50%;" />
 
 主体、资源、权限相关的数据模型如下： 
 
@@ -64,7 +66,7 @@ Who，即``主体（Subject）``，主体一般是指用户，也可以是程序
 
 主体（用户）、资源、权限关系如下图： 
 
-![image-20200831214658418](Spring Security.assets/image-20200831214658418.png)
+<img src="Spring Security.assets/image-20200831214658418.png" alt="image-20200831214658418" style="zoom:50%;" />
 
 通常企业开发中将资源和权限表合并为一张权限表，如下： 
 
@@ -78,7 +80,7 @@ Who，即``主体（Subject）``，主体一般是指用户，也可以是程序
 
 修改后数据模型之间的关系如下图： 
 
-![image-20200831214816999](Spring Security.assets/image-20200831214816999.png)
+<img src="Spring Security.assets/image-20200831214816999.png" alt="image-20200831214816999" style="zoom:50%;" />
 
 ### 1.5 RBAC
 
@@ -277,11 +279,7 @@ SpringBoot工程启动会自动扫描启动类所在包下的所有Bean，加载
    }
    ```
 
-   在 ``userDetailsService()`` 方法中，我们返回了一个 ``UserDetailsService`` 给 spring 容器，Spring Security会使用它来 
-
-   获取用户信息。我们暂时使用 ``InMemoryUserDetailsManager`` 实现类，并在其中分别创建了zhangsan、lisi两个用 
-
-   户，并设置密码和权限。 
+   在 ``userDetailsService()`` 方法中，我们返回了一个 ``UserDetailsService`` 给 spring 容器，Spring Security会使用它来获取用户信息。我们暂时使用 ``InMemoryUserDetailsManager`` 实现类，并在其中分别创建了zhangsan、lisi两个用户，并设置密码和权限。 
 
    而在 ``confifigure()`` 中，我们通过 HttpSecurity 设置了安全拦截规则，其中包含了以下内容： 
 
@@ -328,7 +326,7 @@ SpringBoot工程启动会自动扫描启动类所在包下的所有Bean，加载
 
 5. 测试
 
-   ![image-20200831225411701](Spring Security.assets/image-20200831225411701.png)
+   <img src="Spring Security.assets/image-20200831225411701.png" alt="image-20200831225411701" style="zoom:50%;" />
 
 ![image-20200831225435676](Spring Security.assets/image-20200831225435676.png)
 
@@ -344,13 +342,31 @@ SpringBoot工程启动会自动扫描启动类所在包下的所有Bean，加载
 
 Spring Security所解决的问题就是``安全访问控制``，而安全访问控制功能其实就是对所有进入系统的请求进行拦截，校验每个请求是否能够访问它所期望的资源。根据前边知识的学习，可以通过Filter或AOP等技术来实现，Spring Security对Web资源的保护是靠Filter实现的，所以从这个Filter来入手，逐步深入Spring Security原理。 
 
-当初始化Spring Security时，会创建一个名为 SpringSecurityFilterChain 的Servlet过滤器，类型为``org.springframework.security.web.FilterChainProxy``，它实现了javax.servlet.Filter，因此外部的请求会经过此类，下图是Spring Security过虑器链结构图：
+当初始化Spring Security时，会创建一个名为 `SpringSecurityFilterChain` 的Servlet过滤器，类型为``org.springframework.security.web.FilterChainProxy``，它实现了javax.servlet.Filter，因此外部的请求会经过此类：
 
-![image-20200901202301655](Spring Security.assets/image-20200901202301655.png)
+```java
+// public class WebSecurityConfiguration implements ImportAware, BeanClassLoaderAware
+@Bean(name = AbstractSecurityWebApplicationInitializer.DEFAULT_FILTER_NAME)
+public Filter springSecurityFilterChain() throws Exception {
+   boolean hasConfigurers = webSecurityConfigurers != null
+         && !webSecurityConfigurers.isEmpty();
+   if (!hasConfigurers) {
+      WebSecurityConfigurerAdapter adapter = objectObjectPostProcessor
+            .postProcess(new WebSecurityConfigurerAdapter() {
+            });
+      webSecurity.apply(adapter);
+   }
+   return webSecurity.build();
+}
+```
 
-``FilterChainProxy`` 是一个代理，真正起作用的是FilterChainProxy中SecurityFilterChain所包含的各个Filter，同时这些Filter作为Bean被Spring管理，它们是Spring Security核心，各有各的职责，但他们并不直接处理用户的认证，也不直接处理用户的授权，而是把它们交给了``认证管理器（AuthenticationManager）``和``决策管理器（AccessDecisionManager）``进行处理，下图是FilterChainProxy相关类的UML图示。 
+下图是Spring Security过虑器链结构图：
 
-![image-20200901203703249](Spring Security.assets/image-20200901203703249.png)
+<img src="Spring Security.assets/image-20200901202301655.png" alt="image-20200901202301655" style="zoom:50%;" />
+
+``FilterChainProxy`` 是一个代理，真正起作用的是 FilterChainProxy 中 `SecurityFilterChain 所包含的各个 Filter`，同时这些Filter作为Bean被Spring管理，它们是Spring Security核心，各有各的职责，但他们并不直接处理用户的认证，也不直接处理用户的授权，而是把它们交给了``认证管理器（AuthenticationManager）``和``决策管理器（AccessDecisionManager）``进行处理，下图是FilterChainProxy相关类的UML图示。 
+
+<img src="Spring Security.assets/image-20200901203703249.png" alt="image-20200901203703249" style="zoom: 40%;" />
 
 Spring Security功能的实现主要是由一系列过滤器链相互配合完成。
 
@@ -384,7 +400,7 @@ Spring Security功能的实现主要是由一系列过滤器链相互配合完�
 
 认证核心组件的大体关系如下：
 
-![image-20200901215204133](Spring Security.assets/image-20200901215204133.png)
+<img src="Spring Security.assets/image-20200901215204133.png" alt="image-20200901215204133" style="zoom:50%;" />
 
 #### 3.2.1 AuthenticationProvider
 
@@ -546,7 +562,7 @@ public PasswordEncoder passwordEncoder(){
 
 2. DaoAuthenticationProvider获取UserDetails（其中存储了用户的正确密码） 
 
-3. DaoAuthenticationProvider使用PasswordEncoder对输入的密码和正确的密码进行校验，密码一致则校验通 过，否则校验失败。北京市昌平区建材城西路金燕龙办公楼一层 电话：400-618-9090
+3. DaoAuthenticationProvider使用PasswordEncoder对输入的密码和正确的密码进行校验，密码一致则校验通 过，否则校验失败。
 
 NoOpPasswordEncoder的校验规则拿 输入的密码和UserDetails中的正确密码进行字符串比较，字符串内容一致 则校验通过，否则 校验失败。 
 
