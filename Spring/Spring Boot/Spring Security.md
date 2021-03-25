@@ -340,9 +340,9 @@ SpringBoot工程启动会自动扫描启动类所在包下的所有Bean，加载
 
 ### 3.1 结构总览
 
-Spring Security所解决的问题就是``安全访问控制``，而安全访问控制功能其实就是对所有进入系统的请求进行拦截，校验每个请求是否能够访问它所期望的资源。根据前边知识的学习，可以通过Filter或AOP等技术来实现，Spring Security对Web资源的保护是靠Filter实现的，所以从这个Filter来入手，逐步深入Spring Security原理。 
+Spring Security 所解决的问题就是``安全访问控制``，而安全访问控制功能其实就是对所有进入系统的请求进行拦截，校验每个请求是否能够访问它所期望的资源。根据前边知识的学习，可以通过 Filter 或 AOP 等技术来实现，Spring Security 对 Web 资源的保护是靠 Filter 实现的，所以从这个 Filter 来入手，逐步深入Spring Security 原理。 
 
-当初始化Spring Security时，会创建一个名为 `SpringSecurityFilterChain` 的Servlet过滤器，类型为``org.springframework.security.web.FilterChainProxy``，它实现了javax.servlet.Filter，因此外部的请求会经过此类：
+当初始化 Spring Security 时，会创建一个名为 `SpringSecurityFilterChain` 的Servlet过滤器，类型为``org.springframework.security.web.FilterChainProxy``，它实现了 javax.servlet.Filter，因此外部的请求会经过此类：
 
 ```java
 // public class WebSecurityConfiguration implements ImportAware, BeanClassLoaderAware
@@ -380,7 +380,9 @@ Spring Security功能的实现主要是由一系列过滤器链相互配合完�
 
 ``FilterSecurityInterceptor`` 是用于保护web资源的，使用AccessDecisionManager对当前用户进行授权访问，前面已经详细介绍过了； 
 
-``ExceptionTranslationFilter`` 能够捕获来自 FilterChain 所有的异常，并进行处理。但是它只会处理两类异常： AuthenticationException 和 AccessDeniedException，其它的异常它会继续抛出。 
+``ExceptionTranslationFilter`` 能够捕获来自 FilterChain 所有的异常，并进行处理。但是它只会处理两类异常： AuthenticationException 和 AccessDeniedException，其它的异常它会继续抛出。
+
+`ClientCredentialsTokenEndpointFilter` 对于获取 TOKEN 的请求(默认是 /oauth/token)，需要认证 client_id 和 client_secret
 
 ### 3.2 认证流程
 
