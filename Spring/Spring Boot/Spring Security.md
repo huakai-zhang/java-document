@@ -34,9 +34,9 @@
 >
 > 为什么要授权？ 
 >
-> 认证是为了保证用户身份的合法性，授权则是为了更细粒度的对隐私数据进行划分，授权是在认证通过后发生的，控制不同的用户能够访问不同的资源。 
+> 认证是`为了保证用户身份的合法性`，授权则是`为了更细粒度的对隐私数据进行划分`，授权是在认证通过后发生的，控制不同的用户能够访问不同的资源。 
 
-``授权`` 用户认证通过根据用户的权限来控制用户访问资源的过程，拥有资源的访问权限则正常访问，没有权限则拒绝访问。
+``授权`` 通过根据用户的权限来控制用户访问资源的过程，拥有资源的访问权限则正常访问，没有权限则拒绝访问。
 
 ### 1.4 授权的数据模型
 
@@ -382,11 +382,47 @@ Spring Security功能的实现主要是由一系列过滤器链相互配合完�
 
 ``ExceptionTranslationFilter`` 能够捕获来自 FilterChain 所有的异常，并进行处理。但是它只会处理两类异常： AuthenticationException 和 AccessDeniedException，其它的异常它会继续抛出。
 
-`ClientCredentialsTokenEndpointFilter` 对于获取 TOKEN 的请求(默认是 /oauth/token)，需要认证 client_id 和 client_secret
+> OAuth 2 中的 Filter：
+>
+> `ClientCredentialsTokenEndpointFilter` 对于获取 TOKEN 的请求(默认是 /oauth/token)，需要认证 client_id 和 client_secret
 
 ### 3.2 认证流程
 
 ![image-20200901214128065](Spring Security.assets/image-20200901214128065.png)
+
+```java
+/***************** AbstractAuthenticationProcessingFilter *****************/
+public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
+		throws IOException, ServletException {
+    // 子类 UsernamePasswordAuthenticationFilter 实现
+    authResult = attemptAuthentication(request, response);
+    // ...
+	successfulAuthentication(request, response, chain, authResult);
+}
+/***************** UsernamePasswordAuthenticationFilter *****************/
+public Authentication attemptAuthentication(HttpServletRequest request,
+      HttpServletResponse response) throws AuthenticationException {
+   if (postOnly && !request.getMethod().equals("POST")) {
+      throw new AuthenticationServiceException(
+            "Authentication method not supported: " + request.getMethod());
+   }
+   String username = obtainUsername(request);
+   String password = obtainPassword(request);
+   if (username == null) {
+      username = "";
+   }
+   if (password == null) {
+      password = "";
+   }
+   username = username.trim();
+   UsernamePasswordAuthenticationToken authRequest = new UsernamePasswordAuthenticationToken(
+         username, password);
+   // Allow subclasses to set the "details" property
+   setDetails(request, authRequest);
+   // 委托 AuthenticationManager 进行认证
+   return this.getAuthenticationManager().authenticate(authRequest);
+}
+```
 
 让我们仔细分析认证过程： 
 
@@ -404,7 +440,93 @@ Spring Security功能的实现主要是由一系列过滤器链相互配合完�
 
 <img src="Spring Security.assets/image-20200901215204133.png" alt="image-20200901215204133" style="zoom:50%;" />
 
-#### 3.2.1 AuthenticationProvider
+#### 3.2.1 AuthenticationManager
+
+从认证流程中可知实际的认证交给了 AuthenticationManager 处理，即是从 getAuthenticationManager() 方法取到的 ：
+
+```java
+/***************** AbstractAuthenticationFilterConfigurer *****************/
+public void configure(B http) throws Exception {
+    // ...
+    // 设置 AuthenticationManager
+	authFilter.setAuthenticationManager(http.getSharedObject(AuthenticationManager.class));
+}
+/***************** AbstractConfiguredSecurityBuilder *****************/
+private final Map<Class<?>, Object> sharedObjects = new HashMap<>();
+public <C> C getSharedObject(Class<C> sharedType) {
+    // 从 sharedObjects 的 HashMap 中获取
+	return (C) this.sharedObjects.get(sharedType);
+}
+public <C> void setSharedObject(Class<C> sharedType, C object) {
+	this.sharedObjects.put(sharedType, object);
+}
+/***************** HttpSecurity *****************/
+public HttpSecurity(ObjectPostProcessor<Object> objectPostProcessor,
+		AuthenticationManagerBuilder authenticationBuilder,
+		Map<Class<?>, Object> sharedObjects) {
+	// 设置一个 AuthenticationManagerBuilder
+	setSharedObject(AuthenticationManagerBuilder.class, authenticationBuilder);
+	// ...
+}
+@Override
+protected void beforeConfigure() throws Exception {
+    // getAuthenticationRegistry 返回初始化时设置的 AuthenticationManagerBuilder
+    // WebSecurityConfigurerAdapter$DefaultPasswordEncoderAuthenticationManagerBuilder
+	setSharedObject(AuthenticationManager.class, getAuthenticationRegistry().build());
+}
+/***************** WebSecurityConfigurerAdapter *****************/
+public void setApplicationContext(ApplicationContext context) {
+    authenticationBuilder = new DefaultPasswordEncoderAuthenticationManagerBuilder(objectPostProcessor, passwordEncoder);
+}
+```
+
+从 `getAuthenticationRegistry()` 返回的是 WebSecurityConfigurerAdapter 的内部类 `DefaultPasswordEncoderAuthenticationManagerBuilder`，所以后续执行它的 build() 方法，但是其未实现该方法：
+
+```java
+// DefaultPasswordEncoderAuthenticationManagerBuilder extends AuthenticationManagerBuilder
+// AuthenticationManagerBuilder extends AbstractConfiguredSecurityBuilder
+// AbstractConfiguredSecurityBuilder extends AbstractSecurityBuilder
+/***************** AbstractSecurityBuilder *****************/
+public final O build() throws Exception {
+	if (this.building.compareAndSet(false, true)) {
+		this.object = doBuild();
+		return this.object;
+	}
+	throw new AlreadyBuiltException("This object has already been built");
+}
+/***************** AbstractConfiguredSecurityBuilder *****************/
+protected final O doBuild() throws Exception {
+	synchronized (configurers) {
+		buildState = BuildState.INITIALIZING;
+		beforeInit();
+		init();
+		buildState = BuildState.CONFIGURING;
+		beforeConfigure();
+		configure();
+		buildState = BuildState.BUILDING;
+		O result = performBuild();
+		buildState = BuildState.BUILT;
+		return result;
+	}
+}
+/***************** AuthenticationManagerBuilder *****************/
+protected ProviderManager performBuild() throws Exception {
+	//...
+    // 由此可见，最终的 AuthenticationManager 是 ProviderManager
+	ProviderManager providerManager = new ProviderManager(authenticationProviders,
+			parentAuthenticationManager);
+	if (eraseCredentials != null) {
+		providerManager.setEraseCredentialsAfterAuthentication(eraseCredentials);
+	}
+	if (eventPublisher != null) {
+		providerManager.setAuthenticationEventPublisher(eventPublisher);
+	}
+	providerManager = postProcess(providerManager);
+	return providerManager;
+}
+```
+
+#### 3.2.2 AuthenticationProvider
 
 通过前面的 Spring Security 认证流程我们得知，``认证管理器（AuthenticationManager）``委托 ``AuthenticationProvider``完成认证工作。 
 
@@ -465,7 +587,7 @@ public interface Authentication extends Principal, Serializable {
 
 5. ``getPrincipal()`` 身份信息，大部分情况下返回的是UserDetails接口的实现类，UserDetails代表用户的详细信息，那从Authentication中取出来的UserDetails就是当前登录用户信息，它也是框架中的常用接口之一。 
 
-#### 3.2.2 UserDetailsService
+#### 3.2.3 UserDetailsService
 
 DaoAuthenticationProvider处理了web表单的认证逻辑，认证成功后既得到一个Authentication(UsernamePasswordAuthenticationToken实现)，里面包含了身份信息（Principal）。这个身份信息就是一个 Object ，大多数情况下它可以被强转为UserDetails对象。 
 
@@ -530,7 +652,7 @@ public class SpringDataUserDetailsService implements UserDetailsService {
 public UserDetailsService userDetailsService() { } */
 ```
 
-#### 3.2.3 PasswordEncoder
+#### 3.2.4 PasswordEncoder
 
 DaoAuthenticationProvider 认证处理器通过 UserDetailsService 获取到 UserDetails 后，它是如何与请求 Authentication 中的密码做对比呢？ 
 
