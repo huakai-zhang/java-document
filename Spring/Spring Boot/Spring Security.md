@@ -426,15 +426,13 @@ public Authentication attemptAuthentication(HttpServletRequest request,
 
 让我们仔细分析认证过程： 
 
-1. 用户提交用户名、密码被 SecurityFilterChain 中的 ``UsernamePasswordAuthenticationFilter`` 过滤器获取到， 封装为请求Authentication，通常情况下是``UsernamePasswordAuthenticationToken``这个实现类。 
+1. 用户提交用户名、密码被 SecurityFilterChain 中的 ``UsernamePasswordAuthenticationFilter`` 过滤器获取到， 封装为请求 Authentication，通常情况下是``UsernamePasswordAuthenticationToken``这个实现类。 
 
-2. 然后过滤器将Authentication提交至认证管理器（AuthenticationManager）进行认证 
+2. 然后过滤器将 Authentication 提交至认证管理器（AuthenticationManager）进行认证 
 
 3. 认证成功后， AuthenticationManager 身份管理器返回一个被填充满了信息的（包括上面提到的权限信息，身份信息，细节信息，但密码通常会被移除） Authentication 实例。 
 
 4. SecurityContextHolder 安全上下文容器将第3步填充了信息的 Authentication ，通过 SecurityContextHolder.getContext().setAuthentication(…)方法，设置到其中。 
-
-可以看出AuthenticationManager接口（认证管理器）是认证相关的核心接口，也是发起认证的出发点，它的实现类为ProviderManager。而Spring Security支持多种认证方式，因此ProviderManager维护着一个``List<AuthenticationProvider> ``列表，存放多种认证方式，最终实际的认证工作是由 AuthenticationProvider 完成的。咱们知道web表单的对应的AuthenticationProvider实现类为 DaoAuthenticationProvider，它的内部又维护着一个UserDetailsService负责UserDetails的获取。最终 AuthenticationProvider将UserDetails填充至Authentication。 
 
 认证核心组件的大体关系如下：
 
@@ -526,6 +524,25 @@ protected ProviderManager performBuild() throws Exception {
 }
 ```
 
+可以看出 AuthenticationManager 接口（认证管理器）是认证相关的核心接口，也是发起认证的出发点，它的实现类为 `ProviderManager`。而 Spring Security 支持多种认证方式，因此 ProviderManager 维护着一个``List<AuthenticationProvider> ``列表，存放多种认证方式，最终实际的认证工作是由 AuthenticationProvider 完成的。咱们知道 web 表单的对应的 AuthenticationProvider 实现类为 `DaoAuthenticationProvider`，它的内部又维护着一个 `UserDetailsService` 负责 UserDetails 的获取。最终 AuthenticationProvider 将 UserDetails 填充至 Authentication。 
+
+```java
+/***************** ProviderManager *****************/
+private List<AuthenticationProvider> providers = Collections.emptyList();
+public Authentication authenticate(Authentication authentication)
+      throws AuthenticationException {
+   //...
+   // provider == DaoAuthenticationProvider
+   for (AuthenticationProvider provider : getProviders()) {
+      if (!provider.supports(toTest)) {
+         continue;
+      }
+      result = provider.authenticate(authentication);
+       //...
+   }
+}
+```
+
 #### 3.2.2 AuthenticationProvider
 
 通过前面的 Spring Security 认证流程我们得知，``认证管理器（AuthenticationManager）``委托 ``AuthenticationProvider``完成认证工作。 
@@ -554,11 +571,58 @@ public boolean supports(Class<?> authentication) {
 	return (UsernamePasswordAuthenticationToken.class
 			.isAssignableFrom(authentication));
 }
+public Authentication authenticate(Authentication authentication)
+		throws AuthenticationException {
+	//...
+	user = retrieveUser(username, (UsernamePasswordAuthenticationToken) authentication);
+    // 校验 userDetails 信息是否正确，即密码是否一致
+	additionalAuthenticationChecks(user, (UsernamePasswordAuthenticationToken) authentication);
+	return createSuccessAuthentication(principalToReturn, authentication, user);
+}
+/***************** DaoAuthenticationProvider  *****************/
+protected final UserDetails retrieveUser(String username,
+		UsernamePasswordAuthenticationToken authentication)
+		throws AuthenticationException {
+    // this.getUserDetailsService()
+    // 执行自定义 UserDetailsService 的 loadUserByUsername 方法
+    UserDetails loadedUser = this.getUserDetailsService().loadUserByUsername(username);
+    if (loadedUser == null) {
+        throw new InternalAuthenticationServiceException(
+            "UserDetailsService returned null, which is an interface contract violation");
+    }
+    return loadedUser;
+}
+/***************** InitializeUserDetailsManagerConfigurer  *****************/
+// DaoAuthenticationProvider 中所需的 UserDetailsService 和 PasswordEncoder，来源于此处的配置
+public void configure(AuthenticationManagerBuilder auth) throws Exception {
+    // 获取上下文中的 UserDetailsService(自定义实现的)
+	UserDetailsService userDetailsService = getBeanOrNull(UserDetailsService.class);
+	if (userDetailsService == null) {
+		return;
+	}
+	PasswordEncoder passwordEncoder = getBeanOrNull(PasswordEncoder.class);
+	UserDetailsPasswordService passwordManager = getBeanOrNull(UserDetailsPasswordService.class);
+	DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+	provider.setUserDetailsService(userDetailsService);
+    if (passwordEncoder != null) {
+        provider.setPasswordEncoder(passwordEncoder);
+    }
+}
+private <T> T getBeanOrNull(Class<T> type) {
+    // AbstractApplicationContext -> DefaultListableBeanFactory.getBeanNamesForType -> doGetBeanNamesForType(class, true, true)
+	String[] beanNames = InitializeUserDetailsBeanManagerConfigurer.this.context
+			.getBeanNamesForType(type);
+	if (beanNames.length != 1) {
+		return null;
+	}
+	return InitializeUserDetailsBeanManagerConfigurer.this.context
+			.getBean(beanNames[0], type);
+}
 ```
 
-也就是说``当web表单提交用户名密码时``，Spring Security由DaoAuthenticationProvider处理。
+也就是说``当web表单提交用户名密码时``，Spring Security 由 DaoAuthenticationProvider 处理。
 
-最后，我们来看一下``Authentication(认证信息)``的结构，它是一个接口，我们之前提到的 UsernamePasswordAuthenticationToken就是它的实现之一： 
+最后，我们来看一下``Authentication(认证信息)``的结构，它是一个接口，我们之前提到的 UsernamePasswordAuthenticationToken 就是它的实现之一： 
 
 ```java
 public interface Authentication extends Principal, Serializable {
@@ -575,9 +639,19 @@ public interface Authentication extends Principal, Serializable {
 
 	void setAuthenticated(boolean isAuthenticated) throws IllegalArgumentException;
 }
+// AbstractUserDetailsAuthenticationProvider 最终调用 createSuccessAuthentication 方法返回 Authentication
+// 即其实现类 UsernamePasswordAuthenticationToken
+protected Authentication createSuccessAuthentication(Object principal,
+		Authentication authentication, UserDetails user) {
+	UsernamePasswordAuthenticationToken result = new UsernamePasswordAuthenticationToken(
+			principal, authentication.getCredentials(),
+			authoritiesMapper.mapAuthorities(user.getAuthorities()));
+	result.setDetails(authentication.getDetails());
+	return result;
+}
 ```
 
-1. Authentication是spring security包中的接口，直接继承自Principal类，而Principal是位于 java.security 包中的。它是表示着一个抽象主体身份，任何主体都有一个名称，因此包含一个getName()方法。 
+1. Authentication 是spring security 包中的接口，直接继承自 `Principal` 类，而 Principal 是位于 java.security 包中的。它是表示着一个抽象主体身份，任何主体都有一个名称，因此包含一个getName()方法。 
 
 2. ``getAuthorities()`` 权限信息列表，默认是GrantedAuthority接口的一些实现类，通常是代表权限信息的一系列字符串。 
 
@@ -589,18 +663,17 @@ public interface Authentication extends Principal, Serializable {
 
 #### 3.2.3 UserDetailsService
 
-DaoAuthenticationProvider处理了web表单的认证逻辑，认证成功后既得到一个Authentication(UsernamePasswordAuthenticationToken实现)，里面包含了身份信息（Principal）。这个身份信息就是一个 Object ，大多数情况下它可以被强转为UserDetails对象。 
+DaoAuthenticationProvider 处理了 web 表单的认证逻辑，认证成功后既得到一个Authentication(UsernamePasswordAuthenticationToken实现)，里面包含了身份信息（Principal）。这个身份信息就是一个 Object ，大多数情况下它可以被强转为UserDetails对象。 
 
 DaoAuthenticationProvider中包含了一个UserDetailsService实例，它负责根据用户名提取用户信息UserDetails(包含密码)，而后DaoAuthenticationProvider会去对比UserDetailsService提取的用户密码与用户提交的密码是否匹配作为认证成功的关键依据，因此可以通过将自定义的 UserDetailsService 公开为spring bean来定义自定义身份验证。 
 
 ```java
 public interface UserDetailsService {
-
 	UserDetails loadUserByUsername(String username) throws UsernameNotFoundException;
 }
 ```
 
-很多人把 DaoAuthenticationProvider 和 UserDetailsService 的职责搞混淆，其实UserDetailsService只负责从特定的地方（通常是数据库）加载用户信息，仅此而已。而DaoAuthenticationProvider的职责更大，它完成完整的认 证流程，同时会把UserDetails填充至Authentication。 
+很多人把 DaoAuthenticationProvider 和 UserDetailsService 的职责搞混淆，其实UserDetailsService只负责从`特定的地方（通常是数据库）加载用户信息`，仅此而已。而DaoAuthenticationProvider的职责更大，它完成完整的认证流程，同时会把UserDetails填充至Authentication。 
 
 上面一直提到UserDetails是用户信息，咱们看一下它的真面目：
 
@@ -625,7 +698,7 @@ public interface UserDetails extends Serializable {
 
 通过实现UserDetailsService和UserDetails，我们可以完成对用户信息获取方式以及用户信息字段的扩展。 
 
-Spring Security提供的InMemoryUserDetailsManager(内存认证)，JdbcUserDetailsManager(jdbc认证)就是UserDetailsService的实现类，主要区别无非就是从内存还是从数据库加载用户。 
+Spring Security提供的`InMemoryUserDetailsManager(内存认证)`，`JdbcUserDetailsManager(jdbc认证)`就是UserDetailsService的实现类，主要区别无非就是从内存还是从数据库加载用户。 
 
 自定义UserDetailsService :
 
@@ -756,11 +829,11 @@ UserDetails userDetails = User.withUsername(username).password("$2a$10$c4G.dGQSK
 
 ### 3.3 授权流程
 
-Spring Security可以通过 http.authorizeRequests() 对web请求进行授权保护。Spring Security使用标准Filter建立了对web请求的拦截，最终实现对资源的授权访问。 
+Spring Security可以通过 `http.authorizeRequests() 对web请求进行授权保护`。Spring Security使用标准Filter建立了对web请求的拦截，最终实现对资源的授权访问。 
 
 Spring Security的授权流程如下：
 
-![image-20200901223746453](Spring Security.assets/image-20200901223746453.png)
+<img src="Spring Security.assets/image-20200901223746453.png" alt="image-20200901223746453" style="zoom:50%;" />
 
 分析授权流程： 
 
@@ -1343,8 +1416,6 @@ PRIMARY KEY (`role_id`,`permission_id`)
 insert into `t_role_permission`(`role_id`,`permission_id`) values ('1','1'),('1','2'); 
 ```
 
-
-
 在UserDao中添加：
 
 ```java
@@ -1362,8 +1433,6 @@ public List<String> findPermissionsByUserId(String userId){
     return permissions;
 }
 ```
-
-
 
 修改UserDetailService :
 
@@ -1431,8 +1500,6 @@ http
 
 因此,登录页面的规则应该在/ admin/**规则之前。
 
-
-
 保护URL常用的方法有： 
 
 ``authenticated()`` 保护URL，需要用户登录 
@@ -1486,8 +1553,6 @@ public interface BankService {
 
 post方法需要有TELLER角色才能访问，底层使用RoleVoter投票器。 
 
-
-
 使用如下代码可启用prePost注解的支持 
 
 ```java
@@ -1495,7 +1560,6 @@ post方法需要有TELLER角色才能访问，底层使用RoleVoter投票器。
 public class MethodSecurityConfig { 
 	...
 } 
-
 
 public interface BankService { 
 	@PreAuthorize("isAnonymous()") 
@@ -1545,9 +1609,11 @@ public interface BankService {
 
 ``统一认证服务(UAA)``
 
-它承载了OAuth2.0接入方认证、登入用户的认证、授权以及生成令牌的职责，完成实际的用户认证、授权功能。 
+它承载了 OAuth2.0 接入方认证、登入用户的认证、授权以及生成令牌的职责，完成实际的用户认证、授权功能。 
 
 ``API网关``
 
 作为系统的唯一入口，API网关为接入方提供定制的API集合，它可能还具有其它职责，如身份验证、监控、负载均衡、缓存等。API网关方式的核心要点是，所有的接入方和消费端都通过统一的网关接入微服务，在网关层处理所有的非业务功能。
+
+------
 
