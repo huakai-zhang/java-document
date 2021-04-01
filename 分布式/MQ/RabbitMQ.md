@@ -152,7 +152,7 @@ rpm -ivh esl-erlang_23.0.2-2_centos_7_amd64.rpm
 # 2.安装RabbitMQ安装包
 ## 可能需要先安装！！
 yum install socat
-rpm -ivh rabbitmq-server-3.7.17-1.el7.noarch.rpm
+rpm -ivh rabbitmq-server-3.8.5-1.el7.noarch.rpm
 
 # 3.执行如下命令,启动rabbitmq中的插件管理
 rabbitmq-plugins enable rabbitmq_management

@@ -118,7 +118,70 @@ RabbitMQ 本身不支持延迟队列，总的来说有三种实现方案：
 
 #### 1.3.2.基于延迟队列插件的实现（Linux）
 
-在 RabbitMQ 3.5.7 及以后的版本提供了一个插件（rabbitmq-delayed-message-exchange）来实现延时队列功能。同时插件依赖Erlang/OPT 18.0 及以上。 
+在 RabbitMQ 3.5.7 及以后的版本提供了一个插件 `rabbitmq-delayed-message-exchange` 来实现延时队列功能。同时插件依赖Erlang/OPT 18.0 及以上。 
+
+[下载插件](https://www.rabbitmq.com/community-plugins.html) --》 rabbitmq_delayed_message_exchange --》 Download for 3.7.x and 3.8.x
+
+```markdown
+# 上传 rabbitmq_delayed_message_exchange-3.8.0.ez 至
+# Linux /usr/lib/rabbitmq/lib/rabbitmq_server-3.8.5/plugins
+# Windows C:\Program Files\RabbitMQ Server\rabbitmq_server-3.8.5\plugins
+	rabbitmq-plugins enable rabbitmq_delayed_message_exchange
+```
+
+```java
+@Configuration
+public class RabbitMqConfig {
+
+   public static final String DELAY_EXCHANGE = "delay_exchange";
+
+   public static  final String DELAY_QUEUE = "delay_queue";
+
+   //延时队列
+   @Bean
+   public Queue delayQueue(){
+      return new Queue(DELAY_QUEUE,true);
+   }
+
+   //延时交换机
+   @Bean
+   public CustomExchange delayExchange(){
+      Map<String,Object> args = new HashMap<>();
+      args.put("x-delayed-type", "direct");
+      return new CustomExchange(DELAY_EXCHANGE, "x-delayed-message",true, false, args);
+   }
+
+   //绑定延时队列与交换机
+   @Bean
+   public Binding delayBind(){
+      return BindingBuilder.bind(delayQueue()).to(delayExchange()).with("order.*").noargs();
+   }
+}
+@Slf4j
+@Component
+public class DelayConsumer {
+    @RabbitListener(queues = RabbitMqConfig.DELAY_QUEUE)
+    public void process(String context, Message message, Channel channel)throws IOException {
+        try {
+            log.info("开始执行订单[{}]的支付超时订单关闭......", context);
+            System.out.println(new Date() + " Delay get: " + context);
+            channel.basicAck(message.getMessageProperties().getDeliveryTag(), false);
+            log.info("超时订单{}处理完毕",context);
+        }catch (Exception e){
+            log.error("超时订单处理失败:{}",context);
+            e.printStackTrace();
+            //这里会不断消费吗？
+            channel.basicReject(message.getMessageProperties().getDeliveryTag(),false);
+        }
+    }
+}
+
+rabbitTemplate.convertAndSend(RabbitMqConfig.DELAY_EXCHANGE, "order.delay", "延迟队列测试" , message -> {
+    message.getMessageProperties().setDelay(20 * 60 * 1000);
+    System.out.println(new Date() + " Delay sent.");
+    return message;
+});
+```
 
 ### 1.4 服务端流控(Flow Control)
 
