@@ -20,59 +20,75 @@ help 命令名
 
 ### ls
 
-ls：全拼list，功能是列出目录的内容及其内容属性信息。
+> `ls(list)` 功能是列出目录的内容及其内容属性信息
+
+`ls -l` 显示文件和目录的详细资料
+
+`ls -a` 列出全部文件，包含隐藏文件
+
+`ls -R` 连同子目录的内容一起列出（递归列出），等于该目录下的所有文件都会显示出来
 
 ### cd
 
-cd：全拼change directory，功能是从当前工作目录切换到指定的工作目录。
+> `cd(change directory)` 功能是从当前工作目录切换到指定的工作目录
+
+`cd` 进入个人的主目录
+
+`cd -` 返回上次所在的目录
 
 ### cp
 
-cp：全拼copy，其功能为复制文件或目录。
+`cp(copy)` 其功能为复制文件或目录
 
 ### find
 
-find：查找的意思，用于查找目录及目录下的文件。
+> `find` 查找的意思，用于查找目录及目录下的文件
 
--cmin n : 在过去 n 分钟内被修改过
+`-cmin n` 在过去 n 分钟内被修改过
 
--cnewer file :比文件 file 更新的文件
+`-cnewer file` 比文件 file 还要新的文件
 
--ctime n : 在过去n天内被修改过的文件
+`-mtime n` 在过去 n 天内被创建或内容被修改过的文件
 
--empty : 空的文件-gid n or -group name : gid 是 n 或是 group 名称是 name
+> `atime(access time)` 文件被读取或者执行的时间
+>
+> `mtime(modify time)` 更改文件内容
+>
+> `ctime(change time)` 更改文件任何属性
 
--ipath p, -path p : 路径名称符合 p 的文件，ipath 会忽略大小写
+`-empty` 空的文件
 
--name name, -iname name : 文件名称符合 name 的文件。iname 会忽略大小写
+`-name name` 文件名称符合 name 的文件，iname 会忽略大小写
 
--size n : 文件大小 是 n 单位，b 代表 512 位元组的区块，c 表示字元数，k 表示 kilo bytes，w 是二个位元组。
+`-size [+,-]n[b,k,M,G]` 文件大小是大于/小于 n 单位
 
--type c : 文件类型是 c 的文件。
+`-type c` 文件类型是 c 的文件
 
-​		d: 目录
-
-​		c: 字型装置文件
-
-​		b: 区块装置文件
-
-​		p: 具名贮列
-
-​		f: 一般文件
-
-​		l: 符号连结
-
-​		s: socket
+> b	区块装置文件
+>
+> c	字型装置文件
+>
+> d	目录
+>
+> f	一般文件
+>
+> l	符号连结
+>
+> p	具名贮列
+>
+> s	socket
 
 ```markdown
 # 将目前目录及其子目录下所有延伸档名是 xml 的文件列出来
 	find . -name *.xml
+		find / xxx 表示从根目录查找
+		find . xxx 表示从当前目录查找
 
 # 将目前目录其其下子目录中所有目录列出
 	find . -type d
 
 # 将目前目录及其子目录下所有最近 1 天内更新过的文件列出
-find . -ctime -1
+	find . -ctime -1
 ```
 
 ### mkdir
@@ -81,11 +97,11 @@ mkdir：全拼make directories，其功能是创建目录。
 
 ### mv
 
-mv：全拼move，其功能是移动或重命名文件。
+`mv(move)` 其功能是移动或重命名文件
 
 ### pwd
 
-pwd：全拼print working directory，其功能是显示当前工作目录的绝对路径。
+`pwd(print working directory)` 其功能是显示当前工作目录的绝对路径
 
 ### rename
 
@@ -93,13 +109,13 @@ rename：用于重命名文件。
 
 ### rm
 
-rm：全拼remove，其功能是删除一个或多个文件或目录。
+> `rm(remove)` 其功能是删除一个或多个文件或目录
 
--i 删除前逐一询问确认。
+`-i` 删除前逐一询问确认
 
--f 即使原档案属性设为唯读，亦直接删除，无需逐一确认。
+`-f` 即使原档案属性设为唯读，亦直接删除，无需逐一确认
 
--r 将目录及以下之档案亦逐一删除。
+`-r` 将目录及以下之档案亦逐一删除
 
 ```markdown
 # 删除spring目录下的所有文件及目录
@@ -116,13 +132,17 @@ file：显示文件的类型。
 
 ## 查看文件及内容处理命令
 
-more：分页显示文件内容。
+`cat` 从第一个字节开始正向查看文件的内容，`-n` 可标示文件行数
 
-less：分页显示文件内容，more命令的相反用法。
+`more` 分页显示文件内容
 
-head：显示文件内容的头部。
+`less` 分页显示文件内容，more命令的相反用法
 
-tail：显示文件内容的尾部。
+`head` 显示文件内容的头部，`-n` 表示前 n 行
+
+`tail` 显示文件内容的尾部，`-n` 表示最后 n 行
+
+> `tail -n +1000 file1` 从1000行开始显示，显示1000行以后的
 
 ```shell
 # 单个关键词高亮显示
@@ -137,13 +157,26 @@ tail -f xxx.log | perl -pe 's/(关键词1)|(关键词2)/\e[1;颜色1$1\e[0m\e[1;
 35m：紫
 36m：青
 37m：白
+# 显示1000行到3000行
+cat filename | head -n 3000 | tail -n +1000
+```
+
+`grep` 分析一行的信息，若当中有我们所需要的信息，就将该行显示出来，该命令通常与管道命令一起使用，用于对一些命令的输出进行筛选加工等等
+
+```shell
+# 在文件 '/var/log/messages'中查找关键词"Aug"
+grep Aug /var/log/messages
+# 在文件 '/var/log/messages'中查找以"Aug"开始的词汇
+grep ^Aug /var/log/messages
+# 选择 '/var/log/messages' 文件中所有包含数字的行
+grep [0-9] /var/log/messages
+# 在目录 '/var/log' 及随后的目录中搜索字符串"Aug"
+grep Aug -R /var/log/*
 ```
 
 wc：统计文件的行数、单词数或字节数。
 
 iconv：转换文件的编码格式。
-
-grep/egrep：过滤字符串
 
 vi/vim：命令行文本编辑器。
 

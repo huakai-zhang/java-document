@@ -773,7 +773,67 @@ key_len显示的值为索引最大可能长度，并非实际使用长度，即k
 
 第五行（执行顺序5）：代表从union的临时表中读取行的阶段，table列的<union1,4>表示用第一个和第四个select的结果进行union操作。【两个结果union操作】
 
-## 3.4 Show profiles
+## 3.4 查询优化方案
+
+**1. 避免索引失效，充分利用已经存在的索引**
+
+对照 MySQL 索引 5.3
+
+**2. 查询尽可能使用 limit 减少返回的行数**
+
+减少数据传输时间和带宽浪费
+
+**3. 避免使用子查询，可以把子查询优化为 JOIN 操作，同时避免使用 JOIN 关联太多的表**
+
+子查询的结果集无法使用索引，通常子查询的结果集会被存储到临时表中，不论是内存临时表还是磁盘临时表都不会存在索引。
+
+MySQL 的关联缓存大小可以由 `join_buffer_size` 参数进行设置。多关联（join）一个表，就会多分配一个关联缓存，占用的内存也就越大。
+
+如果程序中大量的使用了多表关联的操作，同时 join_buffer_size 设置的也不合理的情况下，就容易造成服务器内存溢出的情况，就会影响到服务器数据库性能的稳定性。
+
+同时对于关联操作来说，会产生临时表操作，影响查询效率，MySQL 最多允许关联 61 个表，建议不超过 5 个。
+
+**4. 减少同数据库的交互次数**
+
+数据库更适合处理批量操作，合并多个相同的操作到一起，可以提高处理效率(包括新增和更新操作)。
+
+## 3.5 数据库设计方案
+
+> 数据库三大范式
+>
+> `第一范式`用来确保每列的原子性，要求每列（或者每个属性值）都是不可再分的最小数据单元（也称为最小的原子单元）。
+>
+> `第二范式`在第一范式的基础上更进一层，要求表中的每列都和主键相关，即要求实体的唯一性。如果一个表满足第一范式，并且除了主键以外的其他列全部都依赖于该主键，那么该表满足第二范式。
+>
+> `第三范式`在第二范式的基础上，确保每列都和主键列直接相关，而不是间接相关(传递依赖)，即限制列的冗余性。如果一个关系满足第二范式，并且除了主键以外的其他列都依赖于主键列，列和列之间不存在相互依赖关系，则满足第三范式。
+
+**1. 字段数据类型**
+
+* 优先选择符合存储需要的最小的数据类型
+
+  列的字段越大，建立索引时所需要的空间也就越大，这样一页中所能存储的索引节点的数量也就越少也越少，在遍历时所需要的 IO 次数也就越多，索引的性能也就越差。
+
+  将字符串转换成数字类型存储
+
+  对于非负型的数据(如自增 ID)要优先使用无符号整型来存储
+
+* 字段类型使用 TIMESTAMP(4 个字节) 或 DATETIME 类型 (8 个字节) 存储时间
+
+* 金额和重量数据必须使用 decimal 类型
+
+* 避免使用 TEXT 和 BLOB 数据类型
+
+  因为 MySQL 对索引字段长度是有限制的，所以 TEXT 类型只能使用前缀索引，并且 TEXT 列上是不能有默认值的
+
+**2. 尽可能把所有列定义为 NOT NULL**
+
+`空''` 在存储过程中是不会占用空间的，但是 `NULL` 会。
+
+如果要查询表的 NULL 需要使用 `is null` 或 `is not null`，如果直接使用 `=/!=/in/not inl` 将查询不到值。
+
+Mysql 的索引会为 NULL 值做特殊处理(未设置 NOT NULL 情况下)，导致整个索引的查询效率下降。如果是语句中有 `is null` 会使用索引，如果语句中有`is not null` 则会导致索引失效。
+
+## 3.6 Show profiles
 
 `Show profiles` 是 mysql 提供可以用来分析当前会话中语句执行的资源消耗情况。可以用于SQL的调优测量。
 
@@ -834,9 +894,9 @@ show profile cpu,block io for query 3;
 
 ![1601199549766](file:///Users/spring_zhang/Documents/%E8%8A%B1%E5%BC%80%E4%B8%8D%E5%90%88%E9%98%B3%E6%98%A5%E6%9A%AE/java-document/%E6%95%B0%E6%8D%AE%E5%BA%93/MySQL%20%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96.assets/1601199549766.png?lastModify=1613535673)
 
-## 3.5 其他系统命令
+## 3.7 其他系统命令
 
-### 3.5.1 全局查询日志
+### 3.7.1 全局查询日志
 
 **配置启用**
 
@@ -863,7 +923,7 @@ select * from mysql.general_log;
 
 ``永远不要在生产环境开启这个功能。``
 
-### 3.5.2 show processlist 运行线程
+### 3.7.2 show processlist 运行线程
 
 ```mysql
 show processlist; 
@@ -885,7 +945,7 @@ select * from information_schema.processlist;
 | State   | 线程状态，比如查询可能有 copying to tmp table，Sorting result，Sending data https://dev.mysql.com/doc/refman/5.7/en/general-thread-states.html |
 | Info    | SQL 语句的前 100 个字符，如果要查看完整的 SQL 语句，用 SHOW FULL PROCESSLIST |
 
-### 3.5.3 show status 服务器运行状态
+### 3.7.3 show status 服务器运行状态
 
 [SHOW STATUS](https://dev.mysql.com/doc/refman/5.7/en/show-status.html) 用于查看 MySQL 服务器运行状态（重启后会清空），有 session 和 global 两种作用域，格式：参数-值。 
 
@@ -895,7 +955,7 @@ select * from information_schema.processlist;
 SHOW GLOBAL STATUS LIKE 'com_select'; -- 查看 select 次数 
 ```
 
-### 3.5.4 show engine 存储引擎运行信息
+### 3.7.4 show engine 存储引擎运行信息
 
 [SHOW ENGINE](https://dev.mysql.com/doc/refman/5.7/en/show-engine.html ) 用来显示存储引擎的当前运行信息，包括事务持有的表锁、行锁信息、事务的锁等待情况、线程信号量等待、文件 IO 请求、buffer pool 统计信息。 
 

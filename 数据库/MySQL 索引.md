@@ -783,7 +783,11 @@ EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND age > 11 AND pos = 'manager
 
 > `回表` 非主键索引，我们先通过索引找到主键索引的键值，再通过主键值查出索引里面没有的数据，它比基于主键索引的查询多扫描了一棵索引树，这个过程就叫回表。
 
-尽量使用`覆盖索引`(只访问索引的查询(索引列和查询列一致))，减少 select
+尽量使用`覆盖索引`(只访问索引的查询(索引列和查询列一致，不要返回用不到的任何字段))，减少 select
+
+- 减少消耗 CPU 和 IO 网络带宽资源
+- 可使用覆盖索引
+- 可减少表结构变更带来的影响
 
 ```mysql
 EXPLAIN SELECT name, age, pos FROM staffs WHERE name = 'July' AND age = 23 AND pos = 'dev';
@@ -811,7 +815,7 @@ EXPLAIN SELECT * FROM staffs WHERE name != 'July' AND age = 11 AND pos = 'manage
 
 ### 7.is null 和 is not null
 
-is null,is not null 也无法使用索引
+`索引列设置为 NOT NULL` 情况下，is null 与 is not null 均无法使用索引
 
 ```mysql
 EXPLAIN SELECT * FROM staffs WHERE name is null;
@@ -904,6 +908,8 @@ explain select * from staffs where name = 'July' or name = 'z3';
 ```
 
 ![1600998091903](MySQL 索引.assets/1600998091903.png)
+
+`可使用 in 代替 or` in 操作可以更有效的利用索引，or 大多数情况下很少能利用到索引。
 
 ### 小结
 
