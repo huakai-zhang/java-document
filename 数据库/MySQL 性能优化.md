@@ -918,9 +918,9 @@ show profile cpu,block io for query 3;
 
 参数备注：
 
-![1601199661301](file:///Users/spring_zhang/Documents/%E8%8A%B1%E5%BC%80%E4%B8%8D%E5%90%88%E9%98%B3%E6%98%A5%E6%9A%AE/java-document/%E6%95%B0%E6%8D%AE%E5%BA%93/MySQL%20%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96.assets/1601199661301.png?lastModify=1613535673)
+![1600939704485](MySQL 性能优化.assets/1601199661301.png)
 
-![1601199549766](file:///Users/spring_zhang/Documents/%E8%8A%B1%E5%BC%80%E4%B8%8D%E5%90%88%E9%98%B3%E6%98%A5%E6%9A%AE/java-document/%E6%95%B0%E6%8D%AE%E5%BA%93/MySQL%20%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96.assets/1601199549766.png?lastModify=1613535673)
+![1601199549766](MySQL 性能优化.assets/1601199549766.png?lastModify=1613535673)
 
 ## 3.7 其他系统命令
 
