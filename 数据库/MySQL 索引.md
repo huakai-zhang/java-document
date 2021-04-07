@@ -531,7 +531,7 @@ SELECT * FROM tb_emp te RIGHT JOIN tb_dept td ON te.deptId = td.id WHERE te.dept
 
 数据行数相同的情况下，分子越大，列的离散度就越高。简单来说，如果列的重复值越多，离散度就越低，重复值越少，离散度就越高。
 
-在离散度低的列上建立的索引去检索数据的时候，由于重复值太多，需要扫描的行数就更多，所以<font color=yellow>建立索引要使用离散度更高的字段。</font>
+在离散度低的列上建立的索引去检索数据的时候，由于重复值太多，需要扫描的行数就更多，所以<font color=red>建立索引要使用离散度更高的字段。</font>
 
 ## 5.2 索引分析
 
@@ -761,7 +761,7 @@ EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND pos = 'dev';
 
 ③ 索引列上无计算
 
-不在索引列上做任何操作（计算、函数、（自动or手动）类型转换），会导致索引失效而转向全表扫描。
+不在索引列上做任何操作（计算、函数、（自动or手动）类型转换），会导致索引失效而转向全表扫描，尽量将数据的处理工作放在服务器上。
 
 ```mysql
 EXPLAIN SELECT * FROM staffs WHERE left(name, 4) = 'July';
@@ -803,9 +803,9 @@ EXPLAIN SELECT name, age, pos FROM staffs WHERE name = 'July' AND age > 11 AND p
 
 同时，如果只查询索引列的部分字段，同样可以使用 using index，但是如果查询索引列以外的字段，则不会用到 using index。
 
-### 6.!=和<>
+### 6.!= 和 <>
 
-mysql在使用不等于（!=或者<>）的时候无法使用索引会导致全表扫描
+mysql在使用不等于（`!=` 或者 `<>`）的时候无法使用索引会导致全表扫描
 
 ```mysql
 EXPLAIN SELECT * FROM staffs WHERE name != 'July' AND age = 11 AND pos = 'manager';
@@ -899,17 +899,17 @@ explain select * from staffs where name = '2000';
 
 ![1600997772120](MySQL 索引.assets/1600997772120.png)
 
-### 10.少用or
+### 10.少用 or
 
-用or连接时会索引失效
+用 or 连接时会索引失效
 
 ```mysql
-explain select * from staffs where name = 'July' or name = 'z3';
+explain select * from staffs where name = 'July' or age = 23;
 ```
 
 ![1600998091903](MySQL 索引.assets/1600998091903.png)
 
-`可使用 in 代替 or` in 操作可以更有效的利用索引，or 大多数情况下很少能利用到索引。
+> 在数据量过百万，并且条件没有加索引，or 的查询效率远远低于 in，or 的效率为O(n)，而 in 的效率为O(logn)，当 n 越大的时候效率相差越明显。
 
 ### 小结
 
