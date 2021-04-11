@@ -183,7 +183,7 @@ int c = a + b;
 
 #  2 线程的生命周期
 
-## 2.1 线程状态图
+## 2.1 操作系统层面线程状态图
 
 ![1600315348121](Java 并发编程基础.assets/1600315348121.png)
 
@@ -205,7 +205,7 @@ int c = a + b;
 
 * `死亡状态`：线程执行完或因异常退出run()方法，线程生命周期结束
 
-##  2.2 等待队列和锁池
+###  等待队列和锁池
 
 ``等待队列`` 和 ``锁池`` 都和wait()、notify()、synchronized有关，wait()和notify()又必须由对象调用且必须写在synchronized同步代码块内。
 
@@ -221,9 +221,11 @@ int c = a + b;
 
 ![1600320275299](Java 并发编程基础.assets/1600320275299.png)
 
-## 2.3 Thread.State 枚举类
+## 2.2 Java 线程层面线程状态
 
-JDK源码中Thread类，会发现里面有定义State的枚举，枚举中有：NEW、RUNNABLE、BLOCKED、WAITING、TIMED_WAITING、TERMINATED。由于线程中的初始化和死亡状态很短，我们不用太关心，runnable状态暂无歧义。我们只针对BLOCKED、WAITING、TIMED_WAITING三种可能混淆的状态进行分析 。
+JDK源码中Thread类，会发现里面有定义State的枚举，枚举中有：NEW、RUNNABLE、BLOCKED、WAITING、TIMED_WAITING、TERMINATED。
+
+> Java 将操作系统中的运行和就绪两个状态合并成为运行状态。
 
 ```java
 public enum State {
@@ -259,16 +261,82 @@ public enum State {
 * `TIMED_WAITING`场景：某一线程因为调用以下带有指定正等待时间的方法之一而处于定时等待状态：
 
   - Thread.sleep(long millis)
-
-  - 带有超时值的 Object.wait()
-
+- 带有超时值的 Object.wait()
   - 带有超时值的 Thread.join()
-
-  - LockSupport.parkNanos()
-
+- LockSupport.parkNanos()
   - LockSupport.parkUntil() 分析：既有可能进入等待队列，也有可能进入其他阻塞的阻塞状态。和WAITING区别在于是否指定时间
 
-## 2.4 线程的启动
+<img src="Java 并发编程基础.assets/image-20210410153309138.png" alt="image-20210410153309138" style="zoom:50%;" />
+
+```java
+public class ThreadState {
+    public static void main(String[] args) {
+        new Thread(new TimeWaiting(), "TimeWaitingThread").start();
+        new Thread(new Waiting(), "WaitingThread").start();
+        new Thread(new Blocked(), "BlockedThread-1").start();
+        new Thread(new Blocked(), "BlockedThread-2").start();
+    }
+
+    static class TimeWaiting implements Runnable {
+
+        @Override
+        public void run() {
+            while (true) {
+                try {
+                    TimeUnit.SECONDS.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    static class Waiting implements Runnable {
+
+        @Override
+        public void run() {
+            while (true) {
+                synchronized(Waiting.class) {
+                    try {
+                        Waiting.class.wait();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+    }
+
+    static class Blocked implements Runnable {
+
+        @Override
+        public void run() {
+            synchronized(Blocked.class) {
+                while (true) {
+                    try {
+                        TimeUnit.SECONDS.sleep(100);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+    }
+}
+// "BlockedThread-2" #12 prio=5 os_prio=31 tid=0x00007fd4108e4800 nid=0x5503 waiting for monitor entry [0x0000700010555000]
+// java.lang.Thread.State: BLOCKED (on object monitor)
+
+// "BlockedThread-1" #11 prio=5 os_prio=31 tid=0x00007fd4108e4000 nid=0x4203 waiting on condition [0x0000700010452000]
+// java.lang.Thread.State: TIMED_WAITING (sleeping)
+
+// "WaitingThread" #10 prio=5 os_prio=31 tid=0x00007fd4108e3000 nid=0x3f03 in Object.wait() [0x000070001034f000]
+// java.lang.Thread.State: WAITING (on object monitor)
+
+// "TimeWaitingThread" #9 prio=5 os_prio=31 tid=0x00007fd411080800 nid=0x4303 waiting on condition [0x000070001024c000]
+// java.lang.Thread.State: TIMED_WAITING (sleeping)
+```
+
+## 2.3 线程的启动
 
 启动一个线程为什么是调用 start 方法，而不是 run 方法，这做一个简单的分析，先简单看一下 start 方法的定义：
 
@@ -465,20 +533,24 @@ void os::pd_start_thread(Thread* thread) {
 }
 ```
 
-## 2.5 线程的终止
+## 2.4 线程的终止
 
 线程的终止，并不是简单的调用 stop 命令去。虽然 api 仍 然可以调用，但是和其他的线程控制方法如 suspend、 resume 一样都是过期了的不建议使用，就拿 stop 来说，stop 方法在结束一个线程时并不会保证线程的资源正常释放，因此会导致程序可能出现一些不确定的状态。 要优雅的去中断一个线程，在线程中提供了一个 interrupt 方法。
 
 ### t.interrupt()
 
-当其他线程通过调用当前线程的 interrupt 方法，表示向当前线程打个招呼，告诉他可以中断线程的执行了，至于什么时候中断，取决于当前线程自己。 线程通过检查是否被中断来进行相应操作，可以通过 isInterrupted()来判断是否被中断。
+当其他线程通过调用当前线程的 interrupt 方法，表示向当前线程打个招呼，告诉他可以中断线程的执行了，至于什么时候中断，取决于当前线程自己。 线程通过检查是否被中断来进行相应操作，可以通过 `isInterrupted()` 来判断是否被中断。
 
 打断标记：线程是否被打断，true表示被打断了，false表示没有
 
 interrupt() 方法用于中断线程
 
-1. 可以打断sleep、wait、join、IO阻塞等情况，将会抛出``InterruptedException`` 异常，但是打断后,线程的打断标记还是false
-2. 打断正常线程 ，线程不会真正被中断，但是线程的打断标记为true
+1. 打断 sleep、wait、join、IO 阻塞等情况会抛出``InterruptedException`` 异常
+
+   Java 虚拟机会先将该线程的中断标识位清除，然后抛出 InterruptedException，此时调用 isInterrupted() 方法会返回 false
+
+2. 打断正常线程 ，线程不会真正被中断，但是线程的打断标记为 true
+
 3. 等待获取锁的线程也不可被中断，参考“synchronized 不可被中断特性”
 
 isInterrupted()  获取线程的打断标记 ,调用后不会修改线程的打断标记
@@ -541,6 +613,8 @@ public class InterruptionInJava01 {
     }
 }
 ```
+
+> 通过中断操作或者自定义标识都可以终止线程，但这种通过中断操作(判断标识位)的方式能够使线程在终止时有机会去清理资源，而不是武断的将线程停止，因此显得更加安全和优雅。
 
 ### Thread.interrupted
 
@@ -704,7 +778,7 @@ JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
 
 注意上面加了中文注释的地方的代码，先判断 is_interrupted 的状态，然后抛出一个 InterruptedException 异常。到此为止，我们就已经分析清楚了中断的整个流程。
 
-## 2.6 并发编程中常用API的理解
+## 2.5 并发编程中常用API的理解
 
 ### obj.wait() 或 obj.wait(long timeout) 
 
@@ -1012,6 +1086,61 @@ public class JoinTest {
 ```
 
 对比两段代码的执行结果很容易发现，在没有使用join方法之间，线程是并发执行的，而使用join方法后，所有线程是顺序执行的。 
+
+# 3 happens-before
+
+从JDK 5开始，提出了 happens-before 的概念，通过这个概念来阐述`操作之间的内存可见性`。如果一个操作执行的结果需要对另一个操作可见，那么这两个操作之间必须存在happens-before关系。这里提到的两个操作既可以是在一个线程之内，也可以是在不同线程之间。
+
+所以为了解决多线程的可见性问题，就搞出了happens-before原则，让线程之间遵守这些原则。编译器还会优化我们的语句，所以等于是给了编译器优化的约束。简单来说：happens-before 应该翻译成：`前一个操作的结果可以被后续的操作获取`。讲白点就是前面一个操作变量a赋值为1，那后面一个操作肯定能知道a已经变成了1。
+
+## happens-before 规则
+
+> Two actions can be ordered by a happens-before relationship.If one action happens before another, then the first is visible to and ordered before the second.
+>
+> • Each action in a thread happens before every subsequent action in that thread.
+> • An unlock on a monitor happens before every subsequent lock on that monitor.
+> • A write to a volatile field happens before every subsequent read of that volatile.
+> • A call to start() on a thread happens before any actions in the started thread.
+> • All actions in a thread happen before any other thread successfully returns from a join() on that thread.
+> • If an action a happens before an action b, and b happens before an action c, then a happens before c.
+
+具体的一共有六项规则：
+
+### 程序顺序规则（单线程规则）
+
+解释：一个线程中的每个操作，happens-before于该线程中的任意后续操作
+
+同一个线程中前面的所有写操作对后面的操作可见
+
+### 锁规则（Synchronized,Lock等）
+
+解释：对一个锁的解锁，happens-before于随后对这个锁的加锁。
+
+如果线程1解锁了monitor a，接着线程2锁定了a，那么，线程1解锁a之前的写操作都对线程2可见（线程1和线程2可以是同一个线程）
+
+### volatile 变量规则
+
+解释：对一个volatile域的写，happens-before于任意后续对这个volatile域的读。
+
+如果线程1写入了volatile变量v（临界资源），接着线程2读取了v，那么线程1写入v及之前的写操作都对线程2可见（线程1和线程2可以是同一个线程）
+
+### 传递性
+
+解释：如果A happens-before B，且B happens-before C，那么A happens-before C。
+
+A h-b B ， B h-b C 那么可以得到 A h-b C
+
+### start() 规则
+
+解释：如果线程A执行操作ThreadB.start()（启动线程B），那么A线程的ThreadB.start()操作happens-before于线程B中的任意操作。
+
+假定线程A在执行过程中，通过执行ThreadB.start()来启动线程B，那么线程A对共享变量的修改在接下来线程B开始执行前对线程B可见。注意：线程B启动之后，线程A在对变量修改线程B未必可见
+
+### join() 规则
+
+解释：如果线程A执行操作ThreadB.join()并成功返回，那么线程B中的任意操作happens-before于线程A从ThreadB.join()操作成功返回。
+
+线程t1写入的所有变量，在任意其它线程t2调用t1.join()，或者t1.isAlive() 成功返回后，都对t2可见
 
 ------
 

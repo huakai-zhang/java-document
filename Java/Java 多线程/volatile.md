@@ -93,9 +93,19 @@ synchronized(t) {
 
 **volatile 如何保证可见性？？？**
 
-（1）修改volatile变量时会强制将修改后的值写回到系统内存中
+有 volatile 变量修饰的共享变量进行写操作时会多出一行汇编代码：
 
-（2）这个写回内存的操作会使在其他 CPU 里缓存了该内存地址的数据失效。因此，再读取该变量值的时候就需要重新读取系统内存中的值。
+```
+0x01a3de1d: movb $0x0,0x1104800(%esi);0x01a3de24: lock add1 $0x0x,(%esp);
+```
+
+`Lock 前缀`的指令会在多核处理器下引发两件事：
+
+（1）将当前处理器缓存行的数据写回到系统内存
+
+（2）这个写回内存的操作会使在其他 CPU 里缓存了该内存地址的数据失效(`嗅探技术`保证它的内存缓存、系统内存和其他处理器缓存数据在总线上保持一致)。
+
+因此，再读取该变量值的时候就需要重新读取系统内存中的值。
 
 通过这两个操作，就可以解决volatile变量的可见性问题。
 
@@ -299,9 +309,19 @@ public class AtomicIntegerTest {
 
 重排序虽然可以提高执行效率，但是在并发执行下，JVM虚拟机底层并不能保证重排序带来的安全性等问题。
 
-> `数据依赖性` 两个操作访问同一变量，其中一个操作为写操作，此时两个操作之间就存在数据依赖性，编译器和处理器不会改变存在数据依赖性的两个操作的执行顺序。
+> `数据依赖性` 两个操作访问同一变量，其中一个操作为写操作，此时两个操作之间就存在数据依赖性，编译器和处理器不会改变存在数据依赖性的两个操作的执行顺序。这里所说的数据依赖性仅针对单个处理器中执行的指令序列和单个线程中执行的操作，不同处理器之间和不同线程之间的数据依赖性不被编译器和处理器考虑。
 >
 > `as-if-serial` 语义，不管怎么重排序，（单线程）程序的执行结果都不能被改变。
+>
+> ```java
+> if (flag) { //3
+>     int i = a * a;//4
+> }
+> ```
+>
+> `控制依赖性 ` 操作 3 和 操作 4 存在控制依赖关系，会影响指令序列执行的并行度。编译器和处理器会采用`猜测(Speculation)`执行来克服执行相关性对并行度的影响。猜测实际上是对操作3，4重排序，把4的结果临时保存到一个重排序缓存中。
+>
+> 在多线程程序中，对存在控制依赖的操作重排序可能会改变程序结果。
 
 ```java
 public class OutOfOrderDemo {
@@ -358,60 +378,46 @@ public volatile static int i = 0, j = 0;
 
 ### 5.1 volatile 写读建立的happens-before关系
 
-上面的内容讲述了重排序原则，为了提高处理速度，JVM会对代码进行编译优化 ，也就是指令重排序优化，并发编程下指令重排序会带来一些安全隐患：``如指令重排序导致的多个线程操作之间的不可见性``。如果让程序员再去了解这些底层的实现以及具体规则，那么程序员的负担就太重了，严重影响了并发编程的效率。
+```java
+class VolitileExample {
+    int a = 0;
+    volatile boolean flag = fals;
+    public void writer() {
+        a = 1; //1
+        flag = true; //2
+    }
+    public void reader() {
+        if(flag) {//3
+            int i = a;//4
+            ...
+        }
+    }
+}
+```
 
-从JDK 5开始，提出了happens-before的概念，通过这个概念来阐述操作之间的内存可见性。如果一个操作执行的结果需要对另一个操作可见，那么这两个操作之间必须存在happens-before关系。这里提到的两个操作既可以是在一个线程之内，也可以是在不同线程之间。
+假设线程 A 执行 writer() 方法之后，线程 B 执行 reader() 方法：
 
-所以为了解决多线程的可见性问题，就搞出了happens-before原则，让线程之间遵守这些原则。编译器还会优化我们的语句，所以等于是给了编译器优化的约束。不能让它优化的不知道东南西北了！简单来说：happens-before 应该翻译成：`前一个操作的结果可以被后续的操作获取`。讲白点就是前面一个操作变量a赋值为1，那后面一个操作肯定能知道a已经变成了1。
+1. 根据程序顺序规则， 1 happens-before 2，3 happens-before 4
+2. 根据 vlolaitle 规则，2 happens-before 3
+3. 根据传递性规则，1 happens-before 4
 
-### 5.2 happens-before 规则
+也即是 A 线程在写 volatile 变量之前所有可见的共享变量，在 B 线程读同一个 volatile 变量后，将立刻变得对 B 线程可见。
 
-> Two actions can be ordered by a happens-before relationship.If one action happens before another, then the first is visible to and ordered before the second.
->
-> • Each action in a thread happens before every subsequent action in that thread.
-> • An unlock on a monitor happens before every subsequent lock on that monitor.
-> • A write to a volatile field happens before every subsequent read of that volatile.
-> • A call to start() on a thread happens before any actions in the started thread.
-> • All actions in a thread happen before any other thread successfully returns from a join() on that thread.
-> • If an action a happens before an action b, and b happens before an action c, then a happens before c.
+### 5.2 volatile 写读的内存语义
 
-具体的一共有六项规则：
+当写一个 volatile 变量时，JMM 会把该线程对应的本地内存中的共享变量刷新到主内存。
 
-#### 程序顺序规则（单线程规则）
+当读一个 volatile 变量时，JMM 会把该线程对应的本地内存置为无效，线程接下来将从主内存中读取共享变量。
 
-解释：一个线程中的每个操作，happens-before于该线程中的任意后续操作
+JMM 采取保守策略：
 
-同一个线程中前面的所有写操作对后面的操作可见
+在每个 volatile 写操作的前面插入一个 StoreStore 屏障(保障上面所有的普通写在 volatile 写之前所新到主内存)。
 
-#### 锁规则（Synchronized,Lock等）
+在每个 volatile 写操作的后面插入一个 StoreLoad 屏障(避免 volatile 写与后面可能有的 volatile 读写重排序)。
 
-解释：对一个锁的解锁，happens-before于随后对这个锁的加锁。
+在每个 volatile 读操作的后面插入一个 LoadLoad 屏障(禁止上面的 volatile 读与下面的普通读重排序)。
 
-如果线程1解锁了monitor a，接着线程2锁定了a，那么，线程1解锁a之前的写操作都对线程2可见（线程1和线程2可以是同一个线程）
-
-#### volatile 变量规则
-
-解释：对一个volatile域的写，happens-before于任意后续对这个volatile域的读。
-
-如果线程1写入了volatile变量v（临界资源），接着线程2读取了v，那么线程1写入v及之前的写操作都对线程2可见（线程1和线程2可以是同一个线程）
-
-#### 传递性
-
-解释：如果A happens-before B，且B happens-before C，那么A happens-before C。
-
-A h-b B ， B h-b C 那么可以得到 A h-b C
-
-#### start()规则
-
-解释：如果线程A执行操作ThreadB.start()（启动线程B），那么A线程的ThreadB.start()操作happens-before于线程B中的任意操作。
-
-假定线程A在执行过程中，通过执行ThreadB.start()来启动线程B，那么线程A对共享变量的修改在接下来线程B开始执行前对线程B可见。注意：线程B启动之后，线程A在对变量修改线程B未必可见
-
-#### join()规则
-
-解释：如果线程A执行操作ThreadB.join()并成功返回，那么线程B中的任意操作happens-before于线程A从ThreadB.join()操作成功返回。
-
-线程t1写入的所有变量，在任意其它线程t2调用t1.join()，或者t1.isAlive() 成功返回后，都对t2可见
+在每个 volatile 读操作的后面插入一个 LoadStore 屏障(禁止上面的 volatile 读与下面的普通写重排序)。
 
 ### 5.3 volatile 变量规则演示
 

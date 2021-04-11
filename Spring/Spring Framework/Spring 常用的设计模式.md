@@ -84,6 +84,7 @@ public class LazyDoubleLock {
     public static LazyDoubleLock getInstance() {
         if (instance == null) {
             synchronized (LazyDoubleLock.class) {
+                // 可能会有几个线程同时进入外层代码块，第一个线程执行完，后续线程还会进入内层
                 if (instance == null) {
                     instance = new LazyDoubleLock();
                 }
@@ -94,7 +95,7 @@ public class LazyDoubleLock {
 }
 ```
 
-双重检查模式，进行了两次的判断，`外层判断是为了进行同步，避免多线程问题`，`内层判断是为了避免不要的实例`。由于singleton=new Singleton()对象的创建在JVM中可能会进行重排序，在多线程访问下存在风险，使用volatile修饰signleton实例变量有效，解决该问题。
+双重检查模式，进行了两次的判断，`外层判断是为了避免 synchonized 导致的性能开销`，`内层判断是为了避免重复实例化`。由于singleton=new Singleton()对象的创建在JVM中可能会进行重排序，在多线程访问下存在风险，使用volatile修饰signleton实例变量有效，解决该问题。
 
 >`volatile`
 >
@@ -172,10 +173,11 @@ public class LazyThree {
 在实例使用之前，不管用不用，都先new一个，避免线程安全问题，但容易产生垃圾，因为一开始就初始化
 
 ```java
+// 也是解决懒汉式指令重排的类初始化方案之一
 public class Hungry {
     // 私有化构造方法
     private Hungry(){}
-	////类加载顺序，先静态，后动态，先属性，后方法，先上，后下
+	// 类加载顺序，先静态，后动态，先属性，后方法，先上，后下
     private static final Hungry hungry = new Hungry();
 
     public static Hungry getInstance() {

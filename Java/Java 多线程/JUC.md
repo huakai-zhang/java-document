@@ -549,6 +549,16 @@ public class ReadWriteLockDemo {
 
 # 4 ReentrantLock 的实现原理
 
+> 锁的内存语义：
+>
+> 当线程释放锁时，JMM 会把该线程对应的本地内存中的共享变量刷新到主内存中。
+>
+> 当线程获得锁时，JMM 会把该线程对应的本地内存置为无效。从而使得被监视器保护的临界区代码必须从主内存中读取共享变量。
+>
+> ReentrantLock 在加锁方法中首先读 volatile 变量 state，在释放锁的最后写 volatile 变量 state。
+>
+> 根据 volatile 的 happens-before 规则，释放锁的线程在写 volatile 变量之前可见的共享变量，在获取锁的线程读取同一个 volatile 变量后将立即变得对获取锁的线程可见。
+
 ## 4.1 AQS 是什么
 
 在 Lock 中，用到了一个同步队列 AQS，全称 `AbstractQueuedSynchronizer`，它是一个同步工具也是 Lock 用来实现线程同步的核心组件。如果你搞懂了 AQS，那 么 J.U.C 中绝大部分的工具都能轻松掌握。
