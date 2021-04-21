@@ -561,19 +561,110 @@ public class ReadWriteLockDemo {
 
 ## 4.1 AQS 是什么
 
-在 Lock 中，用到了一个同步队列 AQS，全称 `AbstractQueuedSynchronizer`，它是一个同步工具也是 Lock 用来实现线程同步的核心组件。如果你搞懂了 AQS，那 么 J.U.C 中绝大部分的工具都能轻松掌握。
+在 Lock 中，用到了一个`队列同步器 AQS`，全称 `AbstractQueuedSynchronizer`，它是一个同步工具也是 Lock 用来实现线程同步的核心组件。如果你搞懂了 AQS，那 么 J.U.C 中绝大部分的工具都能轻松掌握。
 
 ## 4.2 AQS 的两种功能
 
 从使用层面来说，AQS 的功能分为两种：独占和共享
 
-`独占锁` 每次只能有一个线程持有锁，比如前面给大家演示的 ReentrantLock 就是以独占方式实现的互斥锁
+`独占锁` 每次只能有一个线程持有锁，比如前面给大家演示的 ReentrantLock 就是以`独占方式(acquire)`实现的互斥锁
 
-`共享锁` 允许多个线程同时获取锁，并发访问共享资源，比如 ReentrantReadWriteLock。
+`共享锁` 允许多个线程同时获取锁，并发访问共享资源，比如 `ReentrantReadWriteLock.ReadLock` 就是以`共享方式(acquireShared)`获取同步状态
+
+> 共享式获取与独占式获取最主要的区别在于同一时刻能否有多个线程同时获取到同步状态。
+>
+> ```java
+> public final void acquireShared(int arg) {
+> 	if (tryAcquireShared(arg) < 0)
+>     	doAcquireShared(arg);
+> }
+> private void doAcquireShared(int arg) {
+>     final Node node = addWaiter(Node.SHARED);
+>     boolean failed = true;
+>     try {
+>         boolean interrupted = false;
+>         for (;;) {
+>             final Node p = node.predecessor();
+>             if (p == head) {
+>                 int r = tryAcquireShared(arg);
+>                 if (r >= 0) {
+>                     setHeadAndPropagate(node, r);
+>                     p.next = null; // help GC
+>                     if (interrupted)
+>                         selfInterrupt();
+>                     failed = false;
+>                     return;
+>                 }
+>             }
+>             if (shouldParkAfterFailedAcquire(p, node) &&
+>                 parkAndCheckInterrupt())
+>                 interrupted = true;
+>         }
+>     } finally {
+>         if (failed)
+>             cancelAcquire(node);
+>     }
+> }
+> public final boolean releaseShared(int arg) {
+>     if (tryReleaseShared(arg)) {
+>         doReleaseShared();
+>         return true;
+>     }
+>     return false;
+> }
+> ```
+>
+> `tryAcquireShared` 尝试获取同步状态，当返回值大于等于 0，表示能够获取到同步状态。
+>
+> `doAcquireShared` 方法在自旋过程中，如果当前节点的前驱节点为头节点时，尝试获取同步状态，如果返回值大于等于 0，表示该次获取同步状态成功并从自旋中退出。
+>
+> `releaseShared` 与独占式的区别在于 `tryReleaseShared` 方法必须确保同步状态线程安全释放，一般是通过循环和 CAS 来保证的，因为释放同步状态的操作会同时来自多个线程。
+
+### 独占超时式
+
+超时获取同步状态过程可以被视为响应中断获取同步状态的增强版，主要需要计算睡眠的时间间隔 nanosTimeout，为了防止过早通知，nanosTimeout 计算公式为：nanosTimeout = deadline - System.nanoTime()，deadline 为最终唤醒时间，System.nanoTime() 为当前时间，如果 nanosTimeout 大于 0 则表示超时时间未到，需要继续睡眠 nanosTimeout 纳秒，反正，表示已经超时。
+
+```java
+private boolean doAcquireNanos(int arg, long nanosTimeout)
+    throws InterruptedException {
+    if (nanosTimeout <= 0L)
+        return false;
+    final long deadline = System.nanoTime() + nanosTimeout;
+    final Node node = addWaiter(Node.EXCLUSIVE);
+    boolean failed = true;
+    try {
+        for (;;) {
+            final Node p = node.predecessor();
+            if (p == head && tryAcquire(arg)) {
+                setHead(node);
+                p.next = null; // help GC
+                failed = false;
+                return true;
+            }
+            // 最终唤醒时间 - 当前时间为 还应睡眠的时间
+            nanosTimeout = deadline - System.nanoTime();
+            // 获取同步状态失败，判断是否超时
+            if (nanosTimeout <= 0L)
+                // 超时
+                return false;
+            // nanosTimeout 小于等于 spinForTimeoutThreshold(1000纳秒)，将不会使该线程进行超时等待，而是进入快速自旋过程
+            // 原因在于，非常短的超时等待无法做到十分精确
+            if (shouldParkAfterFailedAcquire(p, node) &&
+                nanosTimeout > spinForTimeoutThreshold)
+                LockSupport.parkNanos(this, nanosTimeout);
+            if (Thread.interrupted())
+                throw new InterruptedException();
+        }
+    } finally {
+        if (failed)
+            cancelAcquire(node);
+    }
+}
+```
 
 ## 4.3 AQS 的内部实现
 
-AQS 队列内部维护的是一个 FIFO 的双向链表，这种结构的特点是每个数据结构都有两个指针，分别指向直接的后继节点和直接前驱节点。所以双向链表可以从任意一个节点开始很方便的访问前驱和后继。每个 Node 其实是由线程封装，当线程争抢锁失败后会封装成 Node 加入到 ASQ 队列中去；当获取锁的线程释放锁以后，会从队列中唤醒一个阻塞的节点(线程)。
+AQS 队列使用一个 `int 成员变量表示同步状态`，内部维护的是一个 `FIFO 的双向链表`，这种结构的特点是每个数据结构都有两个指针，分别指向直接的后继节点和直接前驱节点。所以双向链表可以从任意一个节点开始很方便的访问前驱和后继。每个 Node 其实是由线程封装，当线程争抢锁失败后会封装成 Node 加入到 ASQ 队列中去；当获取锁的线程释放锁以后，会从队列中唤醒一个阻塞的节点(线程)。
 
 ![image-20201228171812471](JUC.assets/image-20201228171812471.png)
 
@@ -893,6 +984,12 @@ private Node enq(final Node node) {
 4. 如果获得锁失败，则根据 waitStatus 决定是否需要挂起线程 
 5. 最后，通过 cancelAcquire 取消获得锁的操作
 
+> 节点进入同步队列之后，就进入一个自旋的过程，当满足条件，获取到了同步状态，就可以从自旋中退出。
+>
+> 简单地判断自己的前驱节点是否为头节点？
+>
+> 这样使得节点的释放规则`符合 FIFO`，并且也便于对`过早通知`的处理（过早通知是指前驱节点不是头节点的线程由于中断而被唤醒）
+
 ```java
 final boolean acquireQueued(final Node node, int arg) {
     boolean failed = true;
@@ -930,17 +1027,17 @@ final boolean acquireQueued(final Node node, int arg) {
 
 如果 ThreadA 的锁还没有释放的情况下，ThreadB 和 ThreadC 来争抢锁肯定是会失败，那么失败以后会调用 shouldParkAfterFailedAcquire 方法。
 
-Node 有 5 中状态，分别是：CANCELLED（1），SIGNAL（-1）、CONDITION（- 2）、PROPAGATE(-3)、默认状态(0) 
+Node 有 5 中状态，分别是：
 
-`CANCELLED` 在同步队列中等待的线程等待超时或被中断，需要从同步队列中取消该 Node 的结点, 其结点的 waitStatus 为 CANCELLED，即结束状态，进入该状态后的结点将不会再变化 
+`CANCELLED 1` 在同步队列中等待的线程等待超时或被中断，需要从同步队列中取消该 Node 的结点, 其结点的 waitStatus 为 CANCELLED，即结束状态，进入该状态后的结点将不会再变化 
 
-`SIGNAL` 只要前置节点释放锁，就会通知标识为 SIGNAL 状态的后续节点的线程 
+`SIGNAL -1` 只要前置节点释放锁，就会通知标识为 SIGNAL 状态的后续节点的线程 
 
-`CONDITION` 和 Condition 有关系，后续会讲解 
+`CONDITION -2` 节点在等待队列中，当其他线程对 Condition 调用了 signal 方法后，该节点会从等待队列中转移到同步队列中
 
-`PROPAGATE` 共享模式下，PROPAGATE 状态的线程处于可运行状态 
+`PROPAGATE -3` 共享模式下，PROPAGATE 状态的线程处于可运行状态 
 
-`0 初始状态`
+`INITIAL 0` 初始状态
 
 这个方法的主要作用是，通过 Node 的状态来判断，ThreadB 竞争锁失败以后是否应该被挂起。 
 
@@ -1130,6 +1227,8 @@ if (compareAndSetTail(t, node)) {
 1. 把 Thread2 节点当成 head 
 2. 把原 head 节点的 next 节点指向为 null
 
+> 设置首节点是通过获取同步状态成功的线程来完成的，因此设置头节点的方法并不需要使用 CAS 来保证。
+
 ```java
 final boolean acquireQueued(final Node node, int arg) {
 	...
@@ -1192,14 +1291,21 @@ protected final boolean tryAcquire(int acquires) {
 
 这个方法与 nonfairTryAcquire(int acquires) 比较，不同的地方在于判断条件多了 `hasQueuedPredecessors()` 方法，也就是加入了`同步队列中当前节点是否有前驱节点`的判断，如果该方法返回 true，则表示有线程比当前线程更早地请求获取锁， 因此需要等待前驱线程获取并释放锁之后才能继续获取锁。
 
+> 非公平锁只要获取到同步状态即成功获取锁，在这个前提下，刚释放锁的线程再次获得同步状态的几率非常大，使得其他线程只能在同步队列中等待(`线程“饥饿”`)。
+>
+> 但为什么会造成线程饥饿的非公平锁会是默认实现呢？
+>
+> 公平锁虽然保证了锁的 FIFO 原则，但是进行了大量的线程切换。非公平锁虽然可能造成线程饥饿，但是极少的线程切换，保证了其更大的吞吐量。
+
 ## 4.7 synchronized 和 ReentrantLock 的区别
 
 1. 两者都是可重入锁
 
 2. synchronized 依赖于 JVM 而 ReentrantLock 依赖于 API(需要 lock() 和 unlock() 方法配合 try/finally 语句块来完成)
 
-3. ReentrantLock 比 synchronized 增加了一些高级功能，主要来说主要有三点：
-   * 等待可中断 lockInterruptibly()、tryLock(long time, TimeUnit unit)
+3. ReentrantLock 比 synchronized 增加了一些高级功能：
+   * `可中断地获取锁 lockInterruptibly()`，在锁的获取中可以中断当前线程
+   * `尝试非阻塞的获取锁 tryLock()` 或`超时获取锁 tryLock(long time, TimeUnit unit)`，调用该方法后直接返回，如果能够获取则返回 true，否则返回 flase
    * 可实现公平锁
    * 可实现选择性通知（锁可以绑定多个条件）Condition
 

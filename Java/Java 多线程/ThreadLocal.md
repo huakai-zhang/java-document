@@ -1,5 +1,7 @@
 # 源码
 
+ThreadLocal 即线程变量，是一个以 ThreadLocal 对象为键、任意对象为值的存储结构。
+
 ![image-20201030135147366](ThreadLocal.assets/image-20201030135147366.png)
 
 ```java

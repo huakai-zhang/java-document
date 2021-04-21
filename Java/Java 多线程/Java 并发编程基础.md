@@ -788,7 +788,11 @@ JDK中一共提供了这三个版本的方法：
 
 （2）wait(long timeout)，该方法与wait()方法类似，唯一的区别就是在指定时间内，如果没有notify或notifAll方法的唤醒，也会自动唤醒。
 
-（3）至于wait(long timeout,long nanos)，本意在于更精确的控制调度时间，不过从目前版本来看，该方法貌似没有完整的实现该功能，其源码(JDK1.8)如下：
+（3）至于wait(long timeout,long nanos)，本意在于更精确的控制调度时间，不过从目前版本来看，该方法貌似没有完整的实现该功能，
+
+> 使用 wait()、notify()、notifyAll() 时需要先对调用对象加锁。
+
+其源码(JDK1.8)如下：
 
 ```java
 public final void wait(long timeout, int nanos) throws InterruptedException {
@@ -861,11 +865,11 @@ Thread-2End------
 
 最后，有两点点需要注意：
 
-1. 调用wait方法后，线程是会释放对monitor对象的所有权的。
+1. 调用 wait 方法后，线程是会释放对 monitor 对象的所有权的，线程状态由 `RUNNING 变为 WAITING`，并将当前线程放置到对象的`等待队列`
 
-2. 一个通过wait方法阻塞的线程，必须同时满足以下两个条件才能被真正执行：
+2. 一个通过 wait 方法阻塞的线程，必须同时满足以下两个条件才能被真正执行：
 
-   * 线程需要被唤醒（超时唤醒或调用notify/notifyll）。
+   * 线程需要被唤醒（超时唤醒或调用notify/notifyAll），将等待队列中的等待线程从等待队列中移到`同步队列`中，线程状态由 `WAITING 变为 BLOCKED`
 
    * 线程唤醒后需要竞争到锁（monitor）。
 
@@ -918,6 +922,57 @@ public class Uninterruptible {
 ```
 
 `notify 或 interrupt 后的线程 t1` 均变为 `BLOCKED` 状态。
+
+#### 等待/通知的经典范式
+
+等待方遵循如下原则：
+
+1. 获取对象的锁
+2. 如果条件不满足，那么调用对象的 wait 方法，被通知后仍要检查条件
+3. 条件满足则执行对应逻辑
+
+```java
+synchronized(对象) {
+    while(条件不满足){
+        对象.wait();
+    }
+    对应的处理逻辑
+}
+```
+
+通知方遵循如下原则：
+
+1. 获得对象的锁
+2. 改变条件
+3. 通知所有等待在对象上的线程
+
+```java
+synchronized(对象) {
+    改变条件
+    对象.notifyAll();
+}
+```
+
+**等待超时模式**
+
+假设超时时间段是 T：
+
+* 等待持续时间：REMAINGING = T
+* 超时时间：FUTURE = now + T
+* wait(REMAINING) 返回之后将执行，REMAINING = FUTURE - now，如果 REMAINING <= 0，表示超时，直接退出
+
+```java
+public synchronized Object get(long mills) throws InterruptedException {
+    long future = System.currentTimeMillis() + mills;
+    long remaining = mills;
+    // 当超时大于 0 并且 result 返回值不满足要求
+    while((result == null) && remaining > 0) {
+        wait(remaining);
+        remaining = future - System.currentTimeMillis();
+    }
+    return result;
+}
+```
 
 ### Thread.sleep(long millis)
 
@@ -1018,9 +1073,9 @@ public class YieldTest implements Runnable {
 
 ### t.join() 或 t.join(long millis) 
 
-当前线程A执行过程中，调用B线程的join方法，使当前线程进入阻塞状态（其他阻塞），但不释放对象锁，等待B线程执行完后或一定时间millis后，A线程进入runnable状态。 
+当前线程 A 执行过程中，调用 B 线程的 join 方法，使当前线程进入阻塞状态（其他阻塞），但不释放对象锁，等待B线程执行完后或一定时间 millis 后，A线程进入 runnable 状态。 
 
- JDK中提供三个版本的join方法，其实现与wait方法类似，join()方法实际上执行的join(0)，而join(long millis, int nanos)也与wait(long millis, int nanos)的实现方式一致 ：
+JDK中提供三个版本的join方法，其实现与wait方法类似，join()方法实际上执行的join(0)，而join(long millis, int nanos)也与wait(long millis, int nanos)的实现方式一致 ：
 
 ```java
 public final synchronized void join(long millis)
@@ -1062,7 +1117,7 @@ throws InterruptedException {
 }
 ```
 
-看一下join(long millis)方法的实现，可以看出join方法就是通过wait方法来将线程的阻塞，如果join的线程还在执行，则将当前线程阻塞起来，直到join的线程执行完成，当前线程才能执行。不过有一点需要注意，这里的join只调用了wait方法，却没有对应的notify方法，原因是Thread的start方法中做了相应的处理，所以当join的线程执行完成以后，会自动唤醒主线程继续往下执行。 
+看一下 join(long millis) 方法的实现，可以看出 join 方法就是`通过 wait 方法来将线程的阻塞`，如果 join 的线程还在执行，则将当前线程阻塞起来，直到 join 的线程执行完成，当前线程才能执行。不过有一点需要注意，这里的 join 只调用了 wait 方法，却没有对应的 notify 方法，原因是 Thread 的 start 方法中做了相应的处理，所以当 join 的线程执行完成以后，会`自动唤醒主线程`继续往下执行。 
 
 ```java
 public class JoinTest {
