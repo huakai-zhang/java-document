@@ -134,9 +134,11 @@ public class VisibilityTest {
 
 ### 1.5.1 as-if-serial 语义
 
-as-if-serial语义的意思是：不管编译器和CPU如何重排序，必须保证在单线程情况下程序的结果是正确的。
+`as-if-serial` 语义，不管怎么重排序，（单线程）程序的执行结果都不能被改变。
 
-以下数据有依赖关系，不能重排序。
+`数据依赖性` 两个操作访问同一变量，其中一个操作为写操作，此时两个操作之间就存在数据依赖性，编译器和处理器不会改变存在数据依赖性的两个操作的执行顺序。这里所说的数据依赖性仅针对单个处理器中执行的指令序列和单个线程中执行的操作，不同处理器之间和不同线程之间的数据依赖性不被编译器和处理器考虑。
+
+以下有数据依赖关系，不能重排序。
 
 写后读：
 
@@ -180,6 +182,16 @@ int b = 2;
 int a = 1; 
 int c = a + b;
 ```
+
+```java
+if (flag) { //3
+ int i = a * a;//4
+}
+```
+
+`控制依赖性 ` 操作 3 和 操作 4 存在控制依赖关系，会影响指令序列执行的并行度。编译器和处理器会采用`猜测(Speculation)`执行来克服执行相关性对并行度的影响。猜测实际上是对操作3，4重排序，把4的结果临时保存到一个重排序缓存中。
+
+在多线程程序中，对存在控制依赖的操作重排序可能会改变程序结果。
 
 #  2 线程的生命周期
 
@@ -261,9 +273,12 @@ public enum State {
 * `TIMED_WAITING`场景：某一线程因为调用以下带有指定正等待时间的方法之一而处于定时等待状态：
 
   - Thread.sleep(long millis)
-- 带有超时值的 Object.wait()
+  
+  - 带有超时值的 Object.wait()
+  
   - 带有超时值的 Thread.join()
-- LockSupport.parkNanos()
+  
+  - LockSupport.parkNanos()
   - LockSupport.parkUntil() 分析：既有可能进入等待队列，也有可能进入其他阻塞的阻塞状态。和WAITING区别在于是否指定时间
 
 <img src="Java 并发编程基础.assets/image-20210410153309138.png" alt="image-20210410153309138" style="zoom:50%;" />
@@ -618,9 +633,9 @@ public class InterruptionInJava01 {
 
 ### Thread.interrupted
 
-interrupted()  获取线程的打断标记，调用后清空打断标记，即如果获取为true 调用后打断标记为false (不常用)
+interrupted() 获取线程的打断标记，调用后清空打断标记，即如果获取为true 调用后打断标记为false (不常用)
 
-上面的案例中，通过 interrupt，设置了一个标识告诉线程可以终止了，线程中还提供了静态方法 Thread.interrupted()对设置中断标识的线程复位。比如在 上面的案例中，外面的线程调用 thread.interrupt 来设置中断标识，而在线程里面，又通过 Thread.interrupted 把线 程的标识又进行了复位。
+上面的案例中，通过 interrupt，设置了一个标识告诉线程可以终止了，线程中还提供了静态方法 Thread.interrupted()对设置中断标识的线程复位。比如在上面的案例中，外面的线程调用 thread.interrupt 来设置中断标识，而在线程里面，又通过 Thread.interrupted 把线程的标识又进行了复位。
 
 ```java
 public class InterruptedDemo {
@@ -643,7 +658,7 @@ public class InterruptedDemo {
 
 **其他的线程复位**
 
-除了通过 Thread.interrupted 方法对线程中断标识进行复位以外 ， 还有一种被动复位的场景，就是对抛出 InterruptedException 异常的方法 ， 在 InterruptedException 抛出之前，JVM 会先把线程的中断标识位清除，然后才会抛出 InterruptedException，这个时候如果调用 isInterrupted 方法，将会返回 false(上例 InterruptionInJava01.java)。
+除了通过 Thread.interrupted 方法对线程中断标识进行复位以外 ， 还有一种被动复位的场景，就是对抛出 InterruptedException 异常的方法 ， `在 InterruptedException 抛出之前，JVM 会先把线程的中断标识位清除`，然后才会抛出 InterruptedException，这个时候如果调用 isInterrupted 方法，将会返回 false(上例 InterruptionInJava01.java)。
 
 **为什么要复位**
 
