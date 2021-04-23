@@ -75,11 +75,11 @@ public class VisibilityTest {
 }
 ```
 
-synchronized保证可见性的原理，执行synchronized时，会对应lock原子操作会刷新工作内存中共享变量的值(参考 Java内存模型——主内存与工作内存之间的交互)。
+synchronized 保证可见性的原理，执行 synchronized 时，会对应 lock 原子操作会刷新工作内存中共享变量的值(参考 Java 内存模型 -- 主内存与工作内存之间的交互)。
 
 ### 1.3 synchronized 与有序性
 
-synchronized保证有序性的原理，我们加synchronized后，依然会发生重排序，只不过，我们有同步代码块，可以保证只有一个线程执行同步代码中的代码，保证有序性。
+synchronized 保证有序性的原理，我们加 synchronized 后，依然会发生重排序，只不过，我们有同步代码块，可以保证只有一个线程执行同步代码中的代码，保证有序性。
 
 ## 2 synchronized 的特性
 
@@ -115,7 +115,7 @@ class MyThread extends Thread {
 }
 ```
 
-可重入原理：synchronized的锁对象中有一个计数器（recursions变量）会记录线程获得几次锁。
+可重入原理：synchronized 的锁对象中有一个计数器（recursions变量）会记录线程获得几次锁。
 
 可重入的好处：
 
@@ -123,7 +123,7 @@ class MyThread extends Thread {
 
 2. 可以让我们更好的来封装代码
 
-synchronized是可重入锁，内部锁对象中会有一个计数器记录线程获取几次锁啦，在执行完同步代码块时，计数器的数量会-1，知道计数器的数量为0，就释放这个锁。
+synchronized 是可重入锁，内部锁对象中会有一个计数器记录线程获取几次锁啦，在执行完同步代码块时，计数器的数量会 -1，知道计数器的数量为 0，就释放这个锁。
 
 ### 2.2 不可中断特性
 
@@ -213,15 +213,17 @@ public class InterruptibleLock {
 }
 ```
 
-Lock的lock方法是不可中断的
+Lock 的 lock 方法是不可中断的
 
-Lock的tryLock方法是可中断的
+Lock 的 `tryLock` 方法是`可中断`的
 
 ## 3 synchronized 原理
 
 ### 3.1 javap 反汇编
 
 ```java
+// javac Demo01.java
+// javap -c Demo01
 public class Demo01 {
     private static Object obj = new Object();
 
@@ -339,17 +341,17 @@ public class Demo01 {
 >
 > • If another threadalready owns the monitor associated with objectref， the thread blocks until the monitor's entry count is zero， then tries again to gain ownership.
 
-每一个对象都会和一个监视器``monitor``(它才是真正的锁对象)关联。监视器被占用时会被锁住，其他线程无法来获取该monitor。 当JVM执行某个线程的某个方法内部的monitorenter时，它会尝试去获取当前对象对应的monitor的所有权。其过程如下：
+每一个对象都会和一个监视器 ``monitor`` (它才是真正的锁对象)关联。监视器被占用时会被锁住，其他线程无法来获取该 monitor。 当 JVM 执行某个线程的某个方法内部的 monitorenter 时，它会尝试去获取当前对象对应的 monitor 的所有权。其过程如下：
 
-1. 若monior的进入数为0，线程可以进入monitor，并将monitor的进入数置为1。``当前线程成为monitor的owner``（所有者）
+1. 若 monior 的进入数为 0，线程可以进入 monitor，并将 monitor 的进入数置为1。``当前线程成为 monitor 的 owner``（所有者）
 
-2. 若线程已拥有monitor的所有权，允许它重入monitor，则进入monitor的进入数加1 
+2. 若线程已拥有 monitor 的所有权，允许它重入 monitor，则进入 monitor 的进入数加 1 
 
-3. 若其他线程已经占有monitor的所有权，那么当前尝试获取monitor的所有权的线程会被阻塞，直到monitor的进入数变为0，才能重新尝试获取monitor的所有权。
+3. 若其他线程已经占有 monitor 的所有权，那么当前尝试获取 monitor 的所有权的线程会被阻塞，直到 monitor 的进入数变为 0，才能重新尝试获取 monitor 的所有权。
 
-synchronized的锁对象会关联一个monitor，这个monitor不是我们主动创建的，是JVM的线程执行到这个同步代码块，发现锁对象没有monitor就会创建monitor，当一个线程拥有monitor后其他线程只能等待。
+synchronized 的锁对象会关联一个 monitor，这个 monitor 不是我们主动创建的，是 JVM 的线程执行到这个同步代码块，发现锁对象没有 monitor 就会创建 monitor，当一个线程拥有 monitor 后其他线程只能等待。
 
-monitor内部有两个重要的成员变量：
+monitor 内部有两个重要的成员变量：
 
 ``owner`` 拥有这把锁的线程
 
@@ -361,13 +363,13 @@ monitor内部有两个重要的成员变量：
 >
 > The thread decrements the entry count of the monitor associated with objectref. If as a result the value of the entry count is zero， the thread exits the monitor and is no longer its owner. Other threads that are blocking to enter the monitor are allowed to attempt to do so.
 
-1. 能执行monitorexit指令的线程一定是拥有当前对象的monitor的所有权的线程。
+1. 能执行 monitorexit 指令的线程一定是拥有当前对象的 monitor 的所有权的线程
 
-2. 执行monitorexit时会将monitor的进入数减1。当monitor的进入数减为0时，当前线程退出monitor，不再拥有monitor的所有权，此时其他被这个monitor阻塞的线程可以尝试去获取这个monitor的所有权
+2. 执行 monitorexit 时会将 monitor 的进入数减 1。当 monitor 的进入数减为 0 时，当前线程退出 monitor，不再拥有 monitor 的所有权，此时其他被这个 monitor 阻塞的线程可以尝试去获取这个 monitor 的所有权
 
-monitorexit释放锁。
+monitorexit 释放锁。
 
-monitorexit插入在方法结束处和异常处，JVM保证每个monitorenter必须有对应的monitorexit。
+monitorexit 插入在方法结束处和异常处，JVM 保证每个 monitorenter 必须有对应的 monitorexit。
 
 ##### synchroznied 出现异常会释放锁
 
@@ -380,29 +382,29 @@ Exception table:
             19    22    19   any
 ```
 
-反编译代码的第6行到第16行如果出现异常会执行第19行代码，19行到22行如果出现异常，会执行第19行代码，22行代码为monitorexit，所以无论如何都会释放锁。
+反编译代码的第 6 行到第 16 行如果出现异常会执行第 19 行代码，19 行到 22 行如果出现异常，会执行第 19 行代码，22 行代码为 monitorexit，所以无论如何都会释放锁。
 
 #### 3.1.3 同步方法
 
-从反编译代码中可以看到同步方法在反汇编后，会增加 ``ACC_SYNCHRONIZED`` 修饰。会隐式调用monitorenter和
+从反编译代码中可以看到同步方法在反汇编后，会增加 ``ACC_SYNCHRONIZED`` 修饰。会隐式调用 monitorenter 和 
 
-monitorexit。在执行同步方法前会调用monitorenter，在执行完同步方法后会调用monitorexit。
+monitorexit。在执行同步方法前会调用 monitorenter，在执行完同步方法后会调用 monitorexit。
 
 ### 3.2 synchronized 与 Lock 的区别
 
-1. synchronized是关键字，而Lock是一个接口。
+1. synchronized 是关键字，而 Lock 是一个接口
 
-2. synchronized会自动释放锁，而Lock必须手动释放锁。
+2. synchronized 会自动释放锁，而 Lock 必须手动释放锁
 
-3. synchronized是不可中断的，Lock可以中断也可以不中断。
+3. synchronized 是不可中断的，Lock 可以中断也可以不中断
 
-4. 通过Lock可以知道线程有没有拿到锁，而synchronized不能。
+4. 通过 Lock 可以知道线程有没有拿到锁，而 synchronized 不能
 
-5. synchronized能锁住方法和代码块，而Lock只能锁住代码块。
+5. synchronized 能锁住方法和代码块，而 Lock 只能锁住代码块
 
-6. Lock可以使用读锁提高多线程读效率。
+6. Lock 可以使用读锁提高多线程读效率
 
-7. synchronized是非公平锁，ReentrantLock可以控制是否是公平锁。
+7. synchronized 是非公平锁，ReentrantLock 可以控制是否是公平锁
 
 ### 3.3 深入 JVM 源码
 
@@ -410,7 +412,7 @@ JVM 源码下载：http://openjdk.java.net/ --> Mercurial --> jdk8 --> hotspot -
 
 #### 3.3.1 monitor 监视器锁
 
-在HotSpot虚拟机中，monitor是由ObjectMonitor实现的。其源码是用c++来实现的，位于HotSpot虚拟机源码ObjectMonitor.hpp文件中(src/share/vm/runtime/objectMonitor.hpp)。ObjectMonitor主要数据结构如下：
+在 HotSpot 虚拟机中，monitor 是由 ObjectMonitor 实现的。其源码是用 c++ 来实现的，位于 HotSpot 虚拟机源码 ObjectMonitor.hpp 文件中(src/share/vm/runtime/objectMonitor.hpp)。ObjectMonitor 主要数据结构如下：
 
 ```c++
 ObjectMonitor() {
@@ -925,9 +927,9 @@ void ATTR ObjectMonitor::exit(bool not_suspended, TRAPS) {
 
 ### 4.1 CAS
 
-``CAS`` 全称是 ``Conpare And Swap``(比较相同再交换)。是现代CPU广泛支持的一种对内存中的共享数据进行操作的一种特殊指令。
+``CAS`` 全称是 ``Conpare And Swap``(比较相同再交换)。是现代 CPU 广泛支持的一种对内存中的共享数据进行操作的一种特殊指令。
 
-CAS 可以将比较和交换转换为原子操作，这个原子操作直接由CPU保证。CAS可以保证共享变量赋值时的原子操作。
+CAS 可以将比较和交换转换为原子操作，这个原子操作直接由 CPU 保证。CAS 可以保证共享变量赋值时的原子操作。
 
 CAS 操作依赖3个值：``内存中的值V``，``旧的预估值X``，``修改的新值B``，如果旧的预估值X等于内存中的值V，就将新的值B保存到内存中。
 
@@ -952,11 +954,11 @@ public class AtomicIntegerTest {
 
 ### 4.2 CAS 原理
 
-查看AtomicInteger源码可以看出，``Unsafe``类提供了原子操作。
+查看 AtomicInteger 源码可以看出，``Unsafe`` 类提供了原子操作。
 
 #### Unsafe 类介绍
 
-Unsafe类使Java拥有了像C语言的指针一样操作内存空间的能力，同时也带来了指针问题。过度的使用Unsafe类会使得出错的几率变大，因此Java官方并不建议使用的，官方文档也几乎没有。Unsafe对象不能直接调用，只能通过反射获得。
+Unsafe 类使 Java 拥有了像 C 语言的指针一样操作内存空间的能力，同时也带来了指针问题。过度的使用 Unsafe 类会使得出错的几率变大，因此 Java 官方并不建议使用的，官方文档也几乎没有。Unsafe 对象不能直接调用，只能通过反射获得。
 
 #### Unsafe 实现CAS
 
@@ -974,7 +976,7 @@ public final int getAndIncrement() {
 }
 ```
 
-``unsafe`` java提供的获得对对象内存地址访问的类，它的作用就是在更新操作时提供“比较并替换”的作用。实际上就是AtomicInteger中的一个工具。
+``unsafe`` java 提供的获得对对象内存地址访问的类，它的作用就是在更新操作时提供“比较并替换”的作用。实际上就是 AtomicInteger 中的一个工具。
 
 ``value`` 用来存储整数的实际变量，这里被声明为 volatile，就是为了保证在更新操作时，当前线程可以拿到value 最新的值。
 
@@ -1001,7 +1003,7 @@ public final native boolean compareAndSwapInt(Object var1, long var2, int var4, 
 /**
     * @param atomicInstance 需要更新的对象
     * @param valueOffSet atomicInstance中 value 的偏移量
-    * @param delta 希望设置 value 的值为这个新值
+    * @param delta 要添加的值
 */
 public final int getAndAddInt(Object var1, long var2, int var4) {
     int var5;
@@ -1014,9 +1016,9 @@ public final int getAndAddInt(Object var1, long var2, int var4) {
 
 这里就是 CAS 的核心，它会原子性的完成以下三个操作：
 
-- 获取obj对象中为offset的偏移值，这里假设为realVal
-- 比较realVal和expect
-- 如果相同，将该值更新为update，否则不更新
+- 获取 obj 对象中为 offset 的偏移值，这里假设为 realVal
+- 比较 realVal 和 expect
+- 如果相同，将该值更新为 update，否则不更新
 
 语义化后的参数我们可以明白：
 
@@ -1027,15 +1029,15 @@ public final int getAndAddInt(Object var1, long var2, int var4) {
 
 ``悲观锁``从悲观的角度出发：
 
-顾名思义，悲观锁是基于一种悲观的态度来防止一切数据冲突，它是以一种预防的姿态在修改数据之前把数据锁住，然后再对数据进行读写，在它释放锁之前任何人都不能对其数据进行操作，这样别人想拿这个数据就会阻塞。因此``synchronized``我们也将其称之为悲观锁。``JDK中的ReentrantLock``也是一种悲观锁。性能较差！
+顾名思义，悲观锁是基于一种悲观的态度来防止一切数据冲突，它是以一种预防的姿态在修改数据之前把数据锁住，然后再对数据进行读写，在它释放锁之前任何人都不能对其数据进行操作，这样别人想拿这个数据就会阻塞。因此``synchronized``我们也将其称之为悲观锁。``JDK 中的 ReentrantLock``也是一种悲观锁。性能较差！
 
-``乐观锁``从乐观的角度出发:
+``乐观锁``从乐观的角度出发：
 
 乐观锁是对于数据冲突保持一种乐观态度，操作数据时不会对操作的数据进行加锁（这使得多个任务可以并行的对数据进行操作），只有到数据提交的时候才通过一种机制来验证数据是否存在冲突(一般实现方式是通过加版本号然后进行版本号的对比方式实现)，就算冲突也没关系，再重试即可。
 
-CAS这种机制我们也可以将其称之为乐观锁。综合性能较好！
+CAS 这种机制我们也可以将其称之为乐观锁。综合性能较好！
 
-> CAS获取共享变量时，为了保证该变量的可见性，需要使用volatile修饰。结合CAS和volatile可以实现无锁并发，适用于竞争不激烈、多核 CPU 的场景下。
+> CAS 获取共享变量时，为了保证该变量的可见性，需要使用 volatile 修饰。结合 CAS 和 volatile 可以实现无锁并发，适用于竞争不激烈、多核 CPU 的场景下。
 >
 > 1. 因为没有使用 synchronized，所以线程不会陷入阻塞，这是效率提升的因素之一。
 >
@@ -1043,21 +1045,21 @@ CAS这种机制我们也可以将其称之为乐观锁。综合性能较好！
 
 ### 4.3 synchronized 锁升级过程
 
-高效并发是从JDK 5到JDK 6的一个重要改进，HotSpot虛拟机开发团队在这个版本上花费了大量的精力去实现各种锁优化技术，包括``偏向锁( Biased Locking )``、``轻量级锁( Lightweight Locking )``和``如适应性自旋(Adaptive Spinning)``、``锁消除( Lock Elimination)``、``锁粗化( Lock Coarsening )``等，这些技术都是为了在线程之间更高效地共享数据，以及解决竞争问题，从而提高程序的执行效率。
+高效并发是从 JDK 5 到 JDK 6 的一个重要改进，HotSpot 虛拟机开发团队在这个版本上花费了大量的精力去实现各种锁优化技术，包括``偏向锁(Biased Locking)``、``轻量级锁(Lightweight Locking)``和``如适应性自旋(Adaptive Spinning)``、``锁消除( Lock Elimination)``、``锁粗化( Lock Coarsening )``等，这些技术都是为了在线程之间更高效地共享数据，以及解决竞争问题，从而提高程序的执行效率。
 
 无锁 —> 偏向锁 —> 轻量级锁 —> 重量级锁
 
 ### 4.4 Java 对象布局
 
-在JVM中，对象在内存中的布局分为三块区域：对象头、实例数据和对象填充。如下图所示：
+在 JVM 中，对象在内存中的布局分为三块区域：对象头、实例数据和对象填充。如下图所示：
 
 <img src="synchronized.assets/image-20200920110609336.png" alt="image-20200920110609336" style="zoom:50%;" />
 
 #### 对象头
 
-当一个线程尝试访问synchronized修饰的代码块时，它首先要获得锁，那么这个锁到底存在哪里呢？是存在锁对象的对象头中的。
+当一个线程尝试访问 synchronized 修饰的代码块时，它首先要获得锁，那么这个锁到底存在哪里呢？是存在锁对象的对象头中的。
 
-HotSpot采用``instanceOopDesc``和``arrayOopDesc``来描述对象头，arrayOopDesc对象用来描述数组类型。instanceOopDesc的定义的在Hotspot源码的 ``instanceOop.hpp`` 文件中，另外，arrayOopDesc的定义对应 ``arrayOop.hpp`` 。 
+HotSpot 采用``instanceOopDesc``和``arrayOopDesc``来描述对象头，arrayOopDesc 对象用来描述数组类型。instanceOopDesc 的定义的在 Hotspot 源码的 ``instanceOop.hpp`` 文件中，另外，arrayOopDesc 的定义对应 ``arrayOop.hpp`` 。 
 
 ```c++
 class instanceOopDesc : public oopDesc {
@@ -1082,7 +1084,7 @@ class instanceOopDesc : public oopDesc {
 };
 ```
 
-从instanceOopDesc代码中可以看到 instanceOopDesc继承自oopDesc，oopDesc的定义载Hotspot源码中的 ``oop.hpp`` 文件中。
+从 instanceOopDesc 代码中可以看到 instanceOopDesc `继承自 oopDesc`，oopDesc 的定义载 Hotspot 源码中的 ``oop.hpp`` 文件中。
 
 ```c++
 class oopDesc {
@@ -1100,17 +1102,17 @@ class oopDesc {
 };
 ```
 
-在普通实例对象中，oopDesc的定义包含两个成员，分别是``_mark``和``_metadata``。
+在普通实例对象中，oopDesc 的定义包含两个成员，分别是 ``_mark`` 和 ``_metadata``。
 
-``_mark`` 表示对象标记，属于markOop类型，也就是Mark Word，它记录了对象和锁有关的信息
+``_mark`` 表示对象标记，属于 markOop 类型，也就是 `Mark Word`，它记录了对象和锁有关的信息
 
-``_metadata`` 表示类元信息，类元信息存储的是对象指向它的元数据Klass的首地址，其中Klass表示普通指针、``_compressed_klass``表示压缩类指针。
+``_metadata`` 表示类元信息，类元信息存储的是对象指向它的元数据 Klass 的首地址，其中 Klass 表示`普通指针`、``_compressed_klass``表示`压缩类指针`。
 
 对象头由两部分组成，一部分用于存储自身的运行时数据，称之为 Mark Word，另外一部分是类型指针，及对象指向它的类元数据的指针。
 
 **Mark Word**
 
-Mark Word用于存储对象自身的运行时数据，如哈希码（HashCode）、GC分代年龄、锁状态标志、线程持有的锁、偏向线程ID、偏向时间戳等等，占用内存大小与虚拟机位长一致。Mark Word对应的类型是 markOop 。源码位于 markOop.hpp 中。
+Mark Word 用于存储对象自身的运行时数据，如哈希码（HashCode）、GC分代年龄、锁状态标志、线程持有的锁、偏向线程ID、偏向时间戳等等，占用内存大小与虚拟机位长一致。Mark Word 对应的类型是 markOop 。源码位于 markOop.hpp 中。
 
 ```java
 // Bit-format of an object header (most significant first, big endian layout below):
@@ -1148,27 +1150,27 @@ Mark Word用于存储对象自身的运行时数据，如哈希码（HashCode）
 |               ptr_to_heavyweight_monitor:``62`` | lock:``2`` | Heavyweight Locked |
 |                                                \| lock:``2`` |   Marked for GC    |
 
-在64位虚拟机下，Mark Word是64bit大小的，其存储结构如下：
+在 64 位虚拟机下，Mark Word 是 64 bit大小的，其存储结构如下：
 
 ![image-20200920122742493](synchronized.assets/image-20200920122742493.png)
 
 **klass pointer**
 
-这一部分用于存储对象的类型指针，该指针指向它的类元数据，JVM通过这个指针确定对象是哪个类的实例。该指针的位长度为JVM的一个字大小，即32位的JVM为32位，64位的JVM为64位。 如果应用的对象过多，使用64位的指针将浪费大量内存，统计而言，64位的JVM将会比32位的JVM多耗费50%的内存。为了节约内存可以使用选项`` -XX:+UseCompressedOops`` 开启指针压缩，其中，oop即ordinaryobject pointer普通对象指针。开启该选项后，下列指针将压缩至32位：
+这一部分用于存储对象的类型指针，该指针指向它的类元数据，JVM 通过这个指针确定对象是哪个类的实例。该指针的位长度为 JVM 的一个字大小，即 32 位的 JVM 为 32 位，64 位的 JVM 为 64 位。 如果应用的对象过多，使用 64 位的指针将浪费大量内存，统计而言，64 位的 JVM 将会比 32 位的 JVM 多耗费 50% 的内存。为了节约内存可以使用选项`` -XX:+UseCompressedOops`` 开启指针压缩，其中，oop 即 ordinaryobject pointer 普通对象指针。开启该选项后，下列指针将压缩至 32 位：
 
-1. 每个Class的属性指针（即静态变量）
+1. 每个 Class 的属性指针（即静态变量）
 
 2. 每个对象的属性指针（即对象变量）
 
 3. 普通对象数组的每个元素指针
 
-当然，也不是所有的指针都会压缩，一些特殊类型的指针JVM不会优化，比如指向PermGen的Class对象指针(JDK8中指向元空间的Class对象指针)、本地变量、堆栈元素、入参、返回值和NULL指针等。
+当然，也不是所有的指针都会压缩，一些特殊类型的指针JVM不会优化，比如指向 PermGen 的 Class 对象指针(JDK8中指向元空间的 Class 对象指针)、本地变量、堆栈元素、入参、返回值和 NULL 指针等。
 
-对象头 = Mark Word + 类型指针（未开启指针压缩的情况下）
-
-在32位系统中，Mark Word = 4 bytes，类型指针 = 4bytes，对象头 = 8 bytes = 64 bits；
-
-在64位系统中，Mark Word = 8 bytes，类型指针 = 8bytes，对象头 = 16 bytes = 128bits；
+> 对象头 = Mark Word + 类型指针（未开启指针压缩的情况下）
+>
+> 在32位系统中，Mark Word = 4 bytes，类型指针 = 4bytes，对象头 = 8 bytes = 64 bits
+>
+> 在64位系统中，Mark Word = 8 bytes，类型指针 = 8bytes，对象头 = 16 bytes = 128bits
 
 #### 实例数据
 
@@ -1211,7 +1213,7 @@ Instance size: 16 bytes
 Space losses: 0 bytes internal + 0 bytes external = 0 bytes total
 ```
 
-可以看出结果中 object header一共12字节，而非16字节，原因在于JVM默认开启了指针压缩，在VM配置中关闭：``-XX:-UseCompressedOops``
+可以看出结果中 object header 一共 12 字节，而非 16 字节，原因在于 JVM 默认开启了指针压缩，在 VM 配置中关闭：``-XX:-UseCompressedOops``
 
 ```markdown
 com.juc.sync.Jol object internals:
@@ -1221,12 +1223,12 @@ com.juc.sync.Jol object internals:
       8     4        (object header)                           68 38 42 07 (01101000 00111000 01000010 00000111) (121780328)
      12     4        (object header)                           01 00 00 00 (00000001 00000000 00000000 00000000) (1)
      16     4    int Jol.x                                     0
-     20     4        (loss due to the next object alignment)
+     20     4        (loss due to the next object alignment)  // 对象填充
 Instance size: 24 bytes
 Space losses: 0 bytes internal + 4 bytes external = 4 bytes total
 ```
 
-此次结果中，包含 对象头和实例数据信息，一共20个字节，非8的整数倍，所以此处添加了4个填充数据。
+此次结果中，包含对象头和实例数据信息，一共 20 个字节，非 8 的整数倍，所以此处添加了 4 个填充数据。
 
 同样的，如果在默认开启指针压缩情况下：
 
@@ -1256,9 +1258,9 @@ Instance size: 24 bytes
 Space losses: 0 bytes internal + 7 bytes external = 7 bytes total
 ```
 
-这里boolean类型占用了一个字节，头信息和实例数据一共17个字节，所以需要填充7个字节，保证字节数是8的倍数。
+这里 boolean 类型占用了一个字节，头信息和实例数据一共 17 个字节，所以需要填充 7 个字节，保证字节数是 8 的倍数。
 
-在无锁状态下，会有31位hashCode的值，但是在对象头在我们并未发现。原因是hashCode的值并不是一开始就有，必须使用hashCode的时候，对象头才会保存hashCode值。
+在无锁状态下，会有 31 位 hashCode 的值，但是在对象头在我们并未发现。原因是 hashCode 的值并不是一开始就有，`必须使用 hashCode 的时候，对象头才会保存 hashCode 值`。
 
 ```java
 public class OpenJdkJolDemo {
@@ -1287,7 +1289,7 @@ Instance size: 24 bytes
 Space losses: 0 bytes internal + 4 bytes external = 4 bytes total
 ```
 
-查看结果发现，hashCode的值是倒序输出的。是因为这里涉及到一个知识点“大端存储与小端存储”。
+查看结果发现，hashCode 的值是倒序输出的。是因为这里涉及到一个知识点“大端存储与小端存储”。
 
 - Little-Endian：低位字节存放在内存的低地址端，高位字节存放在内存的高地址端。
 - Big-Endian：高位字节存放在内存的低地址端，低位字节存放在内存的高地址端。
@@ -1296,11 +1298,11 @@ Space losses: 0 bytes internal + 4 bytes external = 4 bytes total
 
 #### 4.5.1 什么是偏向锁
 
-偏向锁是JDK 6中的重要引进，因为HotSpot作者经过研究实践发现，在大多数情况下，锁不仅不存在多线程竞争，而且总是由同一线程多次获得，为了让线程获得锁的代价更低，引进了偏向锁。
+偏向锁是 JDK 6 中的重要引进，因为 HotSpot 作者经过研究实践发现，在大多数情况下，锁不仅不存在多线程竞争，而且总是由同一线程多次获得，为了让线程获得锁的代价更低，引进了偏向锁。
 
-偏向锁的“偏”，就是偏心的“偏”、偏袒的“偏”，它的意思是这个锁会偏向于第一个获得它的线程，会在对象头存储锁偏向的线程ID，以后该线程进入和退出同步块时只需要检查是否为偏向锁、锁标志位以及ThreadID即可。
+偏向锁的“偏”，就是偏心的“偏”、偏袒的“偏”，它的意思是这个锁会偏向于第一个获得它的线程，会在对象头存储锁偏向的线程ID，以后该线程进入和退出同步块时只需要检查是否为偏向锁、锁标志位以及 ThreadID 即可。
 
-不过一旦出现多个线程竞争时必须撤销偏向锁，所以撤销偏向锁消耗的性能必须小于之前节省下来的CAS原子操作的性能消耗，不然就得不偿失了。
+不过一旦出现多个线程竞争时必须撤销偏向锁，所以撤销偏向锁消耗的性能必须小于之前节省下来的 CAS 原子操作的性能消耗，不然就得不偿失了。
 
 #### 4.5.2 偏向锁原理
 
@@ -1308,13 +1310,13 @@ Space losses: 0 bytes internal + 4 bytes external = 4 bytes total
 
 1. 虚拟机将会把对象头中的标志位设为“01”，即偏向模式
 
-2. 同时使用CAS操作把获取到这个锁的线程的ID记录在对象的Mark Word之中
+2. 同时使用 CAS 操作把获取到这个锁的 ThreadID 记录在对象的 Mark Word 之中
 
 以后该线程在进入和退出同步代码块时不需要进行 CAS 操作来加锁和解锁，只需要简单地测试一下对象头的 Mark Word 里是否存储着指向当前线程的偏向锁。
 
 #### 4.5.3 偏向锁的撤销
 
-偏向锁使用了一种等到竞争出现才释放锁的机制，所以当其他线程尝试竞争偏向锁时，持有偏向锁的线程才会释放锁。
+偏向锁使用了一种`等到竞争出现才释放锁`的机制，所以当其他线程尝试竞争偏向锁时，持有偏向锁的线程才会释放锁。
 
 1. 偏向锁的撤销动作必须等待全局安全点
 2. 暂停拥有偏向锁的线程，检查持有偏向锁的线程是否活着
@@ -1323,7 +1325,7 @@ Space losses: 0 bytes internal + 4 bytes external = 4 bytes total
 
 #### 4.5.4 关闭偏向锁
 
-偏向锁在Java 6之后是默认启用的，但在应用程序启动几秒钟之后才激活，可以使用 ``-XX:BiasedLockingStartupDelay=0`` 参数关闭延迟，如果确定应用程序中所有锁通常情况下处于竞争状态，可以通过 ``XX:-UseBiasedLocking=false`` 参数关闭偏向锁。
+偏向锁在 Java 6 之后是默认启用的，但在应用程序启动几秒钟之后才激活，可以使用 ``-XX:BiasedLockingStartupDelay=0`` 参数关闭延迟，如果确定应用程序中所有锁通常情况下处于竞争状态，可以通过 ``XX:-UseBiasedLocking=false`` 参数关闭偏向锁。
 
 ```java
 // VM:options -XX:BiasedLockingStartupDelay=0

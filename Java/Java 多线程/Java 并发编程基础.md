@@ -31,13 +31,13 @@ public class ShareData {
 // 200  607  607  370  714  807  299  453  200  907  count= 907
 ```
 
-可见结果并没有像想象那样输出1000。
+可见结果并没有像想象那样输出 1000。
 
 可以看出，对共享变量操作，在多线程环境下很容易出现意想不到的结果。
 
 ## 1.2 互斥性
 
-``资源互斥``是指同时只允许一个访问者对其进行访问，具有唯一性和排它性。我们通常允许多个线程同时对数据进行读操作，但同一时间内只允许一个线程对数据进行写操作。所以我们通常将锁分为共享锁和排它锁，也叫做读锁和写锁。如果资源不具有互斥性，即使是共享资源，我们也不需要担心线程安全。例如，对于不可变的数据共享，所有线程都只能对其进行读操作，所以不用考虑线程安全问题。``但是对共享数据的写操作，一般就需要保证互斥性``，上述例子中就是因为没有保证互斥性才导致数据的修改产生问题。Java 中提供多种机制来保证互斥性，最简单的方式是使用Synchronized。现在我们在上面程序中加上Synchronized再执行：
+``资源互斥``是指同时只允许一个访问者对其进行访问，具有唯一性和排它性。我们通常允许多个线程同时对数据进行读操作，但同一时间内只允许一个线程对数据进行写操作。所以我们通常将锁分为共享锁和排它锁，也叫做读锁和写锁。如果资源不具有互斥性，即使是共享资源，我们也不需要担心线程安全。例如，对于不可变的数据共享，所有线程都只能对其进行读操作，所以不用考虑线程安全问题。``但是对共享数据的写操作，一般就需要保证互斥性``，上述例子中就是因为没有保证互斥性才导致数据的修改产生问题。Java 中提供多种机制来保证互斥性，最简单的方式是使用 Synchronized。现在我们在上面程序中加上 Synchronized 再执行：
 
 ```java
 private synchronized static void addCount() {
@@ -45,11 +45,11 @@ private synchronized static void addCount() {
 }
 ```
 
-现在在执行上诉代码，无论多少次返回的最终结果都是1000。
+现在在执行上诉代码，无论多少次返回的最终结果都是 1000。
 
 ## 1.3 原子性(Atomicity)
 
-原子性就是指对数据的操作是``一个独立的、不可分割的整体``。换句话说，就是一次操作，是一个连续不可中断的过程，数据不会执行的一半的时候被其他线程所修改。保证原子性的最简单方式是操作系统指令，就是说如果一次操作对应一条操作系统指令，这样肯定可以能保证原子性。但是很多操作不能通过一条指令就完成。例如，对long类型的运算，很多系统就需要分成多条指令分别对高位和低位进行操作才能完成。还比如，我们经常使用的整数 i++ 的操作，其实需要分成三个步骤：
+原子性就是指对数据的操作是``一个独立的、不可分割的整体``。换句话说，就是一次操作，是一个连续不可中断的过程，数据不会执行的一半的时候被其他线程所修改。保证原子性的最简单方式是操作系统指令，就是说如果`一次操作对应一条操作系统指令，这样肯定可以能保证原子性`。但是很多操作不能通过一条指令就完成。例如，对 long 类型的运算，很多系统就需要分成多条指令分别对高位和低位进行操作才能完成。还比如，我们经常使用的整数 i++ 的操作，其实需要分成三个步骤：
 
 （1）读取整数 i 的值；
 
@@ -63,15 +63,15 @@ private synchronized static void addCount() {
 
 ![image-20200915201437426](Java 并发编程基础.assets/image-20200915201437426.png)
 
-这也是代码段一执行的结果为什么不正确的原因。对于这种组合操作，``要保证原子性，最常见的方式是加锁``，如Java中的``Synchronized``或``Lock``都可以实现，代码段二就是通过Synchronized实现的。除了锁以外，还有一种方式就是``CAS（Compare And Swap）``，即修改数据之前先比较与之前读取到的值是否一致，如果一致，则进行修改，如果不一致则重新执行，这也是``乐观锁的实现原理``。不过CAS在某些场景下不一定有效，比如另一线程先修改了某个值，然后再改回原来值，这种情况下，CAS是无法判断的(``ABA问题``)。
+这也是代码段一执行的结果为什么不正确的原因。对于这种组合操作，``要保证原子性，最常见的方式是加锁``，如 Java 中的``Synchronized``或``Lock``都可以实现，代码段二就是通过 Synchronized 实现的。除了锁以外，还有一种方式就是``CAS（Compare And Swap）``，即修改数据之前先比较与之前读取到的值是否一致，如果一致，则进行修改，如果不一致则重新执行，这也是``乐观锁的实现原理``。不过 CAS 在某些场景下不一定有效，比如另一线程先修改了某个值，然后再改回原来值，这种情况下，CAS 是无法判断的(``ABA问题``)。
 
 ## 1.4 可见性(Visibility)
 
-要理解可见性，需要先对JVM的内存模型有一定的了解，JVM的内存模型与操作系统类似，如图所示：
+要理解可见性，需要先对 JVM 的内存模型有一定的了解，JVM 的内存模型与操作系统类似，如图所示：
 
 ![image-20200915202316436](Java 并发编程基础.assets/image-20200915202316436.png)
 
-从这个图中我们可以看出，每个线程都有一个自己的工作内存（相当于CPU高级缓冲区，这么做的目的还是在于进一步缩小存储系统与CPU之间速度的差异，提高性能），对于共享变量，线程每次读取的是工作内存中共享变量的副本，写入的时候也直接修改工作内存中副本的值，然后在某个时间点上再将工作内存与主内存中的值进行同步。这样导致的问题是，如果线程1对某个变量进行了修改，线程2却有可能看不到线程1对共享变量所做的修改。通过下面这段程序我们可以演示一下不可见的问题：
+从这个图中我们可以看出，每个线程都有一个自己的工作内存（相当于 CPU 高级缓冲区，这么做的目的还是在于进一步缩小存储系统与 CPU 之间速度的差异，提高性能），对于共享变量，线程每次读取的是工作内存中共享变量的副本，写入的时候也直接修改工作内存中副本的值，然后在某个时间点上再将工作内存与主内存中的值进行同步。这样导致的问题是，如果线程 1 对某个变量进行了修改，线程 2 却有可能看不到线程 1 对共享变量所做的修改。通过下面这段程序我们可以演示一下不可见的问题：
 
 ```java
 public class VisibilityTest {
@@ -108,13 +108,24 @@ public class VisibilityTest {
 // 100
 ```
 
-当然，这个结果也只能说是有可能是可见性造成的，当写线程（WriterThread）设置ready=true后，读线程（ReaderThread）看不到修改后的结果，所以会打印false，对于第二个结果，也就是执行if (!ready)时还没有读取到写线程的结果，但执行System.out.println(ready)时读取到了写线程执行的结果。不过，这个结果也有可能是线程的交替执行所造成的。Java 中可通过Synchronized或Volatile来保证可见性，具体细节会在后续的文章中分析。
+当然，这个结果也只能说是有可能是可见性造成的，当写线程设置 ready=true 后(还未刷新到共享内存)，读线程看不到修改后的结果，所以会打印 false，对于第二个结果，也就是执行 if(!ready) 时还没有读取到写线程的结果(写线程刷新但读线程读取不到)，但执行 System.out.println(ready) 时读取到了写线程执行的结果(println 会强制读取共享内存)。不过，这个结果也有可能是线程的交替执行所造成的。Java 中可通过 Synchronized 或 Volatile 来保证可见性，具体细节会在后续的文章中分析。
+
+> System.out.println 源码
+>
+> ```java
+> public void println(String x) {
+>     synchronized (this) {
+>         print(x);
+>         newLine();
+>     }
+> }
+> ```
 
 ## 1.5 有序性(Ordering)
 
 为了提高性能，编译器和处理器常常会对既定的代码执行顺序进行指令重排序。
 
-原因：一个好的内存模型实际上会放松对处理器和编译器规则的束缚，也就是说软件技术和硬件技术都为了一个目标而奋斗：在不改变程序执行结果的前提下，尽可能提高执行效率。JMM对底层尽量减少约束，使其能够发挥自身优势。因此，在执行程序时，``为了提高性能，编译器和处理器常常对指令进行重排``。一般重排序可以分为三种：
+原因：一个好的内存模型实际上会放松对处理器和编译器规则的束缚，也就是说软件技术和硬件技术都为了一个目标而奋斗：在不改变程序执行结果的前提下，尽可能提高执行效率。JMM 对底层尽量减少约束，使其能够发挥自身优势。因此，在执行程序时，``为了提高性能，编译器和处理器常常对指令进行重排``。一般重排序可以分为三种：
 
 （1）编译器优化的重排序。编译器在不改变单线程程序语义的前提下，可以重新安排语句的执行顺序。
 
@@ -130,7 +141,7 @@ public class VisibilityTest {
 
 ![img](Java 并发编程基础.assets/641.png)
 
-先看上第一个图中源码部分，从源码来看，要么指令 1 先执行要么指令 3先执行。如果指令 1 先执行，r2不应该能看到指令 4 中写入的值。如果指令 3 先执行，r1不应该能看到指令 2 写的值。但是运行结果却可能出现r2==2，r1==1的情况，这就是“重排序”导致的结果。上第二个图即是一种可能出现的合法的编译结果，编译后，指令1和指令2的顺序可能就互换了。因此，才会出现r2==2，r1==1的结果。Java 中也可通过Synchronized或Volatile来保证顺序性。
+先看上第一个图中源码部分，从源码来看，要么指令 1 先执行要么指令 3 先执行。如果指令 1 先执行，r2 不应该能看到指令 4 中写入的值。如果指令 3 先执行，r1 不应该能看到指令 2 写的值。但是运行结果却可能出现 r2==2，r1==1 的情况，这就是“重排序”导致的结果。上第二个图即是一种可能出现的合法的编译结果，编译后，指令 1 和指令 2 的顺序可能就互换了。因此，才会出现 r2==2，r1==1 的结果。Java 中也可通过 Synchronized 或 Volatile 来保证顺序性。
 
 ### 1.5.1 as-if-serial 语义
 
@@ -170,11 +181,11 @@ int b = 2;
 int c = a + b;
 ```
 
-上面3个操作的数据依赖关系如图所示：
+上面 3 个操作的数据依赖关系如图所示：
 
 ![image-20200917215400480](Java 并发编程基础.assets/image-20200917215400480.png)
 
-如上图所示a和c之间存在数据依赖关系，同时b和c之间也存在数据依赖关系。因此在最终执行的指令序列中，c不能被重排序到a和b的前面。但a和b之间没有数据依赖关系，编译器和处理器可以重排序a和b之间的执行顺序。
+如上图所示 a 和 c 之间存在数据依赖关系，同时 b 和 c 之间也存在数据依赖关系。因此在最终执行的指令序列中，c 不能被重排序到 a 和 b 的前面。但 a 和 b 之间没有数据依赖关系，编译器和处理器可以重排序a和b之间的执行顺序。
 
 ```java
 //也可以重排序这样： 
@@ -199,35 +210,34 @@ if (flag) { //3
 
 ![1600315348121](Java 并发编程基础.assets/1600315348121.png)
 
-众所周知，Java的线程状态有5种，分别对应上图中五种不同颜色，下面对这5种状态及状态间的转化做相应的解释：
+众所周知，Java 的线程状态有5种，分别对应上图中五种不同颜色，下面对这5种状态及状态间的转化做相应的解释：
 
 * `初始化状态`：新建一个线程对象
 
-* `可运行状态`：其他线程调用了该线程对象的start()方法。该状态的线程位于可运行线程池中，变得可运行，等待获取CPU的使用权
+* `可运行状态`：其他线程调用了该线程对象的 start() 方法。该状态的线程位于可运行线程池中，变得可运行，等待获取 CPU 的使用权
 
-* `运行状态`：可运行状态的线程获得了cpu 时间片（timeslice），执行程序代码
+* `运行状态`：可运行状态的线程获得了 CPU 时间片（timeslice），执行程序代码
 
-* `阻塞状态`：线程因为某种原因放弃CPU使用权，暂时停止运行。直到线程再次进入可运行状态，才有机会转到运行状态。如图所示，会有三种不同类型的阻塞状态：
-
-  - `等待阻塞`：运行中的线程执行wait()方法，线程会进入等待队列中。等待notify()、notifyAll()或interrupt()对其唤醒或中断
-
-  - `同步阻塞`：运行中的线程执行在获取同步锁（注：只有synchronized这种方式的锁（monitor锁）才会让线程出现BLOCKED状态，等待ReentrantLock则不会）时，若该锁已被其他线程占用，线程则会进入锁池队列。等待获取到锁
-
-  - `其他阻塞`：运行的线程执行sleep()、join()，或触发了I/O请求，该该线程被置为阻塞状态。当sleep()状态超时、join()等待线程终止或超时、I/O处理完成，线程会重新进入可运行状态。
-
-* `死亡状态`：线程执行完或因异常退出run()方法，线程生命周期结束
+* `阻塞状态`：线程因为某种原因放弃 CPU 使用权，暂时停止运行。直到线程再次进入可运行状态，才有机会转到运行状态。如图所示，会有三种不同类型的阻塞状态：
+- `等待阻塞`：运行中的线程执行 wait() 方法，线程会进入等待队列中。等待 notify()、notifyAll() 或 interrupt() 对其唤醒或中断
+  
+- `同步阻塞`：运行中的线程执行在获取同步锁（注：只有 synchronized 这种方式的锁（monitor锁）才会让线程出现 BLOCKED 状态，等待 ReentrantLock 则不会）时，若该锁已被其他线程占用，线程则会进入锁池队列等待获取到锁
+  
+- `其他阻塞`：运行的线程执行 sleep()、join()，或触发了 I/O 请求，该该线程被置为阻塞状态。当 sleep() 状态超时、join() 等待线程终止或超时、I/O 处理完成，线程会重新进入可运行状态。
+  
+* `死亡状态`：线程执行完或因异常退出 run() 方法，线程生命周期结束
 
 ###  等待队列和锁池
 
-``等待队列`` 和 ``锁池`` 都和wait()、notify()、synchronized有关，wait()和notify()又必须由对象调用且必须写在synchronized同步代码块内。
+``等待队列`` 和 ``锁池`` 都和 wait()、notify()、synchronized 有关，wait() 和 notify() 又必须由对象调用且必须写在 synchronized 同步代码块内。
 
-1. 等待队列（等待被唤醒）：对应等待阻塞。调用obj的wait()方法，则进入等待队列
+1. 等待队列（等待被唤醒）：对应等待阻塞。调用 obj 的 wait() 方法，则进入等待队列
 
 2. 锁池（等待抢锁）：对应同步阻塞。
 
-   a) 当前running线程调用对象obj的同步方法时，发现锁被其他线程持有，则直接进入锁池。
+   a) 当前 running 线程调用对象 obj 的同步方法时，发现锁被其他线程持有，则直接进入锁池。
 
-   b) 当前等待队列中阻塞的线程A，等待被线程B唤醒，唤醒后并非直接进去runnable状态，而是进入线程A所对应的锁池中，等待抢到锁。
+   b) 当前等待队列中阻塞的线程A，等待被线程B唤醒，唤醒后并非直接进去 runnable 状态，而是进入线程A所对应的锁池中，等待抢到锁。
 
  下图直观描绘了running -> 等待队列 -> 锁池 -> runnable间的状态流转，帮助理解：
 
@@ -235,7 +245,7 @@ if (flag) { //3
 
 ## 2.2 Java 线程层面线程状态
 
-JDK源码中Thread类，会发现里面有定义State的枚举，枚举中有：NEW、RUNNABLE、BLOCKED、WAITING、TIMED_WAITING、TERMINATED。
+JDK 源码中 Thread 类，会发现里面有定义 State 的枚举，枚举中有：NEW、RUNNABLE、BLOCKED、WAITING、TIMED_WAITING、TERMINATED。
 
 > Java 将操作系统中的运行和就绪两个状态合并成为运行状态。
 
@@ -260,16 +270,15 @@ public enum State {
 ```
 
 * `BLOCKED`场景：
-  - 某一线程在等待monitor lock，比如在等待执行synchronized代码块/方法，进入了锁池阻塞状态；
-  - 在synchronized块/方法中wait 之后重进入（reenter）同步块时，也就是线程在等待进入临界区。
+  - 某一线程在等待 monitor lock，比如在等待执行 synchronized 代码块/方法，进入了锁池阻塞状态
+  - 在 synchronized 块/方法中 `wait` 之后重进入（reenter）同步块时，也就是线程在等待进入临界区
 * `WAITING`场景：某一线程因为调用下列方法之一而处于等待状态：
 
-  * 不带超时值的 Object.wait()
+  - 不带超时值的 Object.wait()
 
-  * 不带超时值的 Thread.join()
+  - 不带超时值的 Thread.join()
 
-  * LockSupport.park 分析：既有可能进入等待队列，也有可能进入其他阻塞的阻塞状态
-
+  - LockSupport.park 分析：既有可能进入等待队列，也有可能进入其他阻塞的阻塞状态
 * `TIMED_WAITING`场景：某一线程因为调用以下带有指定正等待时间的方法之一而处于定时等待状态：
 
   - Thread.sleep(long millis)
@@ -413,7 +422,7 @@ static JNINativeMethod methods[] = {
 
  **JVM_StartThread **
 
-从这段代码可以看出 ， start0() 实际会执行 JVM_StartThread 方法，这个方法是干嘛的呢？ 从名字上来看，似乎是在 JVM 层面去启动一个线程，如果真的是这样，那么`在 JVM 层面，一定会调用 Java 中定义的 run 方法`。那接下来继续去找找答案。我们找到 jvm.cpp 这个文 件；这个文件需要下载 hotspot 的源码才能找到。
+从这段代码可以看出 ， start0() 实际会执行 JVM_StartThread 方法，这个方法是干嘛的呢？ 从名字上来看，似乎是在 JVM 层面去启动一个线程，如果真的是这样，那么`在 JVM 层面，一定会调用 Java 中定义的 run 方法`。那接下来继续去找找答案。我们找到 jvm.cpp 这个文件(需要下载 hotspot 的源码才能找到)。
 
 ```c
 JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
@@ -421,7 +430,7 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
   JavaThread *native_thread = NULL;
   {
       ...
-      // 创建线程
+      // 异步（未验证）创建线程
       native_thread = new JavaThread(&thread_entry, sz);
       ...
   // 启动线程
@@ -431,7 +440,7 @@ JVM_END
 
 **JavaThread**
 
-JVM_ENTRY 是用来定义 JVM_StartThread 函数的，在这个函数里面创建了一个真正和平台有关的本地线程。本着打破砂锅查到底的原则，继续看看 newJavaThread 做了什 么事情，继续寻找 JavaThread 的定义 在 hotspot 的源码中 thread.cpp 文件中 1558 行的位置可以找到如下代码：
+JVM_ENTRY 是用来定义 JVM_StartThread 函数的，在这个函数里面创建了一个真正和平台有关的本地线程。继续寻找 JavaThread 的定义在 hotspot 的源码中 thread.cpp 文件中 1558 行的位置可以找到如下代码：
 
 ```c
 JavaThread::JavaThread(ThreadFunction entry_point, size_t stack_sz) :
@@ -447,15 +456,17 @@ JavaThread::JavaThread(ThreadFunction entry_point, size_t stack_sz) :
   initialize();
   _jni_attach_state = _not_attaching_via_jni;
   set_entry_point(entry_point);
+  // JVM层面是通过调用操作系统的创建线程的方式来创建我们Java线程
   os::ThreadType thr_type = os::java_thread;
   thr_type = entry_point == &compiler_thread_entry ? os::compiler_thread :
-                                                     os::java_thread;
+                                                   os::java_thread;
+  // 创建Java线程对应的内核线程
   os::create_thread(this, thr_type, stack_sz);
   _safepoint_visible = false;
 }
 ```
 
-这个方法有两个参数，第一个是函数名称，线程创建成功之后会根据这个函数名称调用对应的函数；第二个是当前进程内已经有的线程数量。最后我们重点关注与一下 os::create_thread，实际就是调用平台创建线程的方法来创建线程。 
+这个方法有两个参数，第一个是函数名称，线程创建成功之后会根据这个函数名称调用对应的函数；第二个是当前进程内已经有的线程数量。最后我们重点关注与一下 `os::create_thread 调用平台创建线程的方法来创建线程`。 
 
 **os_linux -> os::create_thread**
 
@@ -478,7 +489,7 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
 }
 ```
 
-`java_start`，重点关注类，是实际创建线程的方法。
+`java_start` 重点关注类，是实际创建线程的方法。
 
 **java_start**
 
@@ -504,7 +515,7 @@ static void *java_start(Thread *thread) {
 
 **Thread::start**
 
-接下来就是线程的启动，会调用 Thread.cpp 文件中的 Thread::start(Thread* thread)方法，代码如下：
+接下来就是线程的启动，会调用 Thread.cpp 文件中的 Thread::start(Thread* thread) 方法，代码如下：
 
 ```c
 void Thread::start(Thread* thread) {
@@ -519,7 +530,7 @@ void Thread::start(Thread* thread) {
 }
 ```
 
-start 方法中有一个函数调用： os::start_thread(thread);， 调用平台启动线程的方法，最终会调用 Thread.cpp 文件中的 JavaThread::run()方法。
+start 方法中有一个函数调用：os::start_thread(thread)， 调用平台启动线程的方法，最终会调用 Thread.cpp 文件中的 JavaThread::run()方法。
 
 **os::start_thread(thread)**
 
@@ -550,13 +561,13 @@ void os::pd_start_thread(Thread* thread) {
 
 ## 2.4 线程的终止
 
-线程的终止，并不是简单的调用 stop 命令去。虽然 api 仍 然可以调用，但是和其他的线程控制方法如 suspend、 resume 一样都是过期了的不建议使用，就拿 stop 来说，stop 方法在结束一个线程时并不会保证线程的资源正常释放，因此会导致程序可能出现一些不确定的状态。 要优雅的去中断一个线程，在线程中提供了一个 interrupt 方法。
+线程的终止，并不是简单的调用 stop 命令去。虽然 api 仍然可以调用，但是和其他的线程控制方法如 suspend、 resume 一样都是过期了的不建议使用，就拿 stop 来说，stop 方法在结束一个线程时并不会保证线程的资源正常释放，因此会导致程序可能出现一些不确定的状态。 要优雅的去中断一个线程，在线程中提供了一个 interrupt 方法。
 
 ### t.interrupt()
 
 当其他线程通过调用当前线程的 interrupt 方法，表示向当前线程打个招呼，告诉他可以中断线程的执行了，至于什么时候中断，取决于当前线程自己。 线程通过检查是否被中断来进行相应操作，可以通过 `isInterrupted()` 来判断是否被中断。
 
-打断标记：线程是否被打断，true表示被打断了，false表示没有
+打断标记：线程是否被打断，true 表示被打断了，false 表示没有
 
 interrupt() 方法用于中断线程
 
@@ -633,7 +644,7 @@ public class InterruptionInJava01 {
 
 ### Thread.interrupted
 
-interrupted() 获取线程的打断标记，调用后清空打断标记，即如果获取为true 调用后打断标记为false (不常用)
+interrupted() 获取线程的打断标记，调用后清空打断标记，即如果获取为 true 调用后打断标记为 false (不常用)
 
 上面的案例中，通过 interrupt，设置了一个标识告诉线程可以终止了，线程中还提供了静态方法 Thread.interrupted()对设置中断标识的线程复位。比如在上面的案例中，外面的线程调用 thread.interrupt 来设置中断标识，而在线程里面，又通过 Thread.interrupted 把线程的标识又进行了复位。
 
@@ -662,7 +673,7 @@ public class InterruptedDemo {
 
 **为什么要复位**
 
-Thread.interrupted()是属于当前线程的，是当前线程对外界中断信号的一个响应，表示自己已经得到了中断信号， 但不会立刻中断自己，具体什么时候中断由自己决定，让外界知道在自身中断前，他的中断状态仍然是 false，这就是复位的原因。
+Thread.interrupted() 是属于当前线程的，是当前线程对外界中断信号的一个响应，表示自己已经得到了中断信号， 但不会立刻中断自己，具体什么时候中断由自己决定，让外界知道在自身中断前，他的中断状态仍然是 false，这就是复位的原因。
 
 ### 线程的终止原理
 
@@ -697,7 +708,7 @@ JVM_ENTRY(void, JVM_Interrupt(JNIEnv* env, jobject jthread))
 JVM_END
 ```
 
-这个方法比较简单，直接调用了 Thread::interrupt(thr)这 个方法，这个方法的定义在 Thread.cpp 文件中，代码如下：
+这个方法比较简单，直接调用了 Thread::interrupt(thr) 这个方法，这个方法的定义在 Thread.cpp 文件中，代码如下：
 
 ```c
 void Thread::interrupt(Thread* thread) {
@@ -734,7 +745,7 @@ void os::interrupt(Thread* thread) {
 }
 ```
 
-set_interrupted(true)实际上就是调用 osThread.hpp 中的 set_interrupted()方法，在 osThread 中定义了一个成员属性 `volatile jint _interrupted; `
+set_interrupted(true) 实际上就是调用 osThread.hpp 中的 set_interrupted() 方法，在 osThread 中定义了一个成员属性 `volatile jint _interrupted; `
 
 通过上面的代码分析可以知道，thread.interrupt()方法实际就是设置一个 interrupted 状态标识为 true、并且通过 ParkEvent 的 unpark 方法来唤醒线程。 
 
@@ -799,13 +810,13 @@ JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
 
 JDK中一共提供了这三个版本的方法：
 
-（1）wait()方法的作用是将当前运行的线程挂起（即让其进入阻塞状态），直到notify或notifyAll方法来唤醒线程.
+（1）wait() 方法的作用是将当前运行的线程挂起（即让其进入阻塞状态），直到 notify 或 notifyAll 方法来唤醒线程
 
-（2）wait(long timeout)，该方法与wait()方法类似，唯一的区别就是在指定时间内，如果没有notify或notifAll方法的唤醒，也会自动唤醒。
+（2）wait(long timeout) 方法与 wait() 方法类似，唯一的区别就是在指定时间内，如果没有 notify 或 notifAll 方法的唤醒，也会自动唤醒
 
-（3）至于wait(long timeout,long nanos)，本意在于更精确的控制调度时间，不过从目前版本来看，该方法貌似没有完整的实现该功能，
+（3）至于 wait(long timeout, long nanos) 本意在于更精确的控制调度时间，不过从目前版本来看，该方法貌似没有完整的实现该功能
 
-> 使用 wait()、notify()、notifyAll() 时需要先对调用对象加锁。
+> 使用 wait()、notify()、notifyAll() 时需要先对调用对象`加锁`。
 
 其源码(JDK1.8)如下：
 
@@ -825,17 +836,17 @@ public final void wait(long timeout, int nanos) throws InterruptedException {
 }
 ```
 
- wait方法是一个本地方法，其底层是通过一个叫做监视器锁的对象来完成的。 所以wait方法的使用必须在同步的范围内，否则就会抛出`IllegalMonitorStateException`异常 。
+ wait 方法是一个本地方法，其底层是通过一个叫做监视器锁的对象来完成的。 所以 wait 方法的使用必须在同步的范围内，否则就会抛出`IllegalMonitorStateException`异常 。
 
 #### 虚假唤醒
 
-并发编程中为什么使用while循环而不是if()来调用wait方法？
+并发编程中为什么使用 while 循环而不是 if 来调用 wait 方法？
 
-当其他获取到该对象锁的线程释放锁时，上面的线程有可能被意外唤醒，但是此时上面线程是不满足条件的，导致它破坏了被锁保护的约束关系，引起意外后果。 用while()方法，就会再次判断条件是不是成立，满足执行条件了，才会继续执行；而if会直接唤醒wait()方法，继续往下执行，不管被notify或notifyAll唤醒的是不是它，而极有可能，此时并不满足if的判断条件，就是JDK文档中所谓的“虚假唤醒”。 
+当其他获取到该对象锁的线程释放锁时，上面的线程有可能被意外唤醒，但是此时上面线程是不满足条件的，导致它破坏了被锁保护的约束关系，引起意外后果。 用 while 方法，就会再次判断条件是不是成立，满足执行条件了，才会继续执行；而 if 会直接唤醒 wait 方法，继续往下执行，不管被 notify 或 notifyAll 唤醒的是不是它，而极有可能，此时并不满足if的判断条件，就是 JDK 文档中所谓的“虚假唤醒”。 
 
-### obj.notify()/obj.notifyAll()
+### obj.notify() 或 obj.notifyAll()
 
- wait方式是通过对象的monitor对象来实现的，所以只要在同一对象上去调用notify/notifyAll方法，就可以唤醒对应对象monitor上等待的线程了。notify和notifyAll的区别在于前者只能唤醒monitor上的一个线程，对其他线程没有影响，而notifyAll则唤醒所有的线程，看下面的例子很容易理解这两者的差别： 
+wait 方式是通过对象的 monitor 对象来实现的，所以只要在同一对象上去调用 notify/notifyAll 方法，就可以唤醒对应对象 monitor 上等待的线程了。notify 和 notifyAll 的区别在于前者只能唤醒 monitor 上的一个线程，对其他线程没有影响，而 notifyAll 则唤醒所有的线程，看下面的例子很容易理解这两者的差别： 
 
 ```java
 public class NotifyTest {
@@ -878,7 +889,7 @@ Thread-1End------
 Thread-2End------
 ```
 
-最后，有两点点需要注意：
+最后，有两点需要注意：
 
 1. 调用 wait 方法后，线程是会释放对 monitor 对象的所有权的，线程状态由 `RUNNING 变为 WAITING`，并将当前线程放置到对象的`等待队列`
 
@@ -991,9 +1002,9 @@ public synchronized Object get(long mills) throws InterruptedException {
 
 ### Thread.sleep(long millis)
 
-Thread.sleep() 方法的作用是让当前线程暂停指定的时间（毫秒）， 使当前线程进入阻塞状态（其他阻塞），但不释放任何锁资源，一定时间后线程自动进入runnable状态。给其它线程执行机会的最佳方式 。
+Thread.sleep() 方法的作用是让当前线程暂停指定的时间（毫秒）， 使当前线程进入阻塞状态（其他阻塞），但不释放任何锁资源，一定时间后线程自动进入 `runnable 状态`，给其它线程执行机会的最佳方式 。
 
-唯一需要注意的是其与wait方法的区别。最简单的区别是，wait方法依赖于同步，而sleep方法可以直接调用。而更深层次的区别在于``sleep方法只是暂时让出CPU的执行权，并不释放锁。而wait方法则需要释放锁``。
+唯一需要注意的是其与 wait 方法的区别。最简单的区别是，`wait 方法依赖于同步`，而 sleep 方法可以直接调用。而更深层次的区别在于``sleep 方法只是暂时让出 CPU 的执行权，并不释放锁。而 wait 方法则需要释放锁``。
 
 ```java
 public class SleepTest {
@@ -1053,9 +1064,9 @@ Thread-4Wait end ------
 
 ### Thread.yield()
 
-yield暂停当前线程，以便其他线程有机会执行，不过不能指定暂停的时间，并且也不能保证当前线程马上停止。yield方法只是将Running状态转变为Runnable状态 ，放弃cpu使用权，让cpu再次选择要执行的线程。 
+yield 暂停当前线程，以便其他线程有机会执行，不过不能指定暂停的时间，并且也不能保证当前线程马上停止。yield 方法只是将 Running 状态转变为 Runnable 状态 ，放弃 cpu 使用权，让 cpu 再次选择要执行的线程。 
 
- yield仅仅是让其它具有同等优先级的runnable线程获取执行权，但并不能保证其它具有同等优先级的线程就一定能获得cpu执行权。因为做出让步的当前线程，可能会被cpu再次选中，进入running状态。yield()不会导致阻塞。 
+yield 仅仅是让其它具有同等优先级的 runnable 线程获取执行权，但并不能保证其它具有同等优先级的线程就一定能获得 cpu 执行权。因为做出让步的当前线程，可能会被 cpu 再次选中，进入 running 状态，yield() 不会导致阻塞。 
 
 ```java
 public class YieldTest implements Runnable {
@@ -1084,13 +1095,13 @@ public class YieldTest implements Runnable {
 }
 ```
 
- 这个例子就是通过yield方法来实现两个线程的交替执行。不过请注意：这种交替并不一定能得到保证。
+ 这个例子就是通过 yield 方法来实现两个线程的交替执行。不过请注意：这种交替并不一定能得到保证。
 
 ### t.join() 或 t.join(long millis) 
 
-当前线程 A 执行过程中，调用 B 线程的 join 方法，使当前线程进入阻塞状态（其他阻塞），但不释放对象锁，等待B线程执行完后或一定时间 millis 后，A线程进入 runnable 状态。 
+当前线程 A 执行过程中，调用 B 线程的 join 方法，使当前线程进入阻塞状态（其他阻塞），但不释放对象锁，等待 B 线程执行完后或一定时间 millis 后，A 线程进入 runnable 状态。 
 
-JDK中提供三个版本的join方法，其实现与wait方法类似，join()方法实际上执行的join(0)，而join(long millis, int nanos)也与wait(long millis, int nanos)的实现方式一致 ：
+JDK 中提供三个版本的 join 方法，其实现与 wait 方法类似，join() 方法实际上执行的 join(0)，而 join(long millis, int nanos) 也与wait(long millis, int nanos) 的实现方式一致 ：
 
 ```java
 public final synchronized void join(long millis)
@@ -1155,7 +1166,7 @@ public class JoinTest {
 }
 ```
 
-对比两段代码的执行结果很容易发现，在没有使用join方法之间，线程是并发执行的，而使用join方法后，所有线程是顺序执行的。 
+对比两段代码的执行结果很容易发现，在没有使用 join 方法之间，线程是并发执行的，而使用 join 方法后，所有线程是顺序执行的。 
 
 # 3 happens-before
 
