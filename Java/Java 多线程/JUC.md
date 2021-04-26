@@ -14,21 +14,13 @@ java.util.concurrent 在并发编程中使用的工具类，里面包含很多�
 
 ``线程`` 通常在一个进程中可以包含若干个线程，当然一个进程中至少有一个线程，不然没有存在的意义。线程可以利用进程所拥有的资源，在引入线程的操作系统中，通常都是把进程作为分配资源的基本单位，而把线程作为独立运行和独立调度的基本单位，由于线程比进程更小，基本上不拥有系统资源，故对它的调度所付出的开销就会小得多，能更高效的提高系统多个程序间并发执行的程度。 
 
-## 2.2 wait/sleep的区别
-
-功能都是当前线程暂停，有什么区别？ 
-
-wait放开手去睡，放开手里的锁
-
-sleep握紧手去睡，醒了手里还有锁 
-
-## 2.3 并行/并发
+## 2.2 并行/并发
 
 `并行(paralle)`是指两个或者多个事件在同一时刻发生(在不同实体上的多个事件)
 
 `并发(concurrent)`是指两个或多个事件在同一时间间隔发生(在同一实体上的多个事件)
 
-## 2.4 Synchronized
+## 2.3 Synchronized
 
 多线程编程模板：在高内聚低耦合的前提下，线程 --> 操作（对外暴露的调用方法）--> 资源类
 
@@ -77,9 +69,9 @@ public class SaleTicket {
 }
 ```
 
-## 2.5 线程的应用
+## 2.4 线程的应用
 
-### 2.5.1 创建线程的方式
+### 2.4.1 创建线程的方式
 
 ```java
 // 不能这样写
@@ -186,13 +178,13 @@ public class SaleTicket {
 }
 ```
 
-### 2.5.2 获得多线程的几种方式
+### 2.4.2 获得多线程的几种方式
 
 在 Java 中，有多种方式来实现多线程。继承 Thread 类、 实现 Runnable 接口、使用线程池 ExecutorService、Callable 接口通过 Future 实现带返回结果的多线程。 
 
 **继承 Thread 类创建线程**
 
-Thread 类本质上是实现了 Runnable 接口的一个实例，代 表一个线程的实例。启动线程的唯一方法就是通过 Thread 类的 start()实例方法。start()方法是一个 native 方法，它会 启动一个新线程，并执行 run()方法。这种方式实现多线程 很简单，通过自己的类直接 extend Thread，并复写 run() 方法，就可以启动新线程并执行自己定义的 run()方法。 
+Thread 类本质上是实现了 Runnable 接口的一个实例，代表一个线程的实例。启动线程的唯一方法就是通过 Thread 类的 start()实例方法。start() 方法是一个 native 方法，它会 启动一个新线程，并执行 run() 方法。这种方式实现多线程 很简单，通过自己的类直接 extend Thread，并复写 run() 方法，就可以启动新线程并执行自己定义的 run() 方法。 
 
 ```java
 public class MyThread extends Thread { 
@@ -226,21 +218,21 @@ public class MyThread extends OtherClass implements Runnable {
 
 **FutureTask**
 
-Thread类的构造方法根本没有Callable，可以找中间人介绍。中间人是什么？ java多态，一个类可以实现多个接口！！ 
+Thread 类的构造方法根本没有 Callable，可以找中间人介绍。中间人是什么？ java 多态，一个类可以实现多个接口！！ 
 
 <img src="JUC.assets/image-20200905201704019.png" alt="image-20200905201704019"/>
 
-未来的任务，用它就干一件事，异步调用 main方法就像一个冰糖葫芦，一个个方法由main串起来。 
+未来的任务，用它就干一件事，异步调用 main 方法就像一个冰糖葫芦，一个个方法由 main 串起来。 
 
 但解决不了一个问题：正常调用挂起堵塞问题 
 
-在主线程中需要执行比较耗时的操作时，但又不想阻塞主线程时，可以把这些作业交给Future对象在后台完成，当主线程将来需要时，就可以通过Future对象获得后台作业的计算结果或者执行状态。 
+在主线程中需要执行比较耗时的操作时，但又不想阻塞主线程时，可以把这些作业交给 Future 对象在后台完成，当主线程将来需要时，就可以通过 Future 对象获得后台作业的计算结果或者执行状态。 
 
-一般FutureTask多用于耗时的计算，主线程可以在完成自己的任务后，再去获取结果。 
+一般 FutureTask 多用于耗时的计算，主线程可以在完成自己的任务后，再去获取结果。 
 
-仅在计算完成时才能检索结果；如果计算尚未完成，则阻塞 get 方法。一旦计算完成， 就不能再重新开始或取消计算。get方法而获取结果只有在计算完成时获取，否则会一直阻塞直到任务转入完成状态， 然后会返回结果或者抛出异常。 
+仅在计算完成时才能检索结果；如果计算尚未完成，则阻塞 get 方法。一旦计算完成， 就不能再重新开始或取消计算。get 方法而获取结果只有在计算完成时获取，否则会一直阻塞直到任务转入完成状态， 然后会返回结果或者抛出异常。 
 
-只计算一次，get方法放到最后 
+只计算一次，get 方法放到最后 
 
 ```java
 // 与Runnable对比
@@ -272,15 +264,15 @@ public class CallableDemo {
 }
 ```
 
-callable接口与runnable接口的区别？ 
+callable 接口与 runnable 接口的区别？ 
 
 （1）是否有返回值 
 
 （2）是否抛异常
 
-（3）落地方法不一样，一个是run，一个是call 
+（3）落地方法不一样，一个是 run，一个是 call 
 
-## 2.6 多线程锁
+## 2.5 多线程锁
 
 ```java
 class Phone {
@@ -363,7 +355,7 @@ synchronized实现同步的基础：Java中的每一个对象都可以作为锁�
 
 ## 3.1 Lock 接口是什么
 
-在 Lock 接口出现之前，Java 中的应用程序对于多线程的并发安全处理只能基于 synchronized 关键字来解决。但是 synchronized 在有些场景中会存在一些短板， 也就是它并不适合于所有的并发场景。但是在 Java5 以后，Lock 的出现可以解决 synchronized 在某些场景中的短板，它比 synchronized 更加灵活。
+在 Lock 接口出现之前，Java 中的应用程序对于多线程的并发安全处理只能基于 synchronized 关键字来解决。但是 synchronized 在有些场景中会存在一些短板， 也就是它并不适合于所有的并发场景。但是在 Java 5 以后，Lock 的出现可以解决 synchronized 在某些场景中的短板，它比 synchronized 更加灵活。
 
 ![image-20200905113158217](JUC.assets/image-20200905113158217.png)
 
@@ -371,7 +363,7 @@ synchronized实现同步的基础：Java中的每一个对象都可以作为锁�
 
 锁实现提供了比使用同步方法和语句可以获得的更广泛的锁操作。它们允许更灵活的结构，可能具有非常不同的属性，并且可能支持多个关联的条件对象。 
 
-## 3.2 Lock接口的实现
+## 3.2 Lock 接口的实现
 
 ```java
 class X {
@@ -393,25 +385,21 @@ Lock 本质上是一个接口，它定义了释放锁和获得锁的抽象方法
 
 `ReentrantLock` 表示重入锁，它是唯一一个实现了 Lock 接口的类。重入锁指的是线程在获得锁之后，再次获取该锁不需要阻塞，而是直接关联一次计数器增加重入次数 
 
-`ReentrantReadWriteLock` 重入读写锁，它实现了 ReadWriteLock 接口，在这个类中维护了两个锁，一个是 ReadLock，一个是 WriteLock，他们都分别实现了 Lock 接口。读写锁是一种适合读多写少的场景下解决线程安全问题的工具，基本原则 是： 读和读不互斥、读和写互斥、写和写互斥。也就是说涉及到影响数据变化的 操作都会存在互斥
+`ReentrantReadWriteLock` 重入读写锁，它实现了 ReadWriteLock 接口，在这个类中维护了两个锁，一个是 ReadLock，一个是 WriteLock，他们都分别实现了 Lock 接口。读写锁是一种适合读多写少的场景下解决线程安全问题的工具，基本原则是： 读和读不互斥、读和写互斥、写和写互斥。也就是说涉及到影响数据变化的 操作都会存在互斥
 
-`StampedLock`  stampedLock 是 JDK8 引入的新的锁机制，可以简单认为是读写锁的一个改进版本，读写锁虽然通过分离读和写的功能使得读和读之间可以完全并发，但是读和写是有冲突的，如果大量的读线程存在，可能会引起写线程的饥饿。 stampedLock 是一种乐观的读策略，使得乐观锁完全不会阻塞写线程
+`StampedLock`  stampedLock 是 JDK8 引入的新的锁机制，可以简单认为是读写锁的一个改进版本，读写锁虽然通过分离读和写的功能使得读和读之间可以完全并发，但是读和写是有冲突的，如果大量的读线程存在，可能会引起写线程的饥饿。 StampedLock 是一种乐观的读策略，使得乐观锁完全不会阻塞写线程
 
-#### 与 synchronized的区别
+#### synchronized 和 ReentrantLock 的区别
 
-两者区别：
+1. 两者都是可重入锁
 
-1. 首先synchronized是java内置关键字，在jvm层面，Lock是个java类；
+2. synchronized 依赖于 JVM 自动释放锁，而 ReentrantLock 依赖于 API(需要 lock() 和 unlock() 方法配合 try/finally 语句块来完成)，手动释放锁，否则容易造成线程死锁
 
-2. synchronized无法判断是否获取锁的状态，Lock可以判断是否获取到锁；
-
-3. synchronized会自动释放锁(a 线程执行完同步代码会释放锁 ；b 线程执行过程中发生异常会释放锁)，Lock需在finally中手工释放锁（unlock()方法释放锁），否则容易造成线程死锁；
-
-4. 用synchronized关键字的两个线程1和线程2，如果当前线程1获得锁，线程2线程等待。如果线程1阻塞，线程2则会一直等待下去，而Lock锁就不一定会等待下去，如果尝试获取不到锁，线程可以不用一直等待就结束了；
-
-5. synchronized的锁可重入、不可中断、非公平，而Lock锁可重入、可判断、可公平（两者皆可）
-
-6. Lock锁适合大量同步的代码的同步问题，synchronized锁适合代码少量的同步问题。
+3. ReentrantLock 比 synchronized 增加了一些高级功能：
+   * `可中断地获取锁 lockInterruptibly()`，在锁的获取中可以中断当前线程
+   * `尝试非阻塞的获取锁 tryLock()` 或`超时获取锁 tryLock(long time, TimeUnit unit)`，调用该方法后直接返回，如果能够获取则返回 true，否则返回 flase
+   * 可实现公平锁
+   * 可实现选择性通知（锁可以绑定多个条件）Condition
 
 ## 3.3 Lock 的类关系图
 
@@ -421,9 +409,9 @@ Lock 有很多的锁的实现，但是直观的实现是 ReentrantLock 重入锁
 
 void lock() 如果锁可用就获得锁，如果锁不可用就阻塞直到锁释放 
 
-void lockInterruptibly() 和 lock() 方法相似, 但阻塞的线程可中断 ， 抛出 java.lang.InterruptedExcepti on 异常 
+void lockInterruptibly() 和 lock() 方法相似，但阻塞的线程可中断，抛出 java.lang.InterruptedException 异常 
 
-boolean tryLock() 非阻塞获取锁;尝试获取锁，如果成功返回 true 
+boolean tryLock() 非阻塞获取锁，尝试获取锁，如果成功返回 true 
 
 boolean tryLock(long timeout, TimeUnit timeUnit) 带有超时时间的获取锁方法
 
@@ -435,7 +423,7 @@ void unlock() 释放锁
 
 ### 3.4.1 重入锁的设计目的
 
-比如调用 demo 方法获得了当前的对象锁，然后在这个方法中再去调用demo2，demo2 中的存在同一个实例锁，这个时候当前线程会因为无法获得demo2 的对象锁而阻塞，就会产生死锁。
+比如调用 demo 方法获得了当前的对象锁，然后在这个方法中再去调用 demo2，demo2 中的存在同一个实例锁，这个时候当前线程会因为无法获得 demo2 的对象锁而阻塞，就会产生死锁。
 
 重入锁的设计目的是`避免线程的死锁`。
 
@@ -489,7 +477,9 @@ public class ReentrantLockDemo {
 
 ## 3.5 ReentrantReadWriteLock 读写锁
 
-我们以前理解的锁，基本都是排他锁，也就是这些锁在同一时刻只允许一个线程进 行访问，而读写所在同一时刻可以允许多个线程访问，但是在写线程访问时，所有 的读线程和其他写线程都会被阻塞。读写锁维护了一对锁，一个读锁、一个写锁; 一般情况下，读写锁的性能都会比排它锁好，因为大多数场景读是多于写的。在读多于写的情况下，读写锁能够提供比排它锁更好的并发性和吞吐量。
+我们以前理解的锁，基本都是排他锁，也就是这些锁在同一时刻只允许一个线程进行访问，而读写所在同一时刻可以允许多个线程访问，但是在写线程访问时，所有的读线程和其他写线程都会被阻塞。读写锁维护了`一对锁：读锁和写锁`。
+
+一般情况下，读写锁的性能都会比排它锁好，因为大多数场景读是多于写的。在读多于写的情况下，读写锁能够提供比排它锁更好的并发性和吞吐量。
 
 ```java
 class MyCache {
@@ -561,7 +551,7 @@ public class ReadWriteLockDemo {
 
 ## 4.1 AQS 是什么
 
-在 Lock 中，用到了一个`队列同步器 AQS`，全称 `AbstractQueuedSynchronizer`，它是一个同步工具也是 Lock 用来实现线程同步的核心组件。如果你搞懂了 AQS，那 么 J.U.C 中绝大部分的工具都能轻松掌握。
+在 Lock 中，用到了一个`队列同步器 AQS`，全称 `AbstractQueuedSynchronizer`，它是一个同步工具也是 Lock 用来实现线程同步的核心组件。如果你搞懂了 AQS，那么 J.U.C 中绝大部分的工具都能轻松掌握。
 
 ## 4.2 AQS 的两种功能
 
@@ -622,13 +612,14 @@ public class ReadWriteLockDemo {
 
 ### 独占超时式
 
-超时获取同步状态过程可以被视为响应中断获取同步状态的增强版，主要需要计算睡眠的时间间隔 nanosTimeout，为了防止过早通知，nanosTimeout 计算公式为：nanosTimeout = deadline - System.nanoTime()，deadline 为最终唤醒时间，System.nanoTime() 为当前时间，如果 nanosTimeout 大于 0 则表示超时时间未到，需要继续睡眠 nanosTimeout 纳秒，反正，表示已经超时。
+超时获取同步状态过程可以被视为响应中断获取同步状态的增强版，主要需要计算睡眠的时间间隔 nanosTimeout，为了防止过早通知，nanosTimeout 计算公式为：nanosTimeout = deadline - System.nanoTime()，deadline 为`最终唤醒时间`，System.nanoTime() 为`当前时间`，如果 nanosTimeout 大于 0 则表示超时时间未到，需要继续睡眠 nanosTimeout 纳秒，反则表示已经超时。
 
 ```java
 private boolean doAcquireNanos(int arg, long nanosTimeout)
     throws InterruptedException {
     if (nanosTimeout <= 0L)
         return false;
+    // 最终唤醒时间
     final long deadline = System.nanoTime() + nanosTimeout;
     final Node node = addWaiter(Node.EXCLUSIVE);
     boolean failed = true;
@@ -719,25 +710,27 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
 **释放锁以及添加线程对于队列的变化**
 
-当出现锁竞争以及释放锁的时候，AQS 同步队列中的节点会发生变化，首先看一 下添加节点的场景。
+当出现锁竞争以及释放锁的时候，AQS 同步队列中的节点会发生变化，首先看一下添加节点的场景。
 
 ![image-20201228172833908](JUC.assets/image-20201228172833908.png)
 
-会涉及到两个变化 
+会涉及到三个变化 
 
-1. 新的线程封装成 Node 节点追加到同步队列中，设置 prev 节点以及修改当前节 点的前置节点的 next 节点指向自己 
-2. 通过 CAS 将 tail 重新指向新的尾部节点 
+1. 新的线程封装成 Node 节点追加到同步队列中，设置当前节点 prev 节点为旧的尾部节点
+2. 通过 CAS 将 tail 重新指向新的尾部节点
+3. 修改当前节点的前置节点的 next 节点指向自己 
 
 head 节点表示获取锁成功的节点，当头结点在释放同步状态时，会唤醒后继节点， 如果后继节点获得锁成功，会把自己设置为头结点，节点的变化过程如下：
 
 ![image-20201228173101325](JUC.assets/image-20201228173101325.png)
 
-这个过程也是涉及到两个变化 
+这个过程也是涉及到三个变化 
 
 1. 修改 head 节点指向下一个获得锁的节点
-2.  新的获得锁的节点，将 prev 的指针指向 null 
+2.  新的获得锁的节点，将 prev 和 thread 的指针指向 null 
+3. 旧 head 节点的 next 的指针指向 null 
 
-设置 head 节点不需要用 CAS，原因是设置 head 节点是由获得锁的线程来完成的，而同步锁只能由一个线程获得，所以不需要 CAS 保证，只需要把 head 节点 设置为原首节点的后继节点，并且断开原 head 节点的 next 引用即可。
+设置 head 节点不需要用 CAS，原因是`设置 head 节点是由获得锁的线程来完成`的，而同步锁只能由一个线程获得，所以不需要 CAS 保证，只需要把 head 节点设置为原首节点的后继节点，并且断开原 head 节点的 next 引用即可。
 
 ## 4.4 ReentrantLock 的源码分析
 
@@ -1224,7 +1217,7 @@ if (compareAndSetTail(t, node)) {
 
 这个方法前面已经完整分析过了，我们只关注一下 Thread2 被唤醒以后的执行流程。 由于 Thread2 的 prev 节点指向的是 head，并且 Thread1 已经释放了锁。所以这个时候调用 tryAcquire 方法时，可以顺利获取到锁 
 
-1. 把 Thread2 节点当成 head 
+1. 把 Thread2 节点当成 head
 2. 把原 head 节点的 next 节点指向为 null
 
 > 设置首节点是通过获取同步状态成功的线程来完成的，因此设置头节点的方法并不需要使用 CAS 来保证。
@@ -1296,18 +1289,6 @@ protected final boolean tryAcquire(int acquires) {
 > 但为什么会造成线程饥饿的非公平锁会是默认实现呢？
 >
 > 公平锁虽然保证了锁的 FIFO 原则，但是进行了大量的线程切换。非公平锁虽然可能造成线程饥饿，但是极少的线程切换，保证了其更大的吞吐量。
-
-## 4.7 synchronized 和 ReentrantLock 的区别
-
-1. 两者都是可重入锁
-
-2. synchronized 依赖于 JVM 而 ReentrantLock 依赖于 API(需要 lock() 和 unlock() 方法配合 try/finally 语句块来完成)
-
-3. ReentrantLock 比 synchronized 增加了一些高级功能：
-   * `可中断地获取锁 lockInterruptibly()`，在锁的获取中可以中断当前线程
-   * `尝试非阻塞的获取锁 tryLock()` 或`超时获取锁 tryLock(long time, TimeUnit unit)`，调用该方法后直接返回，如果能够获取则返回 true，否则返回 flase
-   * 可实现公平锁
-   * 可实现选择性通知（锁可以绑定多个条件）Condition
 
 # 5 BlockingQueueDemo 阻塞队列
 

@@ -599,7 +599,8 @@ public class UseVolatile02 {
     int c = 3;
     boolean flag = false;
 
-    public void write() {
+    public void write() throws InterruptedException {
+        TimeUnit.SECONDS.sleep(1);
         a = 100;
         b = 200;
         c = 300;
@@ -618,20 +619,21 @@ public class UseVolatile02 {
         }
     }
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) {
         UseVolatile02 useVolatile02 = new UseVolatile02();
+        new Thread(() -> {
+            try {
+                useVolatile02.write();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }).start();
         new Thread(() -> {
             try {
                 useVolatile02.read();
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-        }).start();
-
-        TimeUnit.SECONDS.sleep(1);
-
-        new Thread(() -> {
-            useVolatile02.write();
         }).start();
     }
 }

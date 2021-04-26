@@ -68,6 +68,10 @@ show variables like 'tx_isolation';
 
 ## 1.5 MVCC 实现
 
+> `快照读` 单纯的 select 操作
+>
+> 快照读的实现方式：undolog 和多版本并发控制 MVCC
+
 如果要让一个事务前后两次读取的数据保持一致， 那么我们可以在修改数据的时候给它建立一个备份或者叫快照，后面再来读取这个快照就行了。这种方案我们叫做多版本的并发控制 `Multi Version Concurrency Control (MVCC)`。
 
 > 既然要保证前后两次读取数据一致，那么读取数据的时候锁定要操作的数据，不允许其他的事务修改就行了。这种方案我们叫做基于锁的并发控制 `Lock Based Concurrency Control（LBCC）`。
@@ -383,6 +387,10 @@ Gap Lock 只在 RR 中存在。如果要关闭间隙锁，可以通过以下两�
 这种情况下除了外键约束和唯一性检查会加间隙锁，其他情况都不会用间隙锁。
 
 ### 临键锁
+
+> `当前读` select...lock in share mode (共享读锁)、select...for update、update、delete、insert
+>
+> 当前读的实现方式：next-key 锁(行记录锁 + Gap 间隙锁)
 
 当我们使用了范围查询时使用的就是`临键锁`，它是 MySQL 里面默认的行锁算法，结合了间隙锁和记录锁的一种锁定算法。临键锁，锁住最后一个 key 的`下一个左开右闭的区间`。 
 
