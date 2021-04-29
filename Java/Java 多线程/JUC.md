@@ -762,7 +762,7 @@ sync 实际上是一个抽象的静态内部类，它继承了 AQS 来实现重�
 
 以非公平锁为例，来看看 lock 中的实现 
 
-1. 非公平锁和公平锁最大的区别在于，在非公平锁中我抢占锁的逻辑是，不管有没有线程排队，我先上来 cas 去抢占一下 
+1. 非公平锁和公平锁最大的区别在于，在非公平锁中抢占锁的逻辑是，不管有没有线程排队，先上来 CAS 去抢占一下 
 2. CAS 成功，就表示成功获得了锁 
 3. CAS 失败，调用 acquire(1) 走锁竞争逻辑
 
@@ -786,9 +786,9 @@ protected final boolean compareAndSetState(int expect, int update) {
 }
 ```
 
-通过 cas 乐观锁的方式来做比较并替换，这段代码的意思是，如果当前内存中的 state 的值和预期值 expect 相等，则替换为 update。更新成功返回 true，否则返回 false。
+通过 CAS 乐观锁的方式来做比较并替换，这段代码的意思是，如果当前内存中的 state 的值和预期值 expect 相等，则替换为 update。更新成功返回 true，否则返回 false。
 
-这个操作是原子的，不会出现线程安全问题，这里面涉及到Unsafe这个类的操作，以及涉及到 state 这个属性的意义。 
+这个操作是原子的，不会出现线程安全问题，这里面涉及到 Unsafe 这个类的操作，以及涉及到 state 这个属性的意义。 
 
 state 是 AQS 中的一个属性，它在不同的实现中所表达的含义不一样，对于重入锁的实现来说，表示一个同步状态。它有两个含义的表示 
 
@@ -827,11 +827,11 @@ UNSAFE_END
 
 **AQS.accquire**
 
-acquire 是 AQS 中的方法，如果 CAS 操作未能成功，说明 state 已经不为 0，此时继续 acquire(1)操作。
+acquire 是 AQS 中的方法，如果 CAS 操作未能成功，说明 state 已经不为 0，此时继续 acquire(1) 操作。
 
 **acquire 方法中的 1 的参数是用来做什么呢？**
 
-用作抢占锁后更新satet的update值或者同一线程获取锁后的递增值
+用作抢占锁后更新 satet 的 update 值或者同一线程获取锁后的递增值
 
 这个方法的主要逻辑是 
 
@@ -851,7 +851,7 @@ acquire 是 AQS 中的方法，如果 CAS 操作未能成功，说明 state 已�
 
 这个方法的作用是尝试获取锁，如果成功返回 true，不成功返回 false。
 
-它是重写 AQS 类中的 tryAcquire 方法，并且大家仔细看一下 AQS 中 tryAcquire 方法的定义，并没有实现，而是抛出异常。按照一般的思维模式，既然是一个不实 现的模版方法，那应该定义成 abstract，让子类来实现呀？大家想想为什么
+它是重写 AQS 类中的 tryAcquire 方法，并且大家仔细看一下 AQS 中 tryAcquire 方法的定义，并没有实现，而是抛出异常。按照一般的思维模式，既然是一个不实现的模版方法，那应该定义成 abstract，让子类来实现呀？大家想想为什么
 
 ```java
 protected final boolean tryAcquire(int acquires) {
