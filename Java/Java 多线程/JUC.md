@@ -477,9 +477,18 @@ public class ReentrantLockDemo {
 
 ## 3.5 ReentrantReadWriteLock 读写锁
 
-我们以前理解的锁，基本都是排他锁，也就是这些锁在同一时刻只允许一个线程进行访问，而读写所在同一时刻可以允许多个线程访问，但是在写线程访问时，所有的读线程和其他写线程都会被阻塞。读写锁维护了`一对锁：读锁和写锁`。
+我们以前理解的锁，基本都是排他锁，也就是这些锁在同一时刻只允许一个线程进行访问，而读写所在同一时刻可以允许多个线程访问，但是在写线程访问时，`所有的读线程和其他写线程都会被阻塞`。读写锁维护了`一对锁：读锁和写锁`。
 
-一般情况下，读写锁的性能都会比排它锁好，因为大多数场景读是多于写的。在读多于写的情况下，读写锁能够提供比排它锁更好的并发性和吞吐量。
+一般情况下，读写锁的性能都会比排它锁好，因为大多数场景读是多于写的。在读多于写的情况下，读写锁能够提供比排它锁`更好的并发性和吞吐量`。
+
+`ReadWriteLock` 仅定义了获取读锁和写锁的两个方法，即 `readLock()` 和 `writeLock()` 方法，而其实现 `ReentrantReadWriteLock` 还提供了便于外界监控其内部工作的方法：
+
+| 方法名称                | 描述                       |
+| ----------------------- | -------------------------- |
+| Int getReadLockCount()  | 返回当前读锁被获取的次数   |
+| Int getReadHoldCount()  | 返回当前线程获取读锁的次数 |
+| boolean isWriteLocked() | 判断写锁是否被获取         |
+| int getWriteHoldCount() | 返回当前写锁被获取的次数   |
 
 ```java
 class MyCache {
@@ -1290,11 +1299,126 @@ protected final boolean tryAcquire(int acquires) {
 >
 > 公平锁虽然保证了锁的 FIFO 原则，但是进行了大量的线程切换。非公平锁虽然可能造成线程饥饿，但是极少的线程切换，保证了其更大的吞吐量。
 
-# 5 BlockingQueueDemo 阻塞队列
+# 5 读写锁的实现分析
+
+## 5.1 读写状态的设计
+
+读写锁同样依赖自定义同步器来实现同步功能，而读写状态就是其同步器的同步状态。
+
+`按位切割使用` 读写锁将整型的状态变量切分为了两部分，高 16 位表示读，低 16 位表示写。
+
+读写锁通过位运算迅速确定读和写各自的状态（假设当前同步状态值为 S）：
+
+写状态等于 `S & 0x0000FFFF`（将高 16 位全部抹去），写状态增加 1 时，等于 `S + 1`
+
+读状态等于 `S >>> 16`（无符号补 0 右移 16 位），读状态增加 1 时，等于 `S + (1 << 16)`，也就是 S + 0x00010000
+
+> 推论：
+>
+> S 不等于 0 时，当写状态等于 0 时(S & 0x0000FFFF)，则读状态大于 0，即读锁已被获取。
+
+## 5.2 写锁的获取与释放
+
+写锁是一个支持重进入的排他锁。如果当前线程已经获取了写锁，则增加写状态。如果当前线程在获取写锁时，`读锁已经被获取`（读状态不为 0）或者`该线程不是已经获取写锁的线程`，则当前线程进入等待状态：
+
+```java
+protected final boolean tryAcquire(int acquires) {
+    /*
+     * Walkthrough:
+     * 1. If read count nonzero or write count nonzero
+     *    and owner is a different thread, fail.
+     * 2. If count would saturate, fail. (This can only
+     *    happen if count is already nonzero.)
+     * 3. Otherwise, this thread is eligible for lock if
+     *    it is either a reentrant acquire or
+     *    queue policy allows it. If so, update state
+     *    and set owner.
+     */
+    Thread current = Thread.currentThread();
+    int c = getState();
+    int w = exclusiveCount(c);   // ===》 c & 65535，写状态
+    // 上诉推论中：c != 0 即 S 不等于 0，w == 0 即 写状态等于 0，表读锁已被获取
+    if (c != 0) {
+        // 存在读锁或者当前获取线程不是已经获取写锁的线程
+        if (w == 0 || current != getExclusiveOwnerThread())
+            return false;
+        if (w + exclusiveCount(acquires) > MAX_COUNT)
+            throw new Error("Maximum lock count exceeded");
+        // Reentrant acquire
+        setState(c + acquires);
+        return true;
+    }
+    if (writerShouldBlock() ||
+        !compareAndSetState(c, c + acquires))
+        return false;
+    setExclusiveOwnerThread(current);
+    return true;
+}
+```
+
+**为什么存在读锁，则写锁不能被获取？**
+
+读写锁要确保写锁的操作对读锁可见，如果允许读锁在已被获取的情况下对写锁的获取，那么正在进行的其他读线程就无法感知到当前写线程的操作。因此，只有等待其他读线程都释放了读锁，写锁才能被当前线程获取，而写锁一旦被获取，则其他读写线程的后续访问均被阻塞。
+
+## 5.3 读锁的获取与释放
+
+读锁是一个支持重入的共享锁，能够被多个线程同时获取，在`没有其他写线程访问`或者`写状态为 0` 时，读锁总会被成功地获取，所做的也只是线程安全的增加读状态。
+
+```java
+protected final int tryAcquireShared(int unused) {
+    /*
+     * Walkthrough:
+     * 1. If write lock held by another thread, fail.
+     * 2. Otherwise, this thread is eligible for
+     *    lock wrt state, so ask if it should block
+     *    because of queue policy. If not, try
+     *    to grant by CASing state and updating count.
+     *    Note that step does not check for reentrant
+     *    acquires, which is postponed to full version
+     *    to avoid having to check hold count in
+     *    the more typical non-reentrant case.
+     * 3. If step 2 fails either because thread
+     *    apparently not eligible or CAS fails or count
+     *    saturated, chain to version with full retry loop.
+     */
+    Thread current = Thread.currentThread();
+    int c = getState();
+    // 写状态 == 0 || （写状态 ！= 0 && 写线程 == 当前线程）
+    if (exclusiveCount(c) != 0 &&
+        getExclusiveOwnerThread() != current)
+        return -1;
+    int r = sharedCount(c);
+    if (!readerShouldBlock() &&
+        r < MAX_COUNT &&
+        compareAndSetState(c, c + SHARED_UNIT)) { // 线程安全的设置读状态
+        if (r == 0) {
+            firstReader = current;
+            firstReaderHoldCount = 1;
+        } else if (firstReader == current) {
+            firstReaderHoldCount++;
+        } else {
+            HoldCounter rh = cachedHoldCounter;
+            if (rh == null || rh.tid != getThreadId(current))
+                cachedHoldCounter = rh = readHolds.get();
+            else if (rh.count == 0)
+                readHolds.set(rh);
+            rh.count++;
+        }
+        return 1;
+    }
+    return fullTryAcquireShared(current);
+}
+```
+
+如果当前线程获取了写锁或者写锁未被获取，则当前线程（CAS）增加读状态，成功获取读锁。
+
+读锁的每次释放（线程安全，可能有多个读线程同时释放读锁）均减少读状态，减少的值是 `1 << 16`。
+
+# 6 BlockingQueueDemo 阻塞队列
 
 在使用过分布式消息队列，比如 ActiveMQ、 kafka、RabbitMQ 等等，消息队列的是有可以使得程序之间实现解耦，提升程序响应的效率。 如果我们把多线程环境比作是分布式的话，那么线程与线程之间是不是也可以使用这种消息队列的方式进行数据通 信和解耦呢？
 
-## 5.1 阻塞队列的使用案例
+## 6.1 阻塞队列的使用案例
 
 **注册成功后增加积分**
 
@@ -1366,13 +1490,13 @@ private void sendPoints(User user){
 
 在这个案例中，我们使用了 ArrayBlockingQueue 基于数组的阻塞队列，来优化代码的执行逻辑。 
 
-## 5.2 阻塞队列的应用场景
+## 6.2 阻塞队列的应用场景
 
 阻塞队列这块的应用场景，比较多的仍然是对于生产者消费者场景的应用，但是由于分布式架构的普及，大家更多的关注在分布式消息队列上。所以其实如果把阻塞队列比作成分布式消息队列的话，那么所谓的生产者和消费者其实就是基于阻塞队列的解耦。 另外，阻塞队列是一个 fifo 的队列，所以对于希望在线程级别需要实现对目标服务的顺序访问的场景中，也可以使用。
 
-## 5.3 J.U.C 中的阻塞队列
+## 6.3 J.U.C 中的阻塞队列
 
-### 5.3.1 J.U.C 提供的阻塞队列
+### 6.3.1 J.U.C 提供的阻塞队列
 
 阻塞队列是一个队列，在数据结构中起的作用如下图：
 
@@ -1398,7 +1522,7 @@ private void sendPoints(User user){
 | LinkedTransferQueue   | 链表组成的无界阻塞队列                                       |
 | LinkedBlockingDeque   | 链表组成的双向阻塞队列                                       |
 
-### 5.3.2 阻塞队列的操作方法
+### 6.3.2 阻塞队列的操作方法
 
 ![image-20200906093512436](JUC.assets/image-20200906093512436.png)
 
@@ -1471,7 +1595,7 @@ public class BlockingQueueDemo {
 }
 ```
 
-## 5.4 ArrayBlockingQueue 原理分析
+## 6.4 ArrayBlockingQueue 原理分析
 
 **构造方法**
 
