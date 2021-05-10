@@ -477,7 +477,7 @@ public class ReentrantLockDemo {
 
 ## 3.5 ReentrantReadWriteLock 读写锁
 
-我们以前理解的锁，基本都是排他锁，也就是这些锁在同一时刻只允许一个线程进行访问，而读写所在同一时刻可以允许多个线程访问，但是在写线程访问时，`所有的读线程和其他写线程都会被阻塞`。读写锁维护了`一对锁：读锁和写锁`。
+我们以前理解的锁，基本都是排他锁，也就是这些锁在同一时刻只允许一个线程进行访问，而读写锁在同一时刻可以允许多个线程访问，但是在写线程访问时，`所有的读线程和其他写线程都会被阻塞`。读写锁维护了`一对锁：读锁和写锁`。
 
 一般情况下，读写锁的性能都会比排它锁好，因为大多数场景读是多于写的。在读多于写的情况下，读写锁能够提供比排它锁`更好的并发性和吞吐量`。
 
@@ -1309,9 +1309,9 @@ protected final boolean tryAcquire(int acquires) {
 
 读写锁通过位运算迅速确定读和写各自的状态（假设当前同步状态值为 S）：
 
-写状态等于 `S & 0x0000FFFF`（将高 16 位全部抹去），写状态增加 1 时，等于 `S + 1`
-
 读状态等于 `S >>> 16`（无符号补 0 右移 16 位），读状态增加 1 时，等于 `S + (1 << 16)`，也就是 S + 0x00010000
+
+写状态等于 `S & 0x0000FFFF`（将高 16 位全部抹去），写状态增加 1 时，等于 `S + 1`
 
 > 推论：
 >
@@ -1337,7 +1337,7 @@ protected final boolean tryAcquire(int acquires) {
     Thread current = Thread.currentThread();
     int c = getState();
     int w = exclusiveCount(c);   // ===》 c & 65535，写状态
-    // 上诉推论中：c != 0 即 S 不等于 0，w == 0 即 写状态等于 0，表读锁已被获取
+    // 上诉推论中：c != 0 即 S 不等于 0，w == 0 即写状态等于 0，表读锁已被获取
     if (c != 0) {
         // 存在读锁或者当前获取线程不是已经获取写锁的线程
         if (w == 0 || current != getExclusiveOwnerThread())
@@ -1362,7 +1362,7 @@ protected final boolean tryAcquire(int acquires) {
 
 ## 5.3 读锁的获取与释放
 
-读锁是一个支持重入的共享锁，能够被多个线程同时获取，在`没有其他写线程访问`或者`写状态为 0` 时，读锁总会被成功地获取，所做的也只是线程安全的增加读状态。
+读锁是一个支持重入的共享锁，能够被多个线程同时获取，在`写状态为 0` 或者`没有其他写线程访问`时，读锁总会被成功地获取，所做的也只是线程安全的增加读状态。
 
 ```java
 protected final int tryAcquireShared(int unused) {
@@ -1384,6 +1384,7 @@ protected final int tryAcquireShared(int unused) {
     Thread current = Thread.currentThread();
     int c = getState();
     // 写状态 == 0 || （写状态 ！= 0 && 写线程 == 当前线程）
+    // 写状态为 0		没有其他写线程访问					  
     if (exclusiveCount(c) != 0 &&
         getExclusiveOwnerThread() != current)
         return -1;
