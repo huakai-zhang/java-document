@@ -669,7 +669,7 @@ public class InterruptedDemo {
 
 **其他的线程复位**
 
-除了通过 Thread.interrupted 方法对线程中断标识进行复位以外 ， 还有一种被动复位的场景，就是对抛出 InterruptedException 异常的方法 ， `在 InterruptedException 抛出之前，JVM 会先把线程的中断标识位清除`，然后才会抛出 InterruptedException，这个时候如果调用 isInterrupted 方法，将会返回 false(上例 InterruptionInJava01.java)。
+除了通过 Thread.interrupted 方法对线程中断标识进行复位以外 ， 还有一种`被动复位`的场景，就是对抛出 InterruptedException 异常的方法 ， `在 InterruptedException 抛出之前，JVM 会先把线程的中断标识位清除`，然后才会抛出 InterruptedException，这个时候如果调用 isInterrupted 方法，将会返回 false(上例 InterruptionInJava01.java)。
 
 **为什么要复位**
 
@@ -753,13 +753,13 @@ set_interrupted(true) 实际上就是调用 osThread.hpp 中的 set_interrupted(
 2. 在调用 ParkEvent 的 park 方法之前，会先判断线程的中断状态，如果为 true，会清除当前线程的中断标识 
 3. Object.wait 、 Thread.sleep 、 Thread.join 会抛出 InterruptedException
 
-**为什么 Object.wait、 Thread.sleep 和 Thread.join 都会抛出 InterruptedException? **
+**为什么 Object.wait、Thread.sleep 和 Thread.join 都会抛出 InterruptedException? **
 
 你会发现这几个方法有一个共同点，都是属于阻塞的方法。
 
 而阻塞方法的释放会取决于一些外部的事件，但是阻塞方法可能因为等不到外部的触发事件而导致无法终止，所以它允许一个线程请求自己来停止它正在做的事情。当一个方法抛出 InterruptedException 时，它是在告诉调用者如果执行该方法的线程被中断，它会尝试停止正在做的事情并且通过抛出 InterruptedException 表示提前返回。 
 
-所以，这个异常的意思是表示`一个阻塞被其他线程中断了`。 然后 ，由于线程调用了 interrupt() 中断方法 ， 那么 Object.wait、Thread.sleep 等被阻塞的线程被唤醒以后会通过 is_interrupted 方法判断中断标识的状态变化，如果发现中断标识为 true，则先清除中断标识，然后抛出 InterruptedException。
+所以，这个异常的意思是表示`一个阻塞被其他线程中断了`。 由于线程调用了 interrupt() 中断方法 ， 那么 Object.wait、Thread.sleep 等被阻塞的线程被唤醒，然后会通过 is_interrupted 方法判断中断标识的状态变化，如果发现中断标识为 true，则先清除中断标识，然后抛出 InterruptedException。
 
 需要注意的是，InterruptedException 异常的抛出并不意味着线程必须终止，而是提醒当前线程有中断的操作发生， 至于接下来怎么处理取决于线程本身，比如：
 
