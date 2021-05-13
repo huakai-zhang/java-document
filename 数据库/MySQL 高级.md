@@ -72,11 +72,11 @@ show variables like 'tx_isolation';
 >
 > 快照读的实现方式：undolog 和多版本并发控制 MVCC
 
-如果要让一个事务前后两次读取的数据保持一致， 那么我们可以在修改数据的时候给它建立一个备份或者叫快照，后面再来读取这个快照就行了。这种方案我们叫做多版本的并发控制 `Multi Version Concurrency Control (MVCC)`。
+如果要让一个事务前后两次读取的数据保持一致， 那么我们可以`在修改数据的时候`给它建立一个`备份或者叫快照`，后面再来读取这个快照就行了。这种方案我们叫做多版本的并发控制 `Multi Version Concurrency Control (MVCC)`。
 
 > 既然要保证前后两次读取数据一致，那么读取数据的时候锁定要操作的数据，不允许其他的事务修改就行了。这种方案我们叫做基于锁的并发控制 `Lock Based Concurrency Control（LBCC）`。
 
-问题：这个快照什么时候创建？读取数据的时候，怎么保证能读取到这个快照而不 是最新的数据？
+问题：这个快照什么时候创建？读取数据的时候，怎么保证能读取到这个快照而不是最新的数据？
 
 InnoDB 为每行记录都实现了两个隐藏字段： 
 
@@ -516,19 +516,19 @@ select * from information_schema.INNODB_LOCK_WAITS;
 
 ## 2.7 隔离级别的实现
 
-**Read Uncommited** 
+### Read Uncommited
 
 RU 隔离级别：不加锁
 
-**Serializable** 
+### Serializable
 
-Serializable 所有的 select 语句都会被隐式的转化为 select ... in share mode，会 和 update、delete 互斥。 
+Serializable 所有的 select 语句都会被隐式的转化为 select ... in share mode，会和 update、delete 互斥。 
 
 ### Repeatable Read
 
-RR 隔离级别下，普通的 select 使用快照读(snapshot read)，底层使用 MVCC 来实现。
+RR 隔离级别下，普通的 select 使用`快照读(snapshot read)`，底层使用 MVCC 来实现。
 
-加锁的 select(select ... in share mode / select ... for update)以及更新操作 update, delete 等语句使用当前读（current read），底层使用记录锁、间隙锁、临键锁。 
+加锁的 select(select ... in share mode / select ... for update)以及更新操作 update, delete 等语句使用`当前读(current read)`，底层使用记录锁、间隙锁、临键锁。 
 
 ### Read Commited
 
