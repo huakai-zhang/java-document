@@ -267,9 +267,9 @@ show global status like '%Slow_queries%';
 # Slow_queries		1
 ```
 
-### 3.2.4 日志分析工具 mysqldumpshow
+### 3.2.4 日志分析工具 mysqldumpslow
 
-在生产环境中，如果要手工分析日志，查找、分析SQL，显然是一个体力活，MySQL提供了日志分析工具 mysqldumpshow。
+在生产环境中，如果要手工分析日志，查找、分析SQL，显然是一个体力活，MySQL提供了日志分析工具 mysqldumpslow。
 
 ```shell
 mysqldumpslow --help
@@ -704,7 +704,7 @@ id如果相同，可以认为是一组，从上往下执行；在所有组中，
 
   - 依次从好到差:system，const，eq_ref，ref，fulltext，ref_or_null， unique_subquery，index_subquery，range，index_merge，index，ALL 
 
-#### possible_ _keys
+#### possible_ keys
 
 显示可能应用在这张表中的索引，一个或多个。
 
@@ -795,7 +795,7 @@ key_len显示的值为索引最大可能长度，并非实际使用长度，即k
 
 理想情况下`扫描的行数(rows)`和返回的行数应该是相同的。实际情况一般在1：1和10：1之间。
 
-如果查询没有找到合适的访问类型，解决办法就是增加一个和合适的索引。索引让 MySQL 以最高效、扫描行数最少的方式找到需要的记录(注意应用 WHERE 条件)。
+如果查询没有找到合适的访问类型，解决办法就是增加一个合适的索引。索引让 MySQL 以最高效、扫描行数最少的方式找到需要的记录(注意应用 WHERE 条件)。
 
 ### 3.4.3 重构查询方式
 

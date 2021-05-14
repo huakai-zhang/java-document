@@ -301,13 +301,9 @@ B+Tree 的几个主要特点：
 > 总结一下，InnoDB 中的 B+Tree 的特点： 
 >
 > * 它是 B Tree 的变种，B Tree 能解决的问题，它都能解决(每个节点存储更多关键字，路数更多)
->
+>* B+Tree 的磁盘读写能力相对于 B Tree 来说更强（根节点和枝节点不保存数据区， 所以一个节点可以保存更多的关键字，一次磁盘加载的关键字更多） 
 > * 扫库、扫表能力更强（对表进行全表扫描，只需要遍历叶子节点，不需要遍历整棵树拿到所有的数据） 
->
-> * B+Tree 的磁盘读写能力相对于 B Tree 来说更强（根节点和枝节点不保存数据区， 所以一个节点可以保存更多的关键字，一次磁盘加载的关键字更多） 
->
-> * 排序能力更强（因为叶子节点上有下一个数据区的指针，数据形成了链表） 
->
+>* 排序能力更强（因为叶子节点上有下一个数据区的指针，数据形成了链表） 
 > * 效率更加稳定（B+Tree 永远是在叶子节点拿到数据，所以 IO 次数是稳定的）
 
 **为什么不用红黑树？**
@@ -398,9 +394,9 @@ B Tree 保持平衡要有分叉和合并的操作，这个时候键值的地址�
 
 1. 如果我们定义了主键(PRIMARY KEY)，那么 InnoDB 会选择主键作为聚集索引 
 
-2. 如果没有显式定义主键，则 InnoDB 会选择第一个不包含有 NULL 值的唯一索引作为主键索引
+2. 如果没有显式定义主键，则 InnoDB 会选择`第一个不包含有 NULL 值的唯一索引`作为主键索引
 
-3. 如果也没有这样的唯一索引，则 InnoDB 会选择内置 6 字节长的 ROWID 作为隐藏的聚集索引，它会随着行记录的写入而主键递增
+3. 如果也没有这样的唯一索引，则 InnoDB 会选择内置 6 字节长的 `ROWID` 作为隐藏的聚集索引，它会随着行记录的写入而主键递增
 
 ```sql
 select _rowid name from t_message;
@@ -736,6 +732,8 @@ EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND age = 23 AND pos = 'dev';
 
 ② 中间兄弟不能断
 
+③ 范围之后全失效
+
 ```mysql
 EXPLAIN SELECT * FROM staffs WHERE age = 23 AND pos = 'dev';
 ```
@@ -755,23 +753,7 @@ EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND pos = 'dev';
 
 ![image-20200924220437843](MySQL 索引.assets/image-20200924220437843.png)
 
-如果索引了多例，要遵守最左前缀法则。指的是``查询从索引的最左前列开始并且不跳过索引中的列``。
-
-### 3.索引列不要做任何操作
-
-③ 索引列上无计算
-
-不在索引列上做任何操作（计算、函数、（自动or手动）类型转换），会导致索引失效而转向全表扫描，尽量将数据的处理工作放在服务器上。
-
-```mysql
-EXPLAIN SELECT * FROM staffs WHERE left(name, 4) = 'July';
-```
-
-![image-20200924221255958](MySQL 索引.assets/image-20200924221255958.png)
-
-### 4.存储引擎不能使用索引中范围条件右边的列
-
-④ 范围之后全失效
+如果索引了多例，要遵守最左前缀法则。指的是``查询从索引的最左前列开始并且不跳过索引中的列``，而且存储引擎不能使用索引中范围条件右边的列：
 
 ```mysql
 EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND age > 11 AND pos = 'manager';
@@ -779,7 +761,7 @@ EXPLAIN SELECT * FROM staffs WHERE name = 'July' AND age > 11 AND pos = 'manager
 
 ![image-20200924222542927](MySQL 索引.assets/image-20200924222542927.png)
 
-### 5.尽量使用覆盖索引
+### 3.尽量使用覆盖索引
 
 > `回表` 非主键索引，我们先通过索引找到主键索引的键值，再通过主键值查出索引里面没有的数据，它比基于主键索引的查询多扫描了一棵索引树，这个过程就叫回表。
 
@@ -803,7 +785,35 @@ EXPLAIN SELECT name, age, pos FROM staffs WHERE name = 'July' AND age > 11 AND p
 
 同时，如果只查询索引列的部分字段，同样可以使用 using index，但是如果查询索引列以外的字段，则不会用到 using index。
 
-### 6.!= 和 <>
+### 4.索引列不要做任何操作
+
+④ 索引列上无计算
+
+⑤ 字符串里有引号
+
+不在索引列上做任何操作（计算、函数、（自动or手动）类型转换），会导致索引失效而转向全表扫描，尽量将数据的处理工作放在服务器上。
+
+```mysql
+EXPLAIN SELECT * FROM staffs WHERE left(name, 4) = 'July';
+```
+
+![image-20200924221255958](MySQL 索引.assets/image-20200924221255958.png)
+
+字符串不加单引号索引失效，自动的类型转换：
+
+```mysql
+explain select * from staffs where name = 2000;
+```
+
+![1600997942495](MySQL 索引.assets/1600997942495.png)
+
+```mysql
+explain select * from staffs where name = '2000';
+```
+
+![1600997772120](MySQL 索引.assets/1600997772120.png)
+
+### 5.!= 和 <>
 
 mysql在使用不等于（`!=` 或者 `<>`）的时候无法使用索引会导致全表扫描
 
@@ -813,7 +823,7 @@ EXPLAIN SELECT * FROM staffs WHERE name != 'July' AND age = 11 AND pos = 'manage
 
 ![image-20200924223935629](MySQL 索引.assets/image-20200924223935629.png)
 
-### 7.is null 和 is not null
+### 6.is null 和 is not null
 
 `索引列设置为 NOT NULL` 情况下，is null 与 is not null 均无法使用索引
 
@@ -829,9 +839,21 @@ EXPLAIN SELECT * FROM staffs WHERE name is not null;
 
 ![image-20200924224641899](MySQL 索引.assets/image-20200924224641899.png)
 
+### 7.少用 or
+
+用 or 连接时会索引失效
+
+```mysql
+explain select * from staffs where name = 'July' or age = 23;
+```
+
+![1600998091903](MySQL 索引.assets/1600998091903.png)
+
+> 在数据量过百万，并且条件没有加索引，or 的查询效率远远低于 in，or 的效率为O(n)，而 in 的效率为O(logn)，当 n 越大的时候效率相差越明显。
+
 ### 8.like
 
-⑤ 百分like加右边 
+⑥ 百分like加右边 
 
 like以通配符开头（'%abc...'）mysql索引失效会变成全表扫描操作
 
@@ -883,34 +905,6 @@ explain select id, name, age, email from tb_user where name like '%aa%';
 2、使用覆盖索引，查询字段必须是建立覆盖索引字段
 3、当覆盖索引指向的字段是varchar(380)及380以上的字段时，覆盖索引会失效！
 
-### 9.字符串不加单引号索引失效
-
-⑥ 字符串里有引号
-
-```mysql
-explain select * from staffs where name = 2000;
-```
-
-![1600997942495](MySQL 索引.assets/1600997942495.png)
-
-```mysql
-explain select * from staffs where name = '2000';
-```
-
-![1600997772120](MySQL 索引.assets/1600997772120.png)
-
-### 10.少用 or
-
-用 or 连接时会索引失效
-
-```mysql
-explain select * from staffs where name = 'July' or age = 23;
-```
-
-![1600998091903](MySQL 索引.assets/1600998091903.png)
-
-> 在数据量过百万，并且条件没有加索引，or 的查询效率远远低于 in，or 的效率为O(n)，而 in 的效率为O(logn)，当 n 越大的时候效率相差越明显。
-
 ### 小结
 
 ![1601001932267](MySQL 索引.assets/1601001932267.png)
@@ -918,10 +912,10 @@ explain select * from staffs where name = 'July' or age = 23;
 【优化总结口诀】
 全值匹配我最爱，最左前缀要遵守；
 带头大哥不能死，中间兄弟不能断；
-索引列上少计算，范围之后全失效；
-LIKE百分写最右，覆盖索引不写星；
+范围之后全失效，覆盖索引不写星；
+索引列上少计算，VAR引号不可丢；
 不等空值还有or，索引失效要少用；
-VAR引号不可丢，SQL高级也不难！ 
+LIKE百分不写左，SQL高级也不难！ 
 
 ### 一般性建议
 
@@ -939,7 +933,7 @@ VAR引号不可丢，SQL高级也不难！
 
 `索引条件下推(Index Condition Pushdown)` 5.6 以后完善的功能，只适用于二级索引。
 
-ICP 的目标是减少访问表的完整行的读数量从而减少 I/O 操作。
+ICP 的目标是减少访问表的完整行的读数量从而减少 I/O 操作，不支持覆盖索引(因为覆盖索引无需回表)，主要就是优化了联合索引的一些查询导致索引失效和跳索引字段导致索引失效的问题。
 
 ```mysql
 # 使用 5.3 中 like 小节中的 tb_user 示例
