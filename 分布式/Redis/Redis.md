@@ -38,7 +38,7 @@
 
 #### CAP原理
 
-在计算机科学中，`CAP定理(CAP theorem)` 又被称作`布鲁尔定理( Brewer's theorem)`，它指出对于一个分布式计算系统来说，不可能同时满足以下三点：
+在计算机科学中，`CAP定理(CAP theorem)` 又被称作`布鲁尔定理(Brewer's theorem)`，它指出对于一个分布式计算系统来说，不可能同时满足以下三点：
 
 `一致性(Consistency)` 所有节点在同一时间具有相同的数据，一致性分为三种：
 
@@ -585,7 +585,7 @@ hashtable：OBJ_ENCODING_HT（哈希表）
 >
 > The ziplist is a specially encoded dually linked list that is designed to be very memory efficient. It stores both strings and integer values, where integers are encoded as actual integers instead of a series of characters. It allows push and pop operations on either side of the list in O(1) time. However, because every operation requires a reallocation of the memory used by the ziplist, the actual complexity is related to the amount of memory used by the ziplist.
 
-ziplist 是一个经过特殊编码的双向链表，它不存储指向上一个链表节点和指向下一 个链表节点的指针，而是存储上一个节点长度和当前节点长度，通过牺牲部分读写性能， 来换取高效的内存空间利用率，是一种时间换空间的思想。只用在字段个数少，字段值小的场景里面。
+ziplist 是一个经过特殊编码的双向链表，它不存储指向上一个链表节点和指向下一个链表节点的指针，而是存储上一个节点长度和当前节点长度，通过牺牲部分读写性能， 来换取高效的内存空间利用率，是一种时间换空间的思想。只用在字段个数少，字段值小的场景里面。
 
 **ziplist 的内部结构**
 
@@ -715,11 +715,11 @@ redis 的 hash 默认使用的是 ht[0]，ht[1]不会初始化和分配空间。
 
 rehash 的步骤： 
 
-1. 为字符 ht[1]哈希表分配空间，这个哈希表的空间大小取决于要执行的操作，以及 ht[0]当前包含的键值对的数量。 扩展：ht[1]的大小为第一个大于等于 ht[0].used*2
+1. 为字符 ht[1] 哈希表分配空间，这个哈希表的空间大小取决于要执行的操作，以及 ht[0] 当前包含的键值对的数量。 扩展：ht[1] 的大小为第一个大于等于 `ht[0].used * 2`
 
-2. 将所有的 ht[0]上的节点 rehash 到 ht[1]上，重新计算 hash 值和索引，然后放入指定的位置
+2. 将所有的 ht[0]上的节点 rehash 到 ht[1] 上，重新计算 hash 值和索引，然后放入指定的位置
 
-3. 当 ht[0]全部迁移到了 ht[1]之后，释放 ht[0]的空间，将 ht[1]设置为 ht[0]表， 并创建新的 ht[1]，为下次 rehash 做准备
+3. 当 ht[0] 全部迁移到了 ht[1] 之后，释放 ht[0] 的空间，将 ht[1] 设置为 ht[0] 表， 并创建新的 ht[1]，为下次 rehash 做准备
 
 **什么时候触发扩容？**
 
@@ -900,7 +900,9 @@ String 类型的无序集合，最大存储数量 2^32-1（40 亿左右）。
 
 Redis 用 intset 或 hashtable 存储 set。如果元素都是整数类型，就用 inset 存储。 如果不是整数类型，就用 hashtable（数组+链表的存来储结构）。 
 
-问题：KV 怎么存储 set 的元素？key 就是元素的值，value 为 null。 
+**问题：KV 怎么存储 set 的元素？**
+
+key 就是元素的值，value 为 null
 
 <font color=red>如果整数类型 intset 元素个数超过 512 个，也会用 hashtable 存储。</font>
 
@@ -967,8 +969,8 @@ sadd tags:i5001 流畅至极
 # iPhone12 上市了。 
 	sadd brand:apple iPhone11 
 	sadd brand:ios iPhone11 
-	sad screensize:6.0-6.24 iPhone11 
-	sad screentype:lcd iPhone11 
+	sadd screensize:6.0-6.24 iPhone11 
+	sadd screentype:lcd iPhone11 
 
 # 筛选商品，苹果的，iOS 的，屏幕在 6.0-6.24 之间的，屏幕材质是 LCD 屏幕 
 	sinter brand:apple brand:ios screensize:6.0-6.24 screentype:lcd
@@ -1081,7 +1083,7 @@ zset-max-ziplist-value 64
 | 哈希对象     | OBJ_HASH         | hash          | OBJ_ENCODING_ZIPLIST<br/>OBJ_ENCODING_HT                    | ziplist 64 512<br/>hashtable   |
 | 列表类型     | OBJ_LIST         | list          | OBJ_ENCODING_QUICKLIST                                      | quicklist                      |
 | 集合对象     | OBJ_SET          | set           | OBJ_ENCODING_INTSET<br>OBJ_ENCODING_HT                      | intset 512<br>hashtable        |
-| 有序集合对象 | OBJ_ZSET         | zset          | OBJ_ENCODING_ZIPLIST<br/>OBJ_ENCODING_SKIPLIST              | ziplist<br>skiplist            |
+| 有序集合对象 | OBJ_ZSET         | zset          | OBJ_ENCODING_ZIPLIST<br/>OBJ_ENCODING_SKIPLIST              | ziplist 64 128<br>skiplist     |
 
 **编码转换总结**
 
@@ -1117,7 +1119,7 @@ blpop queue 5
 
 ## 2.2 发布订阅模式
 
-除了通过 list 实现消息队列之外，Redis 还提供了一组命令实现发布/订阅模式。这种方式，发送者和接收者没有直接关联（实现了解耦），接收者也不需要持续尝 试获取消息。 
+除了通过 list 实现消息队列之外，Redis 还提供了一组命令实现发布/订阅模式。这种方式，发送者和接收者没有直接关联（实现了解耦），接收者也不需要持续尝试获取消息。 
 
 ### 2.2.1 订阅频道
 
@@ -2074,6 +2076,7 @@ uint8_t LFULogIncr(uint8_t counter) {
     // 取一个 0-1 之间的随机数 r 与 p 比较
     double r = (double)rand()/RAND_MAX;
     // p 取决于当前 counter 值与 lfu_log_factor 因子，counter 值与 lfu_log_factor 因子越大，p越小，r < p的概率也越小，counter 增长的概率也就越小
+    // LFU_INIT_VAL 默认 5，初始化的 counter = LFU_INIT_VAL
     double baseval = counter - LFU_INIT_VAL;
     if (baseval < 0) baseval = 0;
     double p = 1.0/(baseval*server.lfu_log_factor+1);
@@ -2194,9 +2197,9 @@ b）bgsave
 
 执行 bgsave 时，Redis 会在后台异步进行快照操作，快照同时还可以响应客户端请求。
 
-具体操作是 Redis 进程执行 `fork` 操作创建子进程（copy-on-write），RDB 持久化过程由子进程负责，完成后自动结束。它不会记录 fork 之后后续的命令。阻塞只发生在 fork 阶段，一般时间很短。 
+具体操作是 Redis 进程执行 `fork` 操作创建子进程（copy-on-write），RDB 持久化过程由子进程负责，完成后自动结束。它不会记录 fork 之后后续的命令。`阻塞只发生在 fork 阶段`，一般时间很短。 
 
-用 lastsave 命令可以查看最近一次成功生成快照的时间。 
+用 `lastsave` 命令可以查看最近一次成功生成快照的时间。 
 
 ### 7.1.2 RDB 数据的恢复（演示）
 
@@ -2250,7 +2253,7 @@ b）bgsave
 #### RDB的缺点
 
 1. 如果你需要尽量避免在服务器故障时丢失数据，那么 RDB 不适合你。虽然 Redis 允许你设置不同的保存点（save point）来控制保存 RDB 文件的频率， 但是， 因为RDB 文件需要保存整个数据集的状态， 所以它并不是一个轻松的操作。因此你可能会至少 5 分钟才保存一次 RDB 文件。在这种情况下， 一旦发生故障停机， 你就可能会丢失好几分钟的数据。
-2. 每次保存 RDB 的时候，Redis 都要 fork() 出一个子进程，并由子进程来进行实际的持久化工作。在数据集比较庞大时， fork()可能会非常耗时，造成服务器在几毫秒甚至可能会长达整整一秒内停止处理客户端；虽然 AOF 重写也需要进行 fork() ，但可以调整重写日志的频率，而不需要在持久性上进行任何权衡。
+2. 每次保存 RDB 的时候，Redis 都要 fork() 出一个子进程，并由子进程来进行实际的持久化工作。在数据集比较庞大时， `fork() 可能会非常耗时`，造成服务器在几毫秒甚至可能会长达整整一秒内停止处理客户端；虽然 AOF 重写也需要进行 fork() ，但可以调整重写日志的频率，而不需要在持久性上进行任何权衡。
 
 ## 7.2 AOF
 
@@ -2303,7 +2306,7 @@ AOF 文件重写并不是对原文件进行重新整理，而是直接读取服�
 
 ![image-20201107213041856](Redis.assets/image-20201107213041856.png)
 
-整个重写操作是绝对安全的，因为 Redis 在创建新 AOF 文件的过程中，会继续将命令追加到现有的 AOF 文件里面，即使重写过程中发生停机，现有的 AOF 文件也不会丢失。 而一旦新 AOF 文件创建完毕，Redis 就会从旧 AOF 文件切换到新 AOF 文件，并开始对新 AOF 文件进行追加操作。
+整个重写操作是绝对安全的，因为 Redis 在创建新 AOF 文件的过程中，会`继续将命令追加到现有的 AOF 文件里面`，即使重写过程中发生停机，现有的 AOF 文件也不会丢失。 而一旦新 AOF 文件创建完毕，Redis 就会`从旧 AOF 文件切换到新 AOF 文件`，并开始对新 AOF 文件进行追加操作。
 
 另外有两个与 AOF 相关的参数： 
 
