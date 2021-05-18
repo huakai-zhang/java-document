@@ -1415,9 +1415,9 @@ protected final int tryAcquireShared(int unused) {
 
 读锁的每次释放（线程安全，可能有多个读线程同时释放读锁）均减少读状态，减少的值是 `1 << 16`。
 
-# 6 BlockingQueueDemo 阻塞队列
+# 6 BlockingQueue 阻塞队列
 
-在使用过分布式消息队列，比如 ActiveMQ、 kafka、RabbitMQ 等等，消息队列的是有可以使得程序之间实现解耦，提升程序响应的效率。 如果我们把多线程环境比作是分布式的话，那么线程与线程之间是不是也可以使用这种消息队列的方式进行数据通 信和解耦呢？
+在使用过分布式消息队列，比如 ActiveMQ、 kafka、RabbitMQ 等等，消息队列的是有可以使得程序之间实现解耦，提升程序响应的效率。 如果我们把多线程环境比作是分布式的话，那么线程与线程之间是不是也可以使用这种消息队列的方式进行数据通信和解耦呢？
 
 ## 6.1 阻塞队列的使用案例
 
@@ -1493,7 +1493,7 @@ private void sendPoints(User user){
 
 ## 6.2 阻塞队列的应用场景
 
-阻塞队列这块的应用场景，比较多的仍然是对于生产者消费者场景的应用，但是由于分布式架构的普及，大家更多的关注在分布式消息队列上。所以其实如果把阻塞队列比作成分布式消息队列的话，那么所谓的生产者和消费者其实就是基于阻塞队列的解耦。 另外，阻塞队列是一个 fifo 的队列，所以对于希望在线程级别需要实现对目标服务的顺序访问的场景中，也可以使用。
+阻塞队列这块的应用场景，比较多的仍然是对于`生产者消费者场景`的应用，但是由于分布式架构的普及，大家更多的关注在分布式消息队列上。所以其实如果把阻塞队列比作成分布式消息队列的话，那么所谓的生产者和消费者其实就是基于阻塞队列的解耦。 另外，阻塞队列是一个 fifo 的队列，所以对于希望在线程级别需要实现对目标服务的顺序访问的场景中，也可以使用。
 
 ## 6.3 J.U.C 中的阻塞队列
 
@@ -1515,13 +1515,15 @@ private void sendPoints(User user){
 
 | 队列名称              | 介绍                                                         |
 | --------------------- | ------------------------------------------------------------ |
-| ArrayBlockingQueue    | 数组实现的有界阻塞队列, 此队列按照先进先出（FIFO）的原则 对元素进行排序 |
+| ArrayBlockingQueue    | 数组实现的有界阻塞队列, 此队列按照先进先出（FIFO）的原则对元素进行排序，默认情况下`不保证线程公平`的访问队列 |
 | LinkedBlockingQueue   | 链表实现的有界阻塞队列, 此队列的默认和最大长度为 Integer.MAX_VALUE。此队列按照先进先出的原则对元素进行排序 |
-| PriorityBlockingQueue | 支持优先级排序的无界阻塞队列, 默认情况下元素采取自然顺序升序排列。也可以自定义类实现 compareTo()方法来指定元素排序规则，或者初始化 PriorityBlockingQueue 时，指定构造参数 Comparator 来对元素进行排序 |
-| DelayQueue            | 优先级队列实现的无界阻塞队列                                 |
-| SynchronousQueue      | 不存储元素的阻塞队列, 每一个 put 操作必须等待一个 take 操 作，否则不能继续添加元素 |
+| PriorityBlockingQueue | 支持优先级排序的无界阻塞队列, 默认情况下元素采取`自然顺序升序`排列。也可以自定义类实现 `compareTo()` 方法来指定元素排序规则，或者初始化 PriorityBlockingQueue 时，指定构造参数 `Comparator` 来对元素进行排序，不能保证同优先级元素的顺序 |
+| DelayQueue            | 使用优先级队列 `PriorityQueue` 实现的无界阻塞队列，队列中的元素必须实现 `Delayed 接口`，参考 ScheduledThreadPoolExecutor 里 ScheduledFutureTask 类的实现 |
+| SynchronousQueue      | 不存储元素的阻塞队列, 每一个 put 操作必须等待一个 take 操作，否则不能继续添加元素<br>将生产者线程处理的数据直接传递给消费者线程，非常适合`传递性场景` |
 | LinkedTransferQueue   | 链表组成的无界阻塞队列                                       |
 | LinkedBlockingDeque   | 链表组成的双向阻塞队列                                       |
+
+> 所谓公平访问队列是指阻塞的线程，可以按照阻塞的先后顺序访问队列，为了保证公平性，通常会降低吞吐量。
 
 ### 6.3.2 阻塞队列的操作方法
 
@@ -1529,10 +1531,12 @@ private void sendPoints(User user){
 
 | 类型     | 详情                                                         |
 | -------- | ------------------------------------------------------------ |
-| 抛出异常 | 当阻塞队列满时，再往队列里add插入元素会抛IllegalStateException:Queue full<br>当阻塞队列空时，再往队列里remove移除元素会抛NoSuchElementException |
-| 特殊值   | 插入方法，成功ture失败false<br/>移除方法，成功返回出队列的元素，队列里没有就返回null |
-| 一直阻塞 | 当阻塞队列满时，生产者线程继续往队列里put元素，队列会一直阻塞生产者线程直到put数据or响应中断退出<br>当阻塞队列空时，消费者线程试图从队列里take元素，队列会一直阻塞消费者线程直到队列可用 |
+| 抛出异常 | 当阻塞队列满时，再往队列里add插入元素会抛 `IllegalStateException:Queue full`<br>当阻塞队列空时，再往队列里remove移除元素会抛 `NoSuchElementException` |
+| 特殊值   | 插入方法，插入成功返回 ture 失败 false<br/>移除方法，成功返回出队列的元素，队列里没有就返回 null |
+| 一直阻塞 | 当阻塞队列满时，生产者线程继续往队列里 put 元素，队列会一直阻塞生产者线程直到 put 数据或响应中断退出<br>当阻塞队列空时，消费者线程试图从队列里 take 元素，队列会一直阻塞消费者线程直到队列可用 |
 | 超时退出 | 当阻塞队列满时，队列会阻塞生产者线程一定时间，超过限时后生产者线程会退出 |
+
+> 无界队列使用 put(e) 或 offer(e, time, unit) 方法永远不会阻塞，而使用 offer(e) 方法时永远返回 true
 
 ```java
 public class BlockingQueueDemo {
@@ -1692,6 +1696,8 @@ private void enqueue(E x) {
     notEmpty.signal();
 }
 ```
+
+> 如果队列不可用，那么阻塞生产者主要通过 LockSupport.park(this) 来实现
 
 **putIndex 为什么会在等于数组长度的时候重新设置为 0？**
 

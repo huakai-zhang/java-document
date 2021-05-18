@@ -114,6 +114,8 @@ private final Node<K,V>[] initTable() {
 
 出于性能考虑，Doug Lea 直接通过 Unsafe 类来对 table 进行操作。
 
+> ConcurrentyHashMap 的 `get(Object key) 方法`也使用 tabAt 获取元素
+
 ```java
 static final <K,V> Node<K,V> tabAt(Node<K,V>[] tab, int i) {
     return (Node<K,V>)U.getObjectVolatile(tab, ((long)i << ASHIFT) + ABASE);
