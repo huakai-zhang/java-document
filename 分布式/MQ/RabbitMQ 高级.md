@@ -9,19 +9,28 @@
 所有队列中的消息超过时间未被消费时，都会过期。
 
 ```java
-@Bean("ttlQueue") 
-public Queue queue() { 
-  Map<String, Object> map = new HashMap<String, Object>(); 
-  map.put("x-message-ttl", 11000); // 队列中的消息未被消费 11 秒后过期 
-  return new Queue("GP_TTL_QUEUE", true, false, false, map); 
-}
-
 // 原生API设置方式
-// 绑定死信交换机
 Map<String, Object> arguments = new HashMap<String, Object>();
+// 1.绑定死信交换机
 arguments.put("x-dead-letter-exchange", "DLX_EXCHANGE");
-map.put("x-message-ttl", 11000); // 队列中的消息未被消费 11 秒后过期 
-channel.queueDeclare("work", true, false, false, arguments);
+// 2.队列中的消息未被消费 11 秒后过期
+arguments.put("x-message-ttl", 11000);
+channel.exchangeDeclare("DLX_TEST_EXCHANGE", "topic");
+channel.queueDeclare("DLX_TEST", true, false, false, arguments);
+// 3.绑定交换机和队列，过期属性只有队列中可以设置
+channel.queueBind("DLX_TEST", "DLX_TEST_EXCHANGE", "spring.test");
+// 发送消息
+channel.basicPublish("DLX_TEST_EXCHANGE", "spring.test", null, ("发送死信消息").getBytes());
+
+// DLX_TEST_EXCHANGE 对应路由的消费者不存在，11 秒后 DLX_EXCHANGE 交换机接收到死信消息
+
+// 5.声明死信交换机消费者
+// 通道绑定交换机
+channel.exchangeDeclare("DLX_EXCHANGE", "topic");
+// 临时队列
+String queueName = channel.queueDeclare().getQueue();
+// 绑定队列和交换机，动态通配符形式route key
+channel.queueBind(queueName, "DLX_EXCHANGE",  "#");
 ```
 
 **设置单条消息的过期时间**
@@ -29,9 +38,14 @@ channel.queueDeclare("work", true, false, false, arguments);
 发送消息时指定消息属性。
 
 ```java
+// 原生API
+BasicProperties properties = new BasicProperties().builder().expiration("4000").build();
+channel.basicPublish("DLX_TEST_EXCHANGE", "spring.test", properties, ("发送死信消息").getBytes());
+
+// RabbitTemplate
 MessageProperties messageProperties = new MessageProperties(); 
 messageProperties.setExpiration("4000"); // 消息的过期属性，单位 ms 
-Message message = new Message("这条消息 4 秒后过期".getBytes(), messageProperties); rabbitTemplate.send("GP_TTL_EXCHANGE", "gupao.ttl", message);
+Message message = new Message("这条消息 4 秒后过期".getBytes(), messageProperties); rabbitTemplate.send("", "spring.ttl", message);
 ```
 
 > 如果同时指定了 Message TTL 和 Queue TTL，则小的那个时间生效。
@@ -53,8 +67,8 @@ Message message = new Message("这条消息 4 秒后过期".getBytes(), messageP
 
 ```java
 @Bean("oriUseExchange") 
-public DirectExchange exchange() { 
-  return new DirectExchange("GP_ORI_USE_EXCHANGE", true, false, new HashMap<>()); 
+public TopicExchange exchange() { 
+  return new TopicExchange("GP_ORI_USE_EXCHANGE", true, false, new HashMap<>()); 
 }
 @Bean("oriUseQueue") 
 public Queue queue() { 
@@ -63,7 +77,7 @@ public Queue queue() {
   map.put("x-dead-letter-exchange", "GP_DEAD_LETTER_EXCHANGE"); // 队列中的消息变成死信后，进入死信 交换机
   return new Queue("GP_ORI_USE_QUEUE", true, false, false, map); 
 }
-@Bean public Binding binding(@Qualifier("oriUseQueue") Queue queue,@Qualifier("oriUseExchange") DirectExchange exchange) { 
+@Bean public Binding binding(@Qualifier("oriUseQueue") Queue queue,@Qualifier("oriUseExchange") TopicExchange exchange) { 
   return BindingBuilder.bind(queue).to(exchange).with("gupao.ori.use"); 
 }
 ```
@@ -1255,7 +1269,5 @@ SELECT COUNT(1) FROM T_ORDER WHERE ID = 唯一ID +指纹码
 
 ![image-20201101194140777](RabbitMQ 高级.assets/image-20201101194140777.png)
 
-
-
-
+------
 
