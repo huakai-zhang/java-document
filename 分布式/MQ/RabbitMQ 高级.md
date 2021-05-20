@@ -860,7 +860,7 @@ rabbitTemplate.setChannelTransacted(true);
 
 **普通确认模式**
 
-在生产者通过调用 ``channel.confirmSelect()`` 方法将信道设置成为 Confirm 模式，然后发送消息。一旦消息被投递到所有匹配的队列之后，RabbitMQ 就会发送确认（Basic.ACK）给生产者，也就是调用`channel.waitForConfirms()`返回true，这样生产者就知道消息被服务端接收了。
+在生产者通过调用 ``channel.confirmSelect()`` 方法将信道设置成为 Confirm 模式，然后发送消息。所有在该信道上面发布的消息都会被指派一个唯一的 ID(从 1 开始)，一旦消息`被投递到所有匹配的队列`之后，RabbitMQ 就会发送确认(Basic.ACK)给生产者(包含消息的唯一 ID)，也就是调用`channel.waitForConfirms()`返回true，这样生产者就知道消息被服务端接收了。
 
 ```java
 // 指定我们的消息投递模式: 消息的确认模式
@@ -879,7 +879,7 @@ try {
 }
 ```
 
-这种发送 1 条确认 1 条的方式消息还不是太高，所以我们还有一种批量确认的方式。 批量确认 ， 就是在开启 Confirm 模式后， 先发送一批消息 。 只要 `channel.waitForConfirmsOrDie()` 方法没有抛出异常，就代表消息都被服务端接收了。
+这种发送 1 条确认 1 条的方式消息还不是太高，所以我们还有一种批量确认的方式。`批量确认`就是在开启 Confirm 模式后， 先发送一批消息 。 只要 `channel.waitForConfirmsOrDie()` 方法没有抛出异常，就代表消息都被服务端接收了。
 
 ```java
 try {
@@ -891,7 +891,7 @@ try {
 }
 ```
 
-批量确认的方式比单条确认的方式效率要高，但是也有两个问题，第一个就是批量 的数量的确定。对于不同的业务，到底发送多少条消息确认一次？数量太少，效率提升不上去。数量多的话，又会带来另一个问题，比如我们发 1000 条消息才确认一次，如果前面 999 条消息都被服务端接收了，如果第 1000 条消息被拒绝了，那么前面所有的消息都要重发。 
+批量确认的方式比单条确认的方式效率要高，但是也有两个问题，第一个就是批量的数量的确定。对于不同的业务，到底发送多少条消息确认一次？数量太少，效率提升不上去。数量多的话，又会带来另一个问题，比如我们发 1000 条消息才确认一次，如果前面 999 条消息都被服务端接收了，如果第 1000 条消息被拒绝了，那么前面所有的消息都要重发。 
 
 有没有一种方式，可以一边发送一边确认的呢？这个就是`异步确认模式`。 
 
@@ -942,6 +942,12 @@ public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
     return rabbitTemplate;
 }
 ```
+
+> ```java
+> channel.basicPublish("topics", "user123.save456", null, ("topic type message, key: " + routingKey).getBytes());
+> ```
+>
+> 这种情况下，交换机无法根据自身的类型和路由键找到一个符合条件的队列，默认情况下消息会被丢弃，并返回生产者 ACK。
 
 ### 4.2 消息从交换机路由到队列
 
@@ -1085,7 +1091,7 @@ RabbitMQ 提供了消费者的`消息确认机制（message acknowledgement）`�
 
 如果没有收到 ACK 的消息，消费者断开连接后（不管是网络问题还是宕机），RabbitMQ 会把这条消息发送给其他消费者。如果没有其他消费者，消费者重启后会重新消费这条消息，重复执行业务逻辑。 
 
-消费者在订阅队列时，可以指定 autoAck参数，当 autoAck 等于 false 时，RabbitMQ 会等待消费者显式地回复确认信号后才从队列中移去消息。 
+消费者在订阅队列时，可以指定 autoAck 参数，当 autoAck 等于 false 时，RabbitMQ 会等待消费者显式地回复确认信号后才从队列中移去消息。 
 
 如果消息无法处理或者消费失败，也有两种`拒绝的方式`，`Basic.Reject()`拒绝单条， `Basic.Nack()`批量拒绝。如果 requeue 参数设置为 true，可以把这条消息重新存入队列， 以便发给下一个消费者（当然，只有一个消费者的时候，这种方式可能会出现无限循环重复消费的情况。可以投递到新的队列中，或者只打印异常日志）。 
 
@@ -1098,12 +1104,14 @@ channel.basicConsume(queueName, false, new DefaultConsumer(channel){
     @Override
     public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
         System.out.println("消费者1：" + new String(body) + "====" + envelope.getDeliveryTag());
+        // basic 方法的 multiple 参数，表示到这个序号之前的所有消息都得到处理
         channel.basicAck(envelope.getDeliveryTag(), false);
         // 拒绝消息
         // requeue 是否重新入队列，true 是，false 直接丢弃，相当于告诉队列可以直接删除掉
         channel.basicReject(envelope.getDeliveryTag(), false);
         // 批量拒绝
         // multiple true可拒绝包含DeliveryTag的所有消息；如果为false，则仅拒绝当前DeliveryTag
+        // requeue
         channel.basicNack(envelope.getDeliveryTag(), true, false);
     }
 });

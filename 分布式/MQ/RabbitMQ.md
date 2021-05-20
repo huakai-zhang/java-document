@@ -4,7 +4,9 @@
 
 ### 1.1 什么是MQ
 
-`MQ`(Message Quene) :  翻译为 `消息队列`,通过典型的 `生产者`和`消费者`模型,生产者不断向消息队列中生产消息，消费者不断的从队列中获取消息。因为消息的生产和消费都是异步的，而且只关心消息的发送和接收，没有业务逻辑的侵入,轻松的实现系统间解耦。别名为 `消息中间件`	<font color=red>通过利用高效可靠的消息传递机制进行平台无关的数据交流，并基于数据通信来进行分布式系统的集成。</font>
+`MQ`(Message Quene)：翻译为 `消息队列`，通过典型的 `生产者`和`消费者`模型，生产者不断向消息队列中生产消息，消费者不断的从队列中获取消息。因为消息的生产和消费都是异步的，而且只关心消息的发送和接收，没有业务逻辑的侵入，轻松的实现系统间解耦。
+
+别名为 `消息中间件`，<font color=red>通过利用高效可靠的消息传递机制进行平台无关的数据交流，并基于数据通信来进行分布式系统的集成。</font>
 
 ### 1.2 不同MQ特点
 
@@ -30,7 +32,7 @@
 
 ## 2.RabbitMQ
 
-> 基于`AMQP`协议，erlang语言开发，是部署最广泛的开源消息中间件,是最受欢迎的开源消息中间件之一。
+> 基于`AMQP`协议，`erlang 语言`开发，是部署最广泛的开源消息中间件,是最受欢迎的开源消息中间件之一。
 
 ![rabbit-1](RabbitMQ.assets/rabbit-1.jpg)
 
@@ -58,44 +60,44 @@
 
 ```markdown
  # AMQP 协议
-	AMQP（advanced message queuing protocol）在2003年时被提出，最早用于解决金融领不同平台之间的消息传递交互问题。顾名思义，AMQP是一种协议，更准确的说是一种binary wire-level protocol（链接协议）。这是其和JMS的本质差别，AMQP不从API层进行限定，而是直接定义网络交换的数据格式。这使得实现了AMQP的provider天然性就是跨平台的。以下是AMQP协议模型:
+	AMQP（advanced message queuing protocol）在2003年时被提出，最早用于解决金融领不同平台之间的消息传递交互问题。顾名思义，AMQP 是一种协议，更准确的说是一种 binary wire-level protocol（链接协议）。这是其和JMS的本质差别，AMQP 不从 API 层进行限定，而是直接定义网络交换的数据格式。这使得实现了 AMQP 的 provider 天然性就是跨平台的。以下是 AMQP 协议模型:
 ```
 
 ![image-20201025133851187](RabbitMQ.assets/image-20201025133851187.png)
 
 #### Broker
 
-要是用RabbitMQ来收发消息，就必须要安装一个RabbitMQ的服务，可以安装在Windows或者Linux上，默认端口是5672。这台RabbitMQ的服务器我们叫它``Broker，中文翻译是代理/中介``，因为MQ服务器帮助我们做的事情就是存储、转发消息。
+要是用 RabbitMQ 来收发消息，就必须要安装一个 RabbitMQ 的服务，可以安装在 Windows 或者 Linux 上，默认端口是 5672。这台 RabbitMQ 的服务器我们叫它 ``Broker，中文翻译是代理/中介``，因为 MQ 服务器帮助我们做的事情就是存储、转发消息。
 
 #### Connection
 
-无论是生产者发生消息，还是消费者接收消息，都需要和Broker之间建立一个连接，这个连接是一个TCP的长连接。
+无论是生产者发生消息，还是消费者接收消息，都需要和 Broker 之间建立一个连接，这个连接是一个 TCP 的长连接。
 
 #### Channel
 
-如果生产者发送消息和消费者接收消息都直接创建和释放TCP长连接的话，对于Broker来说会造成很大的消耗，因为TCP连接是非常宝贵的资源，创建和释放也需要消耗时间。
+如果生产者发送消息和消费者接收消息都直接创建和释放 TCP 长连接的话，对于 Broker 来说会造成很大的消耗，因为 TCP 连接是非常宝贵的资源，创建和释放也需要消耗时间。
 
-所以在AMQP中引入了Channel的概念，它是一个虚拟连接。把它翻译成通道，或者消息信道。我们可以在创建的TCP长连接中创建和释放Channel，``大大减少了资源消耗``。
+所以在 AMQP 中引入了 Channel 的概念，它是一个虚拟连接。把它翻译成通道，或者消息信道。我们可以在创建的 TCP 长连接中创建和释放 Channel，``大大减少了资源消耗``。
 
-Channel是RabbitMQ原生API中最重要的编程接口，我们定义交换机、队列、绑定关系，发送消费消息，调用的都是Channel接口上的方法。
+Channel 是 RabbitMQ 原生 API 中最重要的编程接口，我们`定义交换机、队列、绑定关系，发送消费消息`，调用的都是 Channel 接口上的方法。
 
 #### Queue
 
 队列是``真正用来存储消息的``，是一个独立运行的进程，有自己的数据库（Mnesia）。
 
-消费者获取消息有两种模式，一种是push模式，只要生产者发到服务器，就马上推送给消费者。另一种是pull模式，消息存放在服务器，主要消费者主动去拿到消息（消费者对队列监听）。
+消费者获取消息有两种模式，一种是 push 模式，只要生产者发到服务器，就马上推送给消费者。另一种是 pull 模式，消息存放在服务器，主要消费者主动去拿到消息（消费者对队列监听）。
 
-由于队列有FIFO的特性，只要确定前一条消息被消费者接受之后，才会把这条消息从数据库删除，继续投递下一条消息。
+由于队列有 FIFO 的特性，只要确定前一条消息被消费者接受之后，才会把这条消息从数据库删除，继续投递下一条消息。
 
 #### Exchange
 
-在RabbitMQ里面永远不会出现消息直接发送给队列的情况。因为AMQP里面引入了交换机（Exchange）的概念，`用来实现消息的灵活路由`。
+在 RabbitMQ 里面永远不会出现消息直接发送给队列的情况。因为 AMQP 里面引入了交换机（Exchange）的概念，`用来实现消息的灵活路由`。
 
 `交换机是一个绑定列表`，用来查找匹配的绑定关系。
 
 队列使用绑定键（Binding Key）跟交换机建立绑定关系。
 
-生产者发送消息需要携带路由键（Routing Key），交换机收到消息时会根据它保存的绑定列表，决定将消息路由到哪些与它绑定的队列上。
+生产者发送消息需要携带路由键（Routing Key），将消息发送到交换机，交换机会根据它保存的绑定列表，决定将消息路由到哪些与它绑定的队列上，如果路由不到，或许返回给生产者，或许直接丢弃。
 
 注意：交换机与队列、队列与消费者都是多对多的关系。
 
@@ -469,7 +471,7 @@ channel.basicConsume("work", true, new DefaultConsumer(channel){
 
 ![1596530688295](RabbitMQ.assets/1596530688295.png)
 
-> 总结:默认情况下，RabbitMQ 将按顺序将每个消息发送给下一个使用者。平均而言，每个消费者都会收到相同数量的消息。这种分发消息的方式称为循环。
+> 总结：默认情况下，RabbitMQ 将按顺序将每个消息发送给下一个使用者。平均而言，每个消费者都会收到相同数量的消息。这种分发消息的方式称为循环。
 
 ### 消息自动确认机制
 
@@ -477,9 +479,9 @@ channel.basicConsume("work", true, new DefaultConsumer(channel){
 >
 > But we don't want to lose any tasks. If a worker dies, we'd like the task to be delivered to another worker.
 >
-> 完成一项任务可能需要几秒钟。您可能想知道，如果一个消费者开始了一项很长的任务，但只完成了一部分就挂掉，会发生什么。在我们当前的代码中，一旦 RabbitMQ 将消息传递给消费者，它就会立即将其标记为删除。在这种情况下，如果你杀死一个worker，我们就会丢失它正在处理的信息。我们还将丢失所有发送给这个特定worker但尚未处理的消息。
+> 完成一项任务可能需要几秒钟。您可能想知道，如果一个消费者开始了一项很长的任务，但只完成了一部分就挂掉，会发生什么。在我们当前的代码中，一旦 RabbitMQ 将消息传递给消费者，它就会立即将其标记为删除。在这种情况下，如果你杀死一个 worker，我们就会丢失它正在处理的信息。我们还将丢失所有发送给这个特定 worker 但尚未处理的消息。
 >
-> 但我们不想失去任何任务。如果一个worker挂掉，我们希望任务被交付给另一个worker。
+> 但我们不想失去任何任务。如果一个 worker 挂掉，我们希望任务被交付给另一个 worker。
 
 ```java
 channel.basicQos(1);//一次只接受一条未确认的消息
@@ -518,8 +520,8 @@ channel.basicConsume("work",false,new DefaultConsumer(channel){
 在广播模式下，消息发送流程是这样的：
 
 -  可以有多个消费者
--  每个<font color="red">消费者有自己的queue</font>（队列）
--  每个<font color="red">队列都要绑定到Exchange</font>（交换机）
+-  每个<font color="red">消费者有自己的 queue</font>（队列）
+-  每个<font color="red">队列都要绑定到 Exchange</font>（交换机）
 -  <font color="red">生产者发送的消息，只能发送到交换机</font>，交换机来决定要发给哪个队列，生产者无法决定。
 -  交换机把消息发送给绑定过的所有队列
 -  队列的消费者都能拿到消息。实现一条消息被多个消费者消费
@@ -558,20 +560,20 @@ channel.basicConsume(queueName, true, new DefaultConsumer(channel){
 ### 4.6.1 Routing 之订阅模型 - Direct (直连)
 
 在 Fanout 模式中，一条消息，会被所有订阅的队列都消费。但是，在某些场景下，我们希望不同的消息被不同的队列消费。这时就要用到 Direct 类型的 Exchange。
-在Direct模型下：
+在 Direct 模型下：
 
-* 队列与交换机的绑定，不能是任意绑定了，而是要指定一个RoutingKey（路由key）
-* 消息的发送方在 向 Exchange发送消息时，也必须指定消息的 RoutingKey。
-* Exchange不再把消息交给每一个绑定的队列，而是根据消息的Routing Key进行判断，只有队列的Routingkey与消息的 Routing key完全一致，才会接收到消息
+* 队列与交换机的绑定，不能是任意绑定了，而是要指定一个 RoutingKey（路由key）
+* 消息的发送方在 向 Exchange 发送消息时，也必须指定消息的 RoutingKey。
+* Exchange 不再把消息交给每一个绑定的队列，而是根据消息的 Routing Key进行判断，只有队列的 Routingkey 与消息的 Routing key 完全一致，才会接收到消息
 
 ![1596531618495](RabbitMQ.assets/1596531618495.png)
 
 图解：
 
-- P：生产者，向Exchange发送消息，发送消息时，会指定一个routing key。
-- X：Exchange（交换机），接收生产者的消息，然后把消息递交给 与routing key完全匹配的队列
-- C1：消费者，其所在队列指定了需要routing key 为 error 的消息
-- C2：消费者，其所在队列指定了需要routing key 为 info、error、warning 的消息
+- P：生产者，向Exchange发送消息，发送消息时，会指定一个 routing key。
+- X：Exchange（交换机），接收生产者的消息，然后把消息递交给 与 routing key 完全匹配的队列
+- C1：消费者，其所在队列指定了需要 routing key 为 error 的消息
+- C2：消费者，其所在队列指定了需要 routing key 为 info、error、warning 的消息
 
 **生产者**
 
@@ -607,7 +609,7 @@ channel.basicConsume(queueName, true, new DefaultConsumer(channel){
 
 ### 4.6.2 Routing 之订阅模型 - Topic
 
-`Topic`类型的`Exchange`与`Direct`相比，都是可以根据`RoutingKey`把消息路由到不同的队列。只不过`Topic`类型`Exchange`可以让队列在绑定`Routing key` 的时候使用通配符！这种模型`Routingkey` 一般都是由一个或多个单词组成，多个单词之间以”.”分割，例如： `item.insert`
+`Topic` 类型的 `Exchange` 与 `Direct` 相比，都是可以根据 `RoutingKey` 把消息路由到不同的队列。只不过 `Topic` 类型`Exchange` 可以让队列在绑定 `Routing key` 的时候使用通配符！这种模型 `Routingkey` 一般都是由一个或多个单词组成，多个单词之间以”.”分割，例如： `item.insert`
 
 ![1596535479607](RabbitMQ.assets/1596535479607.png)
 
@@ -711,7 +713,7 @@ channel.basicConsume(queueName, true, new DefaultConsumer(channel){
 
 2.秒杀业务根据消息队列中的请求信息，再做后续处理。
 
-# 6. RabbitMQ的集群
+# 6. RabbitMQ 的集群
 
 ## 6.1 集群架构
 
@@ -723,7 +725,7 @@ channel.basicConsume(queueName, true, new DefaultConsumer(channel){
 
 `内存节点（RAM Node）` 将元数据放在内存中。 
 
-内存节点会将磁盘节点的地址存放在磁盘（不然重启后就没有办法同步数据了） ，RabbitMQ集群会始终同步四种类型的内部元数据（类似索引）： 
+内存节点会将磁盘节点的地址存放在磁盘（不然重启后就没有办法同步数据了） ，RabbitMQ 集群会始终同步四种类型的内部元数据（类似索引）： 
 
 * 队列元数据：队列名称和它的属性； 
 
@@ -731,7 +733,7 @@ channel.basicConsume(queueName, true, new DefaultConsumer(channel){
 
 * 绑定元数据：一张简单的表格展示了如何将消息路由到队列； 
 
-* vhost元数据：为vhost内的队列、交换器和绑定提供命名空间和安全属性；
+* vhost 元数据：为vhost内的队列、交换器和绑定提供命名空间和安全属性；
 
 如果是持久化的消息，会同时存放在内存和磁盘。 
 
