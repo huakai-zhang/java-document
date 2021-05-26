@@ -575,7 +575,7 @@ public class ReadWriteLockDemo {
 > ```java
 > public final void acquireShared(int arg) {
 > 	if (tryAcquireShared(arg) < 0)
->     	doAcquireShared(arg);
+>     		doAcquireShared(arg);
 > }
 > private void doAcquireShared(int arg) {
 >     final Node node = addWaiter(Node.SHARED);
@@ -1029,7 +1029,7 @@ final boolean acquireQueued(final Node node, int arg) {
 
 如果 ThreadA 的锁还没有释放的情况下，ThreadB 和 ThreadC 来争抢锁肯定是会失败，那么失败以后会调用 shouldParkAfterFailedAcquire 方法。
 
-Node 有 5 中状态，分别是：
+Node 有 5 种状态，分别是：
 
 `CANCELLED 1` 在同步队列中等待的线程等待超时或被中断，需要从同步队列中取消该 Node 的结点, 其结点的 waitStatus 为 CANCELLED，即结束状态，进入该状态后的结点将不会再变化 
 
@@ -1045,7 +1045,7 @@ Node 有 5 中状态，分别是：
 
 1. 如果 ThreadB 的 pred 节点状态为 SIGNAL，那就表示可以放心挂起当前线程 
 2. 通过循环扫描链表把 CANCELLED 状态的节点移除 
-3. 修改 pred 节点的状态为 SIGNAL,返回 false
+3. 修改 pred 节点的状态为 SIGNAL，返回 false
 
 返回 false 时，也就是不需要挂起，返回 true，则需要调用 parkAndCheckInterrupt 挂起当前线程
 
@@ -1220,7 +1220,7 @@ if (compareAndSetTail(t, node)) {
 
 原本挂起的线程继续执行
 
-通过 ReentrantLock.unlock，原本挂起的线程被唤醒以后继续执行，应该从哪里执行大家还有印象吧。 原来被挂起的线程是在 acquireQueued 方法中，所以被唤醒以后继续从这个方法开始执行。
+通过 ReentrantLock.unlock，原本挂起的线程被唤醒以后继续执行，应该从哪里执行大家还有印象吧。原来`被挂起`的线程是在 `acquireQueued 方法`中，所以`被唤醒以后继续从这个方法开始`执行。
 
 **AQS.acquireQueued**
 
@@ -1305,7 +1305,7 @@ protected final boolean tryAcquire(int acquires) {
 
 读写锁同样依赖自定义同步器来实现同步功能，而读写状态就是其同步器的同步状态。
 
-`按位切割使用` 读写锁将整型的状态变量切分为了两部分，高 16 位表示读，低 16 位表示写。
+`按位切割使用` 读写锁将整型的状态变量切分为了两部分，`高 16 位表示读，低 16 位表示写`。
 
 读写锁通过位运算迅速确定读和写各自的状态（假设当前同步状态值为 S）：
 
@@ -1358,7 +1358,7 @@ protected final boolean tryAcquire(int acquires) {
 
 **为什么存在读锁，则写锁不能被获取？**
 
-读写锁要确保写锁的操作对读锁可见，如果允许读锁在已被获取的情况下对写锁的获取，那么正在进行的其他读线程就无法感知到当前写线程的操作。因此，只有等待其他读线程都释放了读锁，写锁才能被当前线程获取，而写锁一旦被获取，则其他读写线程的后续访问均被阻塞。
+读写锁要确保写锁的操作对读锁可见，如果允许读锁在已被获取的情况下对写锁的获取，那么正在进行的`其他读线程就无法感知到当前写线程的操作`。因此，只有等待其他读线程都释放了读锁，写锁才能被当前线程获取，而写锁一旦被获取，则其他读写线程的后续访问均被阻塞。
 
 ## 5.3 读锁的获取与释放
 
