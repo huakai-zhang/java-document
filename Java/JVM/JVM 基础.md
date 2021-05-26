@@ -1,4 +1,4 @@
-# JVM
+# ThresholdJVM
 
 <img src="JVM 基础.assets/image-20200903203452939.png" style="zoom:50%;" />
 
@@ -92,6 +92,17 @@ ClassFile {
 
  对类的静态变量，静态代码块执行初始化操作
 
+> **对象的创建**
+>
+> 当 Java 虚拟机遇到一个字节码 new 指令：
+>
+> 1. 首先将去检查这个指令的参数是否能在常量池中定位一个类的符号引用，并检查这个符号引用代表的类是否已被加载、解析、和初始化过
+> 2. 为对象分配内存，把一块确定大小的内存块从 Java 堆中划分出来
+> 3. 虚拟机将分配到的内存空间都初始化为零值
+> 4. 虚拟机还需要对对象进行必要的设置（对象是哪个类的实例、如何找到类的元数据信息、对象的哈希码、对象的 GC 分代年龄，这些信息存放在对象的`对象头（Object Header）`中）
+>
+> new 指令之后会接着执行 `<init>() 方法`，按照程序员的意愿对对象进行初始化，一个真正可用的对象才算完全被构造出来。
+
 # 3 类加载器 ClassLoader
 
 > 在装载(Load)阶段，其中第(1)步：通过类的全限定名获取其定义的二进制字节流，需要借助类装载器完成，顾名思义，就是用来装载 Class 文件的。 
@@ -184,6 +195,39 @@ public class String {
 > But
 > 实例变量存在堆内存中，和方法区无关
 
+```java
+// JDK 6
+// VM Args: -XX:PermSize=6M -XX:MaxPermSize=6M
+public class RuntimeConstantPoolOOM {
+    public static void main(String[] args) {
+        Set<String> set = new HashSet<>();
+        short i = 0;
+        while (true) {
+            set.add(String.valueOf(i++).intern());
+        }
+    }
+}
+// Exception in thread "main" java.lang.OutOfMemoryError: PermGen space
+// 说明运行时常量池属于方法区（JDK 6）
+// 在 JDK 7 中设置 -XX:MaxPermSize 或者 JDK 8 及以上版本使用 -XX:MaxMetaspaceSize 参数限制方法区容量，都不会重现 JDK 6 中的溢出异常，因为原本存放在永久代中的字符串常量池被移至 Java 堆中。
+
+String str1 = new StringBuilder("计算机").append("软件").toString();
+System.out.println(str1.intern() == str1);
+/**
+// StringBuilder.toString ==> return new String(value, 0, count); 返回的是一个 String 对象
+String str = new String("计算机软件");  // 堆引用，第二次出现
+System.out.println(str1.intern() == str); // intern 返回首次出现的实例引用，等价于 "计算机软件" == new String("计算机软件")，false
+System.out.println(str1.intern() == str.intern()); // true
+String st = "计算机软件";
+System.out.println(str1.intern() == st);
+*/
+String str2 = new StringBuilder("ja").append("va").toString();
+System.out.println(str2.intern() == str2);
+// JDK 6 返回两个 false，因为 JDK 6 中 intern() 方法会把首次遇到的字符串实例复制到永久代的字符串常量池，返回的也是永久代里的字符串实例的引用
+// JDK 7 返回 ture 和 false，因为 JDK 7 中无需拷贝字符串实例到永久代，直接返回首次出现的实例引用即可，因此 intern() 返回的引用和由 StringBuilder 创建的那个字符串实例是同一个
+// java 这个字符串在之前已经出现，加载 sun.misc.Versions
+```
+
 ## 4.2 堆 Heap
 
 ![1599194756798](JVM 基础.assets/1599194756798.png)
@@ -234,7 +278,19 @@ Java 堆从 GC 的角度还可以细分为：新生代（Eden区、From Survivor
 
 3、SurvivorTo和 SurvivorFrom 互换 
 
-最后，SurvivorTo和SurvivorFrom互换，原SurvivorTo成为下一次GC时的SurvivorFrom区。部分对象会在From和To区域中复制来复制去,如此交换15次(由JVM参数``MaxTenuringThreshold``决定,这个参数默认是15),最终如果还是存活,就存入到老年代
+最后，SurvivorTo和SurvivorFrom互换，原SurvivorTo成为下一次GC时的SurvivorFrom区。部分对象会在From和To区域中复制来复制去,如此交换 15 次(由JVM参数``MaxTenuringThreshold``决定,这个参数默认是15),最终如果还是存活,就存入到老年代
+
+> **动态对象年龄判定**
+>
+> 为了更好地适应不同程序的内存状况，HotSpot 虚拟机并不是永远要求对象的年龄必须达到 -XX:MaxTenuringThreshold 才能晋升老年代，如果在 Survivor 空间中`相同年龄所有对象大小总和大于 Survivor 空间的一半`，年龄大于或等于该年龄的对象就可以直接进入老年代。
+>
+> **空间分配担保**
+>
+> 在发生 Minor GC 之前，虚拟机必须先检查老年代最大可用的连续空间是否大于新生代所有对象总空间，确保 Minor GC 是安全的。
+>
+> 如果这个条件不成立，虚拟机要查看 `-XX:HandlePromotionFailure` 参数的设置值是否允许担保失败；如果允许，那会继续检查老年代最大可用的连续空间是否大于历次晋升老年代对象的平均大小，如果大于，将尝试进行一次 Minor GC，尽管这次 Minor GC 是有风险的；如果小于或者 -XX:HandlePromotionFailure 设置为不允许冒险，这时就改为进行一次 Full GC。
+>
+> JDK 6 Update 24 之后，虚拟机不在使用 -XX:HandlePromotionFailure，只要老年代的连续空间大于新生代对象的总大小或历次晋升的平均大小，就会进行 Minor GC，否则将进行 Full GC。
 
 ### 4.2.2 永久代
 
@@ -345,7 +401,7 @@ public class Test {
 
 ![image-20200903234726062](JVM 基础.assets/image-20200903234726062.png)
 
-> HotSpot 是使用``指针``的方式来访问对象：Java堆中会存放访问``类元数据``的地址，reference 存储的就直接是对象的地址
+> HotSpot 是使用``指针``的方式来访问对象(`速度更快`，相对于句柄访问)：Java堆中会存放访问``类元数据``的地址，reference 存储的就直接是对象的地址
 
 **<font color=red>③ 方法区指向堆</font>**
 
@@ -401,31 +457,59 @@ public class Thread implements Runnable {
 
 ## 5.1 StackOverflowError 栈溢出
 
+《Java 虚拟机规范》中描述了两种异常：
+
+1. 如果线程请求的栈深度大于虚拟机所允许的最大深度，将抛出 StackOverflowError
+2. 如果虚拟机的栈内存运行动态扩展，当扩展栈容量无法申请到足够内存，将抛出 OutOfMemoryError 异常
+
+HotSpot 不支持扩展，所以除非在创建线程申请内存时因无法得到足够内存而出现 OutOfMemoryError，否则在线程运行时不会因为扩展而导致内存溢出，只会因为无法容纳新的栈帧而导致 StackOverflowError。
+
+所以无论是由于栈帧太大还是虚拟机栈容量太小，当新的栈帧内存无法分配的时候，HotSpot 虚拟机都抛出 StackOverflowError。
+
+> HotSpot 不区分虚拟机栈和本地方法栈，所以栈容量只能由 `-Xss` 参数来设定。
+>
+> 对于不同版本的 Java 虚拟机和不同的操作系统，栈容量最小值可能会有所限制，-Xss128k 可以正常用于 32 位 Windows 系统的 JDK 6，但在 MacOS 系统下则会提示栈容量最小不能低于 160K。
+
 ```java
+// -Xss128k
+// The stack size specified is too small, Specify at least 160k
 public class StackOverFlowErrorDemo {
+    private int stackLength = 1;
+
     public static void main(String[] args) {
-        m1();
+        StackOverFlowErrorDemo demo = new StackOverFlowErrorDemo();
+        try {
+            demo.m1();
+        } catch (Throwable e) {
+            System.out.println("stack length: " + demo.stackLength);
+            throw e;
+        }
     }
 
-    public static void m1() {
+    public void m1() {
+        stackLength++;
         m1();
     }
 }
+// stack length: 19167
 // Exception in thread "main" java.lang.StackOverflowError
 // 是错误，不是异常
 ```
 
 ## 5.2 OutOfMemoryError 内存溢出
 
-若老年代执行了Full GC之后发现依然无法进行对象的保存，就会``产生OOM异常“OutOfMemoryError”``。
+若老年代执行了 Full GC 之后发现依然无法进行对象的保存，就会``产生OOM异常“OutOfMemoryError”``。
 
 ### Java heap space
 
-如果出现java.lang.OutOfMemoryError: Java heap space异常，说明Java虚拟机的堆内存不够。原因有二：
+如果出现 java.lang.OutOfMemoryError: Java heap space 异常，说明 Java 虚拟机的堆内存不够。原因有二：
 
-1. Java虚拟机的堆内存设置不够，可以通过参数-Xms、-Xmx来调整。
-
+1. Java 虚拟机的堆内存设置不够，可以通过参数 -Xms、-Xmx 来调整。
 2. 代码中创建了大量大对象，并且长时间不能被垃圾收集器收集（存在被引用）。
+
+> 要解决内存区域的异常，首先通过内存映像分析工具对 Dump 出来的堆转储快照进行分析。
+>
+> 分析到底是`内存泄漏(Memory Leak)`还是`内存溢出(Memory Overflow)`，如果是内存泄漏，通过工具进一步查看 GC Roots 的引用链，找到泄漏对象通过怎样的路径与哪些 GC Roots 相关联。如果不是，换句话说就是内存中的对象都是必须存活的，那就通过调整 Java 虚拟机的堆参数设置。
 
 ```java
 public class JavaHeapSpaceDemo {
@@ -547,7 +631,9 @@ Exception in thread "main" java.lang.OutOfMemoryError: Direct buffer memory
 
 ### unable to create new native thread
 
-高并发请求服务器时，经常出现如下异常：java.lang.OutOfMemoryError: unable to create new native thread，准确的讲该native thread异常与对应的平台有关。
+高并发请求服务器时，经常出现如下异常：java.lang.OutOfMemoryError: unable to create new native thread，准确的讲该 native thread异常与对应的平台有关。
+
+参考自`栈溢出动态扩展`，但这样产生的内存溢出溢出和栈空间是否足够并不存在任何直接关系，主要取决于操作系统本身的内存使用状态，给每个线程栈分配的内存越大，就越容易产生内存溢出异常。
 
 导致原因：
 
@@ -625,9 +711,11 @@ public class MetaspaceOOMTest {
         }
     }
 }
+// JDK 7 中
+// Caused by: java.lang.OutOfMemoryError: PermGen space
 ```
 
-配置VM参数： ``-XX:MetaspaceSize=8m -XX:MaxMetaspaceSize=8m``
+JDK 8 中配置VM参数： ``-XX:MetaspaceSize=8m -XX:MaxMetaspaceSize=8m``
 
 ```markdown
 ************多少次后发生异常： 255

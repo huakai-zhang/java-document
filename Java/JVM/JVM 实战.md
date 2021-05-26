@@ -196,14 +196,18 @@ public class MemoryOptionsDemo {
 
 ```markdown
 # java提供的一个显示当前所有java进程pid的命令
+# JVM Process Status Tool
 	jps -l
 		6960 com.jvm.HelloGC
+# -v 输出虚拟机进程启动的 JVM 参数
+# -l 输出主类的全名，如果进程执行的是 JAR 包，则输出 JAR 路径
 ```
 
 ## 2.2 jinfo
 
 ```markdown
 # 用来查看正在运行的 java 应用程序的扩展参数，包括Java System属性和JVM命令行参数
+# Configuration Info for Java
 	jinfo [option] <pid>
 		option
 			no option 输出全部的参数和系统属性
@@ -232,15 +236,16 @@ public class MemoryOptionsDemo {
 ## 2.3 jstat
 
 ```markdown
-# jstat 查看虚拟机性能统计信息
-# 查看某个java进程的类装载信息，每1000毫秒输出一次，共输出10次
+# jstat 监视虚拟机各种运行状态信息
+# JVM Statistics Monitoring Tool
+# 查看某个java进程的类加载、卸载数量、总空间以及类装载所耗费的时间，每1000毫秒输出一次，共输出10次
 	jstat -class PID 1000 10 
 		Loaded  Bytes  Unloaded  Bytes     Time
   		2204  4094.5        0     0.0       1.00
   		2204  4094.5        0     0.0       1.00
   		2204  4094.5        0     0.0       1.00
 		...
-# 查看垃圾收集信息
+# 监视 Java 堆状况，包括 Eden 区，2 个 Survivor 区、老年代、永久代等的容量，已用空间，垃圾收集时间合计等信息
 	jstat -gc PID 1000 10
  		S0C    S1C    S0U    S1U      EC       EU        OC         OU       MC     MU    CCSC   CCSU   YGC     YGCT    FGC    FGCT     GCT
 		10752.0 10752.0  0.0    0.0   65536.0  55139.0   175104.0     0.0     4480.0 776.5  384.0   76.6       0    0.000   0      0.000    0.000
@@ -252,7 +257,8 @@ public class MemoryOptionsDemo {
 ## 2.4 jstack
 
 ```markdown
-# jstack 查看线程堆栈信息
+# jstack 查看线程堆栈信息，生成虚拟机当前时刻的线程快照，目的通常是定位线程出现长时间停顿的原因，如线程间死锁、死循环、请求外部资源导致的长时间挂起等
+# Stack Track for Java
 	jstack PID
 		2021-02-05 15:56:17
 		Full thread dump Java HotSpot(TM) 64-Bit Server VM (25.271-b09 mixed mode):
@@ -345,6 +351,8 @@ class DeadLock implements Runnable{
 
 ```markdown
 # jmap 生成堆转储快照
+# Memory Map for Java
+# jmap 的作用不仅仅是为了获取堆转储快照，它还可以查询 finalize 执行队列，Java 堆和方法区的详细情况，如空间使用率、当前用的哪种收集器等
 	jmap -heap PID
         Attaching to process ID 12648, please wait...
         Debugger attached successfully.
@@ -384,13 +392,17 @@ class DeadLock implements Runnable{
 
 # 3 常用工具
 
-## 3.1 jconsole 
+## 3.1 JConsole
 
-JConsole工具是JDK自带的可视化监控工具。查看java应用程序的运行概况、监控堆信息、永久区使用情况、类加载情况等。 
+JConsole 工具是 JDK 自带的可视化监控、管理工具。查看 java 应用程序的运行概况、监控堆信息、永久区使用情况、类加载情况等。 
 
 ```markdown
+# Java Monitoring and Management Console
 # 命令行中输入
 	jconsole
+
+# 内存页签相当于可视化的 jstst 命令，用于监视被收集器管理的虚拟机内存（被收集器直接管理的 Java 堆和间接管理的方法区）的变化趋势
+# 线程页签相当于可视化的 jstack 命令，遇到线程停顿时候可以使用这个页签的功能进行分析(“检查死锁”按钮)
 ```
 
 ## 3.2 jvisualvm
