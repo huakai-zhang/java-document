@@ -251,7 +251,7 @@ linux /var/lib/mysql
 
 第二层架构主要完成大多数的核心服务功能，如SQL接口，并完成`缓存的查询`，SQL的分析和优化及部分内置函数的执行，所有跨存储引擎的功能也在这一层实现，如过程、函数等。在该层，服务器会解析查询并创建相应的内部解析树，并对其完成相应的优化如确定查询表的顺序，是否利用索引等，最后生成相应的执行操作。如果是select语句，服务器还会查询内部的缓存，如果缓存空间足够大，这样在解决大量读操作的环境中能够很好的提升系统性能。
 
-``Cache 和 Buffer：查询缓存`` 他的主要功能是将客户端提交给MySQL 的 Select 类 query 请求的返回结果集 cache 到内存中，与该 query 的一个 hash 值 做一个对应。该 Query 所取数据的基表发生任何数据的变化之后， MySQL 会自动使该 query 的Cache 失效。在读写比例非常高的应用系统中， Query Cache 对性能的提高是非常显著的。当然它对内存的消耗也是非常大的。
+``Cache 和 Buffer：查询缓存`` 他的主要功能是将客户端提交给MySQL 的 Select 类 query 请求的返回结果集 cache 到内存中，与该 query 的一个 hash 值做一个对应。该 Query 所取数据的基表发生任何数据的变化之后， MySQL 会自动使该 query 的Cache 失效。在读写比例非常高的应用系统中， Query Cache 对性能的提高是非常显著的。当然它对内存的消耗也是非常大的。
 
 如果查询缓存有命中的查询结果，查询语句就可以直接去查询缓存中取数据。这个缓存机制是由一系列小缓存组成的。比如表缓存，记录缓存，key缓存，权限缓存等。
 
@@ -544,7 +544,7 @@ SHOW VARIABLES LIKE 'innodb_change_buffer_max_size';
 
 为了避免这个问题，InnoDB 把所有对页面的修改操作专门写入一个日志文件，并且在数据库启动时从这个文件进行恢复操作(`实现 crash-safe`) — — 用它来实现`事务的持久性`。
 
-这个文件就是磁盘的 `redo log(叫做重做日志)`，记录的是物理数据页面的修改的信息，对应于/var/lib/mysql/目录下的 ib_logfile0 和 ib_logfile1，每个 48M。
+这个文件就是磁盘的 `redo log(叫做重做日志)`，记录的是物理数据页面的修改的信息，对应于/var/lib/mysql/目录下的 `ib_logfile0` 和 `ib_logfile1`，每个 `48M`。
 
 ```mysql
 show variables like 'innodb_log%';
@@ -616,7 +616,7 @@ show variables like 'innodb_doublewrite';
 
 我们不是有 redo log 吗？但是有个问题，如果这个页本身已经损坏了，用它来做崩溃恢复是没有意义的。所以`在对于应用 redo log 之前`，需要一个页的副本。如果出现了写入失效，就用页的副本来还原这个页，然后再应用 redo log。这个页的副本就是 `double write`，InnoDB 的双写技术。通过它实现了数据页的可靠性。
 
-跟 redo log 一样，double write 由两部分组成，一部分是内存的 double write，一个部分是磁盘上的 double write。因为 double write 是顺序写入的，不会带来很大的开销。 
+跟 redo log 一样，`double write 由两部分组成`，一部分是内存的 double write，一个部分是磁盘上的 double write。因为 double write 是顺序写入的，不会带来很大的开销。 
 
 在默认情况下，所有的表共享一个系统表空间，这个文件会越来越大，而且它的空间不会收缩。 
 
@@ -660,7 +660,7 @@ undo log（撤销日志或回滚日志）记录了事务发生之前的数据状
 
 redo Log 和 undo Log 与事务密切相关，统称为事务日志。
 
-undo Log 的数据默认在系统表空间 ibdata1 文件中，因为共享表空间不会自动收缩，也可以单独创建一个 undo 表空间。
+undo Log 的数据默认在系统表空间 `ibdata1` 文件中，因为共享表空间不会自动收缩，也可以单独创建一个 undo 表空间。
 
 ```mysql
 show global variables like '%undo%'; 
