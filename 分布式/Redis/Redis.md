@@ -455,7 +455,7 @@ OK
 
 **当长度小于阈值时，会还原吗？ **
 
-关于 Redis 内部编码的转换，都符合以下规律：编码转换在 Redis 写入数据时完成，且转换过程不可逆，只能从小内存编码向大内存编码转换（但是不包括重新set）。 
+关于 Redis 内部编码的转换，都符合以下规律：编码转换在 Redis 写入数据时完成，且转换过程不可逆，只能从小内存编码向大内存编码转换（但是`不包括重新 set`）。 
 
 **为什么要对底层的数据结构进行一层包装呢？ **
 
@@ -832,7 +832,7 @@ list-compress-depth（compress）
 # 1：首尾的 ziplist 不压缩；2：首尾第一第二个 ziplist 不压缩，以此类推
 ```
 
-quicklistNode 中的*zl 指向一个 ziplist，一个 ziplist 可以存放多个元素。
+`quicklistNode` 中的*zl 指向一个 ziplist，一个 ziplist 可以存放多个元素。
 
 ```c
 typedef struct quicklistNode {
@@ -1093,7 +1093,7 @@ zset-max-ziplist-value 64
 |              | 整数并且小于long   2^63-1                       | 超过44字节或被修改 |      |
 | 哈希对象     | ziplist                                         | hashtable          |      |
 |              | 键和值长度都小于64字节并且键值个数不超过512     |                    |      |
-| 列表对象     | quicklist                                       |                    |      |
+| 列表对象     | quicklist(quicklistNode + ziplist)              |                    |      |
 | 集合对象     | intset                                          | hashtable          |      |
 |              | 元素都是整数类型且元素个数小于512               |                    |      |
 | 有序集合对象 | ziplist                                         | skiplist           |      |
@@ -1760,7 +1760,7 @@ Redis 基于 Reactor 模式开发了自己的网络事件处理器——`文件�
 
 > 其中 I/O 多路复用程序通过`队列`向文件事件分派器传送 socket
 
-多路复用有很多的实现，以 select 为例，当用户进程调用了多路复用器，进程会被阻塞。内核会监视多路复用器负责的所有 socket，当任何一个 socket 的数据准备好了， 多路复用器就会返回。这时候用户进程再调用 read 操作，把数据从内核缓冲区拷贝到用户空间。 
+多路复用有很多的实现，以 select 为例，当用户进程`调用了多路复用器，进程会被阻塞`。内核会监视多路复用器负责的所有 socket，当任何一个 socket 的`数据准备好`了， 多路复用器就会返回。这时候`用户进程再调用 read 操作`，把数据从内核缓冲区拷贝到用户空间。 
 
 ![image-20201107202540910](Redis.assets/image-20201107202540910.png)
 
@@ -1946,7 +1946,7 @@ typedef struct redisObject {
 
 server.lruclock 的值怎么来的？ 
 
-Redis 中有个定时处理的函数 serverCron ， 默认每 100 毫秒调用函数 getLRUClock 更新一次全局变量的 server.lruclock 的值，它记录的是当前 unix 时间戳。
+Redis 中有个定时处理的函数 serverCron ， 默认`每 100 毫秒`调用函数 getLRUClock 更新一次全局变量的 server.lruclock 的值，它记录的是当前 unix 时间戳。
 
 ```c
 // server.h
@@ -1997,7 +1997,7 @@ unsigned int LRU_CLOCK(void) {
 }
 ```
 
-server.lruclock 只有 24 位，按秒为单位来表示才能存储 97 天。当超过 24bit 能表示的最大时间的时候，它会从头开始计算。 
+server.lruclock 只有 24 位，按秒为单位来表示才能存储 194 天(2 ^ 24 - 1 = 1677215)。当超过 24bit 能表示的最大时间的时候，它会从头开始计算。 
 
 在这种情况下，可能会出现对象的 lru 大于 server.lruclock 的情况，如果这种情况出现那么就 lruclock + (MAX - lru) 来求最久的 key。 
 
@@ -2280,11 +2280,11 @@ appendfilename "appendonly.aof"
 
 AOF 持久化策略（硬盘缓存到磁盘），默认 everysec 
 
-* no 表示不执行 fsync，由操作系统保证数据同步到磁盘，速度最快，但是不太安全； 
+* `no` 表示不执行 fsync，由操作系统保证数据同步到磁盘，速度最快，但是不太安全； 
 
-* always 表示每次写入都执行 fsync，以保证数据同步到磁盘，效率很低； 
+* `always` 表示每次写入都执行 fsync，以保证数据同步到磁盘，效率很低； 
 
-* everysec 表示每秒执行一次 fsync，可能会导致丢失这 1s 数据。通常选择 everysec ，兼顾安全性和效率。
+* `everysec` 表示每秒执行一次 fsync，可能会导致丢失这 1s 数据。通常选择 everysec ，兼顾安全性和效率。
 
 **问题：文件越来越大，怎么办？**
 
@@ -2300,7 +2300,7 @@ AOF 文件重写并不是对原文件进行重新整理，而是直接读取服�
 
  ``auto-aof-rewrite-percentage 100`` 默认值为 100。aof 自动重写配置，当目前 aof 文件大小超过上一次重写的 aof 文件大小的百分之多少进行重写，即当 aof 文件增长到一定大小的时候，Redis 能够调用 bgrewriteaof 对日志文件进行重写。当前 AOF 文件大小是上次日志重写得到 AOF 文件大小的二倍（设置为 100）时，自动启动新的日志重写过程。
 
-``auto-aof-rewrite-min-size 64mb`` 默认 64M。设置允许重写的最小 aof 文件大小，避免了达到约定百分比但尺寸仍然很小的情况还要重写。
+``auto-aof-rewrite-min-size 64mb`` 默认 `64M`。设置允许重写的最小 aof 文件大小，避免了达到约定百分比但尺寸仍然很小的情况还要重写。
 
 **问题：重写过程中，AOF 文件被更改了怎么办？**
 

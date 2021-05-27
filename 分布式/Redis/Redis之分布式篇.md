@@ -78,7 +78,7 @@ repl_backlog_histlen:0
 
 1. slave node 启动时（执行 slaveof 命令），会在自己本地保存 master node 的信息，包括 master node 的 host 和 ip。 
 
-2. slave node 内部有个定时任务 replicationCron（源码 replication.c），每隔 1 秒钟检查是否有新的 master node 要连接和复制，如果发现，就跟 master node 建立 socket 网络连接(会向master发送一个SYNC的命令)，如果连接成功，从节点为该 socket 建立一个专门处理复制工作的文件事件处理器，负责后续的复制工作，如接收 RDB 文件、接收命令传播等。 
+2. slave node 内部有个`定时任务 replicationCron`（源码 replication.c），每隔 1 秒钟检查是否有新的 master node 要连接和复制，如果发现，就跟 master node 建立 socket 网络连接(会向master发送一个SYNC的命令)，如果连接成功，从节点为该 socket 建立一个专门处理复制工作的文件事件处理器，负责后续的复制工作，如接收 RDB 文件、接收命令传播等。 
 
 当从节点变成了主节点的一个客户端之后，会给主节点发送 ping 请求。
 
@@ -86,11 +86,11 @@ repl_backlog_histlen:0
 
 ### 2.2.2 数据同步阶段
 
-3. master node 第一次执行全量复制，通过 bgsave 命令在本地生成一份 RDB 快照，将 RDB 快照文件发给 slave node（如果超时会重连，可以调大 repl-timeout 的值）。slave node 首先清除自己的旧数据，然后用 RDB 文件加载数据。 
+3. master node `第一次执行全量复制`，通过 bgsave 命令在本地生成一份 RDB 快照，将 RDB 快照文件发给 slave node（如果超时会重连，可以调大 repl-timeout 的值）。slave node 首先清除自己的旧数据，然后用 RDB 文件加载数据。 
 
 **问题：生成 RDB 期间，master 接收到的命令怎么处理？**
 
-开始生成 RDB 文件时，master 会把所有新的写命令缓存在内存中。在 slave node 保存了 RDB 之后，再将新的写命令复制给 slave node。 
+开始生成 RDB 文件时，master 会把所有`新的写命令缓存在内存中`。在 slave node 保存了 RDB 之后，再将新的写命令复制给 slave node。 
 
 ### 2.2.3 命令传播阶段
 
@@ -192,13 +192,13 @@ Sentinle 的 Raft 算法和 Raft 论文略有不同。
 
 **问题：怎么让一个原来的 slave 节点成为主节点？**
 
-1. 选出 Sentinel Leader 之后，由 Sentinel Leader 向某个节点发送 slaveof no one 命令，让它成为独立节点。 
+1. 选出 Sentinel Leader 之后，由 Sentinel Leader 向某个节点发送 `slaveof no one` 命令，让它成为独立节点。 
 
 2. 然后向其他节点发送 slaveof x.x.x.x xxxx（本机服务），让它们成为这个节点的子节点，故障转移完成。 
 
 **问题：这么多从节点，选谁成为主节点？**
 
-关于从节点选举，一共有四个因素影响选举的结果，分别是断开连接时长、优先级排序、复制数量、进程 id。 
+关于从节点选举，一共有四个因素影响选举的结果，分别是`断开连接时长、优先级排序、复制数量、进程 id`。 
 
 如果与哨兵连接断开的比较久，超过了某个阈值，就直接失去了选举权。如果拥有选举权，那就看谁的优先级高，这个在配置文件里可以设置（replica-priority 100）， 
 
@@ -690,7 +690,7 @@ Redis 创建了 16384 个槽（slot），每个节点负责一定区间的 slot�
 
 Redis 的每个 master 节点维护一个 16384 位（2048bytes=2KB）的位序列，比如：序列的第 0 位是 1，就代表第一个 slot 是它负责；序列的第 1 位是 0，代表第二个 slot 不归它负责。 
 
-对象分布到 Redis 节点上时，对 key 用 CRC16 算法计算再%16384，得到一个 slot 的值，数据落到负责这个 slot 的 Redis 节点上。 
+对象分布到 Redis 节点上时，对 key 用 `CRC16 算法`计算再%16384，得到一个 slot 的值，数据落到负责这个 slot 的 Redis 节点上。 
 
 查看 key 属于哪个 slot： 
 
@@ -1797,7 +1797,7 @@ redis-cli -p 6379 monitor | head -n 100000 | ./redis-faina.py
 
 ### 7.2.2 缓存雪崩的解决方案
 
-1）加互斥锁或者使用队列，针对同一个 key 只允许一个线程到数据库查询，这种办法虽然能缓解数据库的压力，但是同时又降低了系统的吞吐量
+1）加互斥锁或者使用队列，`针对同一个 key 只允许一个线程到数据库查询`，这种办法虽然能缓解数据库的压力，但是同时又降低了系统的吞吐量
 
 2）缓存定时预先更新，避免同时失效 
 
