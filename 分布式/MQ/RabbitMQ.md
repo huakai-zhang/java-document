@@ -511,6 +511,8 @@ channel.basicConsume("work",false,new DefaultConsumer(channel){
 
 以下为常用模型：
 
+> RabbitMQ 常用交换机类型有 fanout、direct、topic、headers 这四种。
+
 ## 4.5 fanout 模型
 
 ``fanout 扇出`` 也称为广播
@@ -870,8 +872,7 @@ rabbitmqctl stop_app
             	 ha-params：ha-mode模式需要用到的参数
                 ha-sync-mode：进行队列中消息的同步方式，有效值为automatic和manual
                 priority：可选参数，policy的优先级
-                
-                 
+
 # 1.查看当前策略
 	rabbitmqctl list_policies
 

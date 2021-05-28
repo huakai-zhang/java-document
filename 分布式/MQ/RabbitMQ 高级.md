@@ -24,7 +24,7 @@ channel.basicPublish("DLX_TEST_EXCHANGE", "spring.test", null, ("发送死信消
 
 // DLX_TEST_EXCHANGE 对应路由的消费者不存在，11 秒后 DLX_EXCHANGE 交换机接收到死信消息
 
-// 5.声明死信交换机消费者
+// 4.声明死信交换机消费者
 // 通道绑定交换机
 channel.exchangeDeclare("DLX_EXCHANGE", "topic");
 // 临时队列
@@ -54,7 +54,7 @@ Message message = new Message("这条消息 4 秒后过期".getBytes(), messageP
 
 什么情况下消息会变成死信？
 
-1. 消息被消费者拒绝并且设置重回队列（NACK || Reject）&& reuqeue == false
+1. 消息被消费者拒绝并且设置重回队列（NACK || Reject）&& reuqeue == true
 
 2. 消息过期
 3. 队列达到最大长度，超过了Max length(消息数)或者Max length bytes(字节数)，最先入队的消息会被发送到DLX
@@ -190,6 +190,7 @@ public class DelayConsumer {
     }
 }
 
+// messge ==> MessagePostProcessor
 rabbitTemplate.convertAndSend(RabbitMqConfig.DELAY_EXCHANGE, "order.delay", "延迟队列测试" , message -> {
     message.getMessageProperties().setDelay(20 * 60 * 1000);
     System.out.println(new Date() + " Delay sent.");
@@ -1156,13 +1157,15 @@ public class TopicConsumer {
             //int i = 1 / 0;
             channel.basicAck(message.getMessageProperties().getDeliveryTag(), false);
         } catch (Exception e) {
+            // multiple true可拒绝包含DeliveryTag的所有消息；如果为false，则仅拒绝当前DeliveryTag
+            // requeue 是否重新入队列，true 是，false 直接丢弃
             channel.basicNack(message.getMessageProperties().getDeliveryTag(), false, true);
         }
     }
 }
 ```
 
-思考：服务端收到了 ACK 或者 NACK，生产者会知道吗？即使消费者没有接收到消息，或者消费时出现异常，生产者也是完全不知情的。 
+思考：服务端收到了 ACK 或者 NACK，生产者会知道吗？即使消费者没有接收到消息，或者消费时出现异常，`生产者也是完全不知情的`（requeue 为 true 情况下，只是将消息重返给队列，但生产者得不到任何消息，而且重返队列然后再分配给消费者可能会导致永远无法消费，循环往复）。 
 
 这个是生产者最终确定消费者有没有消费成功的两种方式： 
 
@@ -1273,7 +1276,7 @@ SELECT COUNT(1) FROM T_ORDER WHERE ID = 唯一ID +指纹码
 
 又比如：1、发表微博；2、发表评论；3、删除微博。顺序不能颠倒。 
 
-在 RabbitMQ 中，一个队列有多个消费者时，由于不同的消费者消费消息的速度是不一样的，顺序无法保证。只有一个队列仅有一个消费者的情况才能保证顺序消费（不同的业务消息发送到不同的专用的队列）。
+在 RabbitMQ 中，一个队列有多个消费者时，由于不同的消费者消费消息的速度是不一样的，顺序无法保证。`只有一个队列仅有一个消费者的情况才能保证顺序消费`（不同的业务消息发送到不同的专用的队列）。
 
 ![image-20201101194140777](RabbitMQ 高级.assets/image-20201101194140777.png)
 
