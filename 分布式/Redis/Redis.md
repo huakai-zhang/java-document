@@ -719,7 +719,7 @@ rehash 的步骤：
 
 2. 将所有的 ht[0]上的节点 rehash 到 ht[1] 上，重新计算 hash 值和索引，然后放入指定的位置
 
-3. 当 ht[0] 全部迁移到了 ht[1] 之后，释放 ht[0] 的空间，将 ht[1] 设置为 ht[0] 表， 并创建新的 ht[1]，为下次 rehash 做准备
+3. 当 ht[0] 全部迁移到了 ht[1] 之后，`释放 ht[0] 的空间，将 ht[1] 设置为 ht[0] 表， 并创建新的 ht[1]`，为下次 rehash 做准备
 
 **什么时候触发扩容？**
 
@@ -1080,24 +1080,24 @@ zset-max-ziplist-value 64
 | 对象         | 对象 type 属性值 | type 命令输出 | 底层可能的存储结构                                          | object encoding                |
 | ------------ | ---------------- | ------------- | ----------------------------------------------------------- | ------------------------------ |
 | 字符串对象   | OBJ_STRING       | string        | OBJ_ENCODING_INT<br>OBJ_ENCODING_EMBSTR<br>OBJ_ENCODING_RAW | int 2^63-1<br>embstr 44<br>raw |
-| 哈希对象     | OBJ_HASH         | hash          | OBJ_ENCODING_ZIPLIST<br/>OBJ_ENCODING_HT                    | ziplist 64 512<br/>hashtable   |
+| 哈希对象     | OBJ_HASH         | hash          | OBJ_ENCODING_ZIPLIST<br/>OBJ_ENCODING_HT                    | ziplist 512 64<br/>hashtable   |
 | 列表类型     | OBJ_LIST         | list          | OBJ_ENCODING_QUICKLIST                                      | quicklist                      |
 | 集合对象     | OBJ_SET          | set           | OBJ_ENCODING_INTSET<br>OBJ_ENCODING_HT                      | intset 512<br>hashtable        |
 | 有序集合对象 | OBJ_ZSET         | zset          | OBJ_ENCODING_ZIPLIST<br/>OBJ_ENCODING_SKIPLIST              | ziplist 64 128<br>skiplist     |
 
 **编码转换总结**
 
-| 对象         | 原始编码                                        | 升级编码           |      |
-| ------------ | ----------------------------------------------- | ------------------ | ---- |
-| 字符串对象   | INT                                             | embstr             | raw  |
-|              | 整数并且小于long   2^63-1                       | 超过44字节或被修改 |      |
-| 哈希对象     | ziplist                                         | hashtable          |      |
-|              | 键和值长度都小于64字节并且键值个数不超过512     |                    |      |
-| 列表对象     | quicklist(quicklistNode + ziplist)              |                    |      |
-| 集合对象     | intset                                          | hashtable          |      |
-|              | 元素都是整数类型且元素个数小于512               |                    |      |
-| 有序集合对象 | ziplist                                         | skiplist           |      |
-|              | 任何一个member长度小于64字节且元素个数不超过128 |                    |      |
+| 对象         | 原始编码                                           | 升级编码             |      |
+| ------------ | -------------------------------------------------- | -------------------- | ---- |
+| 字符串对象   | INT                                                | embstr               | raw  |
+|              | 整数并且小于long   2^63-1                          | 超过 44 字节或被修改 |      |
+| 哈希对象     | ziplist                                            | hashtable            |      |
+|              | 键值个数不超过 512 并且键和值长度都小于 64 字节    |                      |      |
+| 列表对象     | quicklist(quicklistNode + ziplist)                 |                      |      |
+| 集合对象     | intset                                             | hashtable            |      |
+|              | 元素都是整数类型且元素个数小于 512                 |                      |      |
+| 有序集合对象 | ziplist                                            | skiplist             |      |
+|              | 任何一个member长度小于 64 字节且元素个数不超过 128 |                      |      |
 
 # 2 发布订阅模式
 
@@ -1606,11 +1606,11 @@ KV 结构(数据结构简单，Redis中的数据结构是专门进行设计的)�
 
 单线程有什么好处呢？ 
 
-1. 没有创建线程、销毁线程带来的消耗 
+1. 没有创建`线程、销毁线程`带来的消耗 
 
-2. 避免了上线文切换导致的 CPU 消耗 
+2. 避免了`上下文切换`导致的 CPU 消耗 
 
-3. 避免了线程之间带来的竞争问题，例如加锁释放锁死锁等等 
+3. 避免了`线程之间带来的竞争`问题，例如加锁释放锁死锁等等 
 
 ### 5.2.3 异步非阻塞
 
@@ -1622,7 +1622,7 @@ KV 结构(数据结构简单，Redis中的数据结构是专门进行设计的)�
 
 https://redis.io/topics/faq#redis-is-single-threaded-how-can-i-exploit-multiple-cpu--cores 
 
-因为单线程已经够用了，CPU 不是 redis 的瓶颈。Redis 的瓶颈最有可能是机器内存或者网络带宽。既然单线程容易实现，而且 CPU 不会成为瓶颈，那就顺理成章地采用单线程的方案了。 
+因为单线程已经够用了，`CPU 不是 redis 的瓶颈`。Redis 的瓶颈最有可能是机器内存或者网络带宽。既然单线程容易实现，而且 CPU 不会成为瓶颈，那就顺理成章地采用单线程的方案了。 
 
 ## 5.4 单线程为什么这么快
 
@@ -1919,7 +1919,7 @@ redis> config set maxmemory-policy volatile-lru
 
 **问题：如果基于传统 LRU 算法实现 Redis LRU 会有什么问题？**
 
-需要额外的数据结构存储，消耗内存。 
+需要`额外的数据结构`存储，消耗内存。 
 
 Redis LRU 对传统的 LRU 算法进行了改良，通过随机采样来调整算法的精度。 
 
@@ -2281,10 +2281,8 @@ appendfilename "appendonly.aof"
 AOF 持久化策略（硬盘缓存到磁盘），默认 everysec 
 
 * `no` 表示不执行 fsync，由操作系统保证数据同步到磁盘，速度最快，但是不太安全； 
-
-* `always` 表示每次写入都执行 fsync，以保证数据同步到磁盘，效率很低； 
-
 * `everysec` 表示每秒执行一次 fsync，可能会导致丢失这 1s 数据。通常选择 everysec ，兼顾安全性和效率。
+* `always` 表示每次写入都执行 fsync，以保证数据同步到磁盘，效率很低； 
 
 **问题：文件越来越大，怎么办？**
 

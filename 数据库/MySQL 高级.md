@@ -78,6 +78,8 @@ show variables like 'tx_isolation';
 
 问题：这个快照什么时候创建？读取数据的时候，怎么保证能读取到这个快照而不是最新的数据？
 
+在 InnoDB 中，MVCC 是`通过 Undo log 实现`的。
+
 InnoDB 为每行记录都实现了两个隐藏字段： 
 
 * `DB_TRX_ID` 6 字节：插入或更新行的最后一个事务的事务 ID，事务编号是自动递增的(我们把它理解为创建版本号，在数据新增或者修改为新数据的时候，记录当前事务 ID)
@@ -87,8 +89,6 @@ InnoDB 为每行记录都实现了两个隐藏字段：
 我们把这两个事务 ID 理解为版本号。
 
 ![img](MySQL 高级.assets/WechatIMG226.png)
-
-在 InnoDB 中，MVCC 是通过 Undo log 实现的。
 
 # 2 MySQL 锁机制
 
@@ -520,9 +520,11 @@ select * from information_schema.INNODB_LOCK_WAITS;
 
 RU 隔离级别：不加锁
 
-### Serializable
+### Read Commited
 
-Serializable 所有的 select 语句都会被隐式的转化为 select ... in share mode，会和 update、delete 互斥。 
+RC 隔离级别下，普通的 select 都是快照读，使用 MVCC 实现。 
+
+加锁的 select 都使用记录锁，因为没有 Gap Lock，除了`外键约束检查(foreign-key constraint checking)`以及`重复键检查(duplicate-key checking)`时会使用间隙锁封锁区间，所以 RC 会出现幻读的问题。
 
 ### Repeatable Read
 
@@ -530,11 +532,9 @@ RR 隔离级别下，普通的 select 使用`快照读(snapshot read)`，底层�
 
 加锁的 select(select ... in share mode / select ... for update)以及更新操作 update, delete 等语句使用`当前读(current read)`，底层使用记录锁、间隙锁、临键锁。 
 
-### Read Commited
+### Serializable
 
-RC 隔离级别下，普通的 select 都是快照读，使用 MVCC 实现。 
-
-加锁的 select 都使用记录锁，因为没有 Gap Lock，除了`外键约束检查(foreign-key constraint checking)`以及`重复键检查(duplicate-key checking)`时会使用间隙锁封锁区间，所以 RC 会出现幻读的问题。
+Serializable 所有的 select 语句都会`被隐式的转化为 select ... in share mode`，会和 update、delete 互斥。 
 
 **RU 和 Serializable 肯定不能用。为什么有些公司要用 RC，或者说网上有些文章推荐有 RC？ **
 

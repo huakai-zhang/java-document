@@ -234,7 +234,7 @@ show global variables like 'long_query_time';
 set global long_query_time=3;
 ```
 
-假如运行时间正好等于 long_query_time 的情况，并不会被记录下来。也就是说，在MySQL源码里是``判断大于 long_query_time，并非大于等于``。
+假如运行时间正好等于 `long_query_time` 的情况，并不会被记录下来。也就是说，在MySQL源码里是``判断大于 long_query_time，并非大于等于``。
 
 ### 3.2.2 记录慢 SQL
 
@@ -430,9 +430,9 @@ ORDER BY满足两情况，会使用Index方式排序：
 
 **优化策略**
 
-增大sort_buffer_size参数的设置
+增大 `sort_buffer_size` 参数的设置
 
-增大max_length_for_sort_data参数的设置
+增大 `max_length_for_sort_data` 参数的设置
 
 ##### 提高Order By的速度
 

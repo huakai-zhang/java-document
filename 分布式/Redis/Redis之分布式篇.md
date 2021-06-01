@@ -78,7 +78,7 @@ repl_backlog_histlen:0
 
 1. slave node 启动时（执行 slaveof 命令），会在自己本地保存 master node 的信息，包括 master node 的 host 和 ip。 
 
-2. slave node 内部有个`定时任务 replicationCron`（源码 replication.c），每隔 1 秒钟检查是否有新的 master node 要连接和复制，如果发现，就跟 master node 建立 socket 网络连接(会向master发送一个SYNC的命令)，如果连接成功，从节点为该 socket 建立一个专门处理复制工作的文件事件处理器，负责后续的复制工作，如接收 RDB 文件、接收命令传播等。 
+2. slave node 内部有个`定时任务 replicationCron`（源码 replication.c），每隔 1 秒钟检查是否有新的 master node 要连接和复制，如果发现，就跟 master node 建立 socket 网络连接(会向master发送一个SYNC的命令)，如果连接成功，从节点为该 socket `建立一个专门处理复制工作的文件事件处理器`，负责后续的复制工作，如接收 RDB 文件、接收命令传播等。 
 
 当从节点变成了主节点的一个客户端之后，会给主节点发送 ping 请求。
 
@@ -174,7 +174,7 @@ sentinel down-after-milliseconds <master-name> <milliseconds>
 
 大体上有两个步骤：领导选举，数据复制。 
 
-Raft 是一个共识算法（consensus algorithm）。比如比特币之类的加密货币，就需要共识算法。Spring Cloud 的注册中心解决方案 Consul 也用到了 Raft 协议。 
+Raft 是一个`共识算法`（consensus algorithm）。比如比特币之类的加密货币，就需要共识算法。Spring Cloud 的注册中心解决方案 Consul 也用到了 Raft 协议。 
 
 Raft 的核心思想：先到先得，少数服从多数。 
 
@@ -684,7 +684,7 @@ Node1 设置了两个虚拟节点，Node2 也设置了两个虚拟节点（虚�
 
 Redis 既没有用哈希取模，也没有用一致性哈希，而是用虚拟槽来实现的。 
 
-Redis 创建了 16384 个槽（slot），每个节点负责一定区间的 slot。比如 Node1 负责 0-5460，Node2 负责 5461-10922，Node3 负责 10923-16383。 
+Redis 创建了 `16384 个槽`（slot），每个节点负责一定区间的 slot。比如 Node1 负责 0-5460，Node2 负责 5461-10922，Node3 负责 10923-16383。 
 
 ![image-20201108192659496](Redis之分布式篇.assets/image-20201108192659496.png)
 
@@ -1658,11 +1658,11 @@ Redisson 跟 Jedis 定位不同，它不是一个单纯的 Redis 客户端，而
 
 这种问题怎么解决呢？我们可以提供一个`重试的机制`。
 
-比如：如果删除缓存失败，我们捕获这个异常，把需要删除的 key 发送到消息队列。 然后自己创建一个消费者消费，尝试再次删除这个 key。 这种方式有个缺点，会对业务代码造成入侵。 
+比如：如果删除缓存失败，我们捕获这个异常，把需要删除的 key 发送到`消息队列`。 然后自己创建一个消费者消费，尝试再次删除这个 key。 这种方式有个缺点，会对业务代码造成入侵。 
 
 所以我们又有了第二种方案（异步更新缓存）： 
 
-因为更新数据库时会往 binlog 写入日志，所以我们可以通过一个服务来监听 binlog 的变化（比如阿里的 canal），然后在客户端完成删除 key 的操作。如果删除失败的话， 再发送到消息队列。 
+因为更新数据库时会往 binlog 写入日志，所以我们可以通过一个服务来`监听 binlog 的变化`（比如阿里的 canal），然后在客户端完成删除 key 的操作。如果删除失败的话， 再发送到消息队列。 
 
 总之，对于后删除缓存失败的情况，我们的做法是不断地重试删除，直到成功。
 

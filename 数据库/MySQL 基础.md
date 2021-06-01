@@ -523,7 +523,7 @@ InnoDB 用 `LRU (最近最少使用)算法`来管理缓冲池(链表实现，不
 
 当需要更新一个数据页时，如果数据页在 Buffer Pool 中存在，那么就直接更新好了。 否则的话就需要从磁盘加载到内存，再对内存的数据页进行操作。也就是说，如果没有命中缓冲池，至少要产生一次磁盘 IO。
 
-非唯一索引不需要从磁盘加载索引页判断数据是不是重复(唯一性检查)。这种情况下可以先把修改记录在内存的缓冲池中，从而提升更新(Insert、Delete、Update)语句的执行速度。这一块区域就是 `Change Buffer`。
+`非唯一索引不需要从磁盘加载索引页`判断数据是不是重复(唯一性检查)。这种情况下可以先把修改记录在内存的缓冲池中，从而提升更新(Insert、Delete、Update)语句的执行速度。这一块区域就是 `Change Buffer`。
 
 最后把 Change Buffer 记录到数据页的操作叫做 `merge`：
 
@@ -569,6 +569,8 @@ SHOW VARIABLES LIKE 'innodb_log_buffer_size';
 
 **那么，Log Buffer 什么时候写入 log file？**
 
+redo log，它又分成内存和磁盘两部分。
+
 ```mysql
 # log buffer 写入磁盘的时机，由一个参数控制，默认是 1。
 SHOW VARIABLES LIKE 'innodb_flush_log_at_trx_commit';
@@ -581,7 +583,7 @@ SHOW VARIABLES LIKE 'innodb_flush_log_at_trx_commit';
 
 ![image-20210208133743826](MySQL 基础.assets/image-20210208133743826.png)
 
-redo log，它又分成内存和磁盘两部分。redo log 有什么特点？ 
+**redo log 有什么特点？ **
 
 * redo log 是 InnoDB 存储引擎实现的，并不是所有存储引擎都有
 * 不是记录数据页更新之后的状态，而是记录这个页做了什么改动，属于`物理日志`
@@ -614,7 +616,7 @@ show variables like 'innodb_doublewrite';
 # 默认开启
 ```
 
-我们不是有 redo log 吗？但是有个问题，如果这个页本身已经损坏了，用它来做崩溃恢复是没有意义的。所以`在对于应用 redo log 之前`，需要一个页的副本。如果出现了写入失效，就用页的副本来还原这个页，然后再应用 redo log。这个页的副本就是 `double write`，InnoDB 的双写技术。通过它实现了数据页的可靠性。
+我们不是有 redo log 吗？但是有个问题，如果这个页本身已经损坏了，用它来做崩溃恢复是没有意义的。所以`在对于应用 redo log 之前，需要一个页的副本`。如果出现了写入失效，就用页的副本来还原这个页，然后再应用 redo log。这个页的副本就是 `double write`，InnoDB 的双写技术。通过它实现了数据页的可靠性。
 
 跟 redo log 一样，`double write 由两部分组成`，一部分是内存的 double write，一个部分是磁盘上的 double write。因为 double write 是顺序写入的，不会带来很大的开销。 
 
@@ -691,7 +693,7 @@ binlog 以事件的形式记录了所有的 DDL 和 DML 语句(因为它记录�
 
 跟 redo log 不一样，它的文件内容是可以追加的，没有固定大小限制。 在开启了 binlog 功能的情况下，我们可以把 binlog 导出成 SQL 语句，把所有的操作重放一遍，来`实现数据的恢复`。
 
-binlog 的另一个功能就是用来`实现主从复制`，它的原理就是从服务器读取主服务器 的 binlog，然后执行一遍。 
+binlog 的另一个功能就是用来`实现主从复制`，它的原理就是从服务器读取主服务器的 binlog，然后执行一遍。 
 
 有了这两个日志之后，我们来看一下一条更新语句是怎么执行的： 
 

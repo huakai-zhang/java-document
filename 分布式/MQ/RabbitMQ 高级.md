@@ -54,7 +54,7 @@ Message message = new Message("这条消息 4 秒后过期".getBytes(), messageP
 
 什么情况下消息会变成死信？
 
-1. 消息被消费者拒绝并且设置重回队列（NACK || Reject）&& reuqeue == true
+1. 消息被消费者拒绝并且设置不重回队列（NACK || Reject）&& requeue == false
 
 2. 消息过期
 3. 队列达到最大长度，超过了Max length(消息数)或者Max length bytes(字节数)，最先入队的消息会被发送到DLX
