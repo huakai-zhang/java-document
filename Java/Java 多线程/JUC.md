@@ -16,9 +16,9 @@ java.util.concurrent 在并发编程中使用的工具类，里面包含很多�
 
 ## 2.2 并行/并发
 
-`并行(paralle)`是指两个或者多个事件在同一时刻发生(在不同实体上的多个事件)
+`并行(paralle)`是指在不同实体上的两个或者多个事件在同一时刻发生
 
-`并发(concurrent)`是指两个或多个事件在同一时间间隔发生(在同一实体上的多个事件)
+`并发(concurrent)`是指在同一实体上的两个或多个事件在同一时间间隔发生
 
 ## 2.3 Synchronized
 
@@ -335,13 +335,13 @@ public class Lock8 {
 
 synchronized实现同步的基础：Java中的每一个对象都可以作为锁。 
 
-具体表现为以下3种形式。 
+具体表现为以下 3 种形式：
 
-对于普通同步方法，锁是当前实例对象。 
+* 对于普通同步方法，锁是当前实例对象
 
-对于静态同步方法，锁是当前类的Class对象。 
+* 对于静态同步方法，锁是当前类的Class对象
 
-对于同步方法块，锁是 Synchonized 括号里配置的对象 
+* 对于同步方法块，锁是 Synchonized 括号里配置的对象 
 
  当一个线程试图访问同步代码块时，它首先必须得到锁，退出或抛出异常时必须释放锁。 
 
@@ -391,11 +391,10 @@ Lock 本质上是一个接口，它定义了释放锁和获得锁的抽象方法
 
 #### synchronized 和 ReentrantLock 的区别
 
-1. 两者都是可重入锁
-
-2. synchronized 依赖于 JVM 自动释放锁，而 ReentrantLock 依赖于 API(需要 lock() 和 unlock() 方法配合 try/finally 语句块来完成)，手动释放锁，否则容易造成线程死锁
-
-3. ReentrantLock 比 synchronized 增加了一些高级功能：
+1. 两者都是`可重入锁`
+2. synchronized 能锁住`方法和代码块`，而 Lock 只能锁住`代码块`
+3. synchronized(关键字) 依赖于 `JVM 自动释放锁`，而 ReentrantLock(接口/类) 依赖于 `API 手动释放锁`(需要 lock() 和 unlock() 方法配合 try/finally 语句块来完成)，否则容易造成线程死锁
+4. ReentrantLock 比 synchronized 增加了一些高级功能：
    * `可中断地获取锁 lockInterruptibly()`，在锁的获取中可以中断当前线程
    * `尝试非阻塞的获取锁 tryLock()` 或`超时获取锁 tryLock(long time, TimeUnit unit)`，调用该方法后直接返回，如果能够获取则返回 true，否则返回 flase
    * 可实现公平锁
@@ -554,7 +553,7 @@ public class ReadWriteLockDemo {
 >
 > 当线程获得锁时，JMM 会把该线程对应的本地内存置为无效。从而使得被监视器保护的临界区代码必须从主内存中读取共享变量。
 >
-> ReentrantLock 在加锁方法中首先读 volatile 变量 state，在释放锁的最后写 volatile 变量 state。
+> ReentrantLock 在加锁方法中`首先读 volatile 变量 stat`e，在释放锁的`最后写 volatile 变量 state`。
 >
 > 根据 volatile 的 happens-before 规则，释放锁的线程在写 volatile 变量之前可见的共享变量，在获取锁的线程读取同一个 volatile 变量后将立即变得对获取锁的线程可见。
 
@@ -723,7 +722,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
 ![image-20201228172833908](JUC.assets/image-20201228172833908.png)
 
-会涉及到三个变化 
+会涉及到三个变化：
 
 1. 新的线程封装成 Node 节点追加到同步队列中，设置当前节点 prev 节点为旧的尾部节点
 2. 通过 CAS 将 tail 重新指向新的尾部节点
@@ -733,9 +732,9 @@ head 节点表示获取锁成功的节点，当头结点在释放同步状态时
 
 ![image-20201228173101325](JUC.assets/image-20201228173101325.png)
 
-这个过程也是涉及到三个变化 
+这个过程也是涉及到三个变化：
 
-1. 修改 head 节点指向下一个获得锁的节点
+1. 修改 `head 节点指向下一个`获得锁的节点
 2.  新的获得锁的节点，将 prev 和 thread 的指针指向 null 
 3. 旧 head 节点的 next 的指针指向 null 
 
@@ -1041,7 +1040,7 @@ Node 有 5 种状态，分别是：
 
 `INITIAL 0` 初始状态
 
-这个方法的主要作用是，通过 Node 的状态来判断，ThreadB 竞争锁失败以后是否应该被挂起。 
+这个方法的主要作用是，通过 Node 的状态来判断，ThreadB 竞争锁失败以后是否应该被挂起：
 
 1. 如果 ThreadB 的 pred 节点状态为 SIGNAL，那就表示可以放心挂起当前线程 
 2. 通过循环扫描链表把 CANCELLED 状态的节点移除 
@@ -1311,7 +1310,7 @@ protected final boolean tryAcquire(int acquires) {
 
 读状态等于 `S >>> 16`（无符号补 0 右移 16 位），读状态增加 1 时，等于 `S + (1 << 16)`，也就是 S + 0x00010000
 
-写状态等于 `S & 0x0000FFFF`（将高 16 位全部抹去），写状态增加 1 时，等于 `S + 1`
+写状态等于 `S & 0x0000FFFF`（将高 16 位全部抹去，2 ^ 16 - 1），写状态增加 1 时，等于 `S + 1`
 
 > 推论：
 >
@@ -1362,7 +1361,7 @@ protected final boolean tryAcquire(int acquires) {
 
 ## 5.3 读锁的获取与释放
 
-读锁是一个支持重入的共享锁，能够被多个线程同时获取，在`写状态为 0` 或者`没有其他写线程访问`时，读锁总会被成功地获取，所做的也只是线程安全的增加读状态。
+读锁是一个支持重入的共享锁，能够被多个线程同时获取，在`写锁没有被获取(写状态为 0)` 或者`没有其他写线程访问`时，读锁总会被成功地获取，所做的也只是线程安全的增加读状态。
 
 ```java
 protected final int tryAcquireShared(int unused) {
@@ -1678,7 +1677,7 @@ public boolean offer(E e) {
 
 **enqueue**
 
-这个是最核心的逻辑，方法内部通过 putIndex 索引直接将 元素添加到数组 items。
+这个是最核心的逻辑，方法内部通过 putIndex 索引直接将元素添加到数组 items。
 
 ```java
 private void enqueue(E x) {

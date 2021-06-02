@@ -280,8 +280,7 @@ public enum State {
 
   - LockSupport.park 分析：既有可能进入等待队列，也有可能进入其他阻塞的阻塞状态
 * `TIMED_WAITING`场景：某一线程因为调用以下带有指定正等待时间的方法之一而处于定时等待状态：
-
-  - Thread.sleep(long millis)
+- Thread.sleep(long millis)
   
   - 带有超时值的 Object.wait()
   
@@ -1004,7 +1003,11 @@ public synchronized Object get(long mills) throws InterruptedException {
 
 Thread.sleep() 方法的作用是让当前线程暂停指定的时间（毫秒）， 使当前线程进入阻塞状态（其他阻塞），但不释放任何锁资源，一定时间后线程自动进入 `runnable 状态`，给其它线程执行机会的最佳方式 。
 
-唯一需要注意的是其与 wait 方法的区别。最简单的区别是，`wait 方法依赖于同步`，而 sleep 方法可以直接调用。而更深层次的区别在于``sleep 方法只是暂时让出 CPU 的执行权，并不释放锁。而 wait 方法则需要释放锁``。
+唯一需要注意的是其与 wait 方法的区别：
+
+* 最简单的区别是 `wait 方法依赖于同步`，而 sleep 方法可以`直接调用`
+
+* 更深层次的区别在于 ``sleep 方法只是暂时让出 CPU 的执行权并不释放锁，而 wait 方法则需要释放锁``
 
 ```java
 public class SleepTest {

@@ -341,7 +341,7 @@ public class Demo01 {
 >
 > • If another threadalready owns the monitor associated with objectref， the thread blocks until the monitor's entry count is zero， then tries again to gain ownership.
 
-每一个对象都会和一个监视器 ``monitor`` (它才是真正的锁对象)关联。监视器被占用时会被锁住，其他线程无法来获取该 monitor。 当 JVM 执行某个线程的某个方法内部的 monitorenter 时，它会尝试去获取当前对象对应的 monitor 的所有权。其过程如下：
+``每一个对象都会和一个监视器 monitor (它才是真正的锁对象)关联``。监视器被占用时会被锁住，其他线程无法来获取该 monitor。 当 JVM 执行某个线程的某个方法内部的 monitorenter 时，它会尝试去获取当前对象对应的 monitor 的所有权。其过程如下：
 
 1. 若 monior 的进入数为 0，线程可以进入 monitor，并将 monitor 的进入数置为1。``当前线程成为 monitor 的 owner``（所有者）
 
@@ -390,27 +390,11 @@ Exception table:
 
 monitorexit。在执行同步方法前会调用 monitorenter，在执行完同步方法后会调用 monitorexit。
 
-### 3.2 synchronized 与 Lock 的区别
-
-1. synchronized 是关键字，而 Lock 是一个接口
-
-2. synchronized 会自动释放锁，而 Lock 必须手动释放锁
-
-3. synchronized 是不可中断的，Lock 可以中断也可以不中断
-
-4. 通过 Lock 可以知道线程有没有拿到锁，而 synchronized 不能
-
-5. synchronized 能锁住方法和代码块，而 Lock 只能锁住代码块
-
-6. Lock 可以使用读锁提高多线程读效率
-
-7. synchronized 是非公平锁，ReentrantLock 可以控制是否是公平锁
-
-### 3.3 深入 JVM 源码
+### 3.2 深入 JVM 源码
 
 JVM 源码下载：http://openjdk.java.net/ --> Mercurial --> jdk8 --> hotspot --> zip
 
-#### 3.3.1 monitor 监视器锁
+#### 3.2.1 monitor 监视器锁
 
 在 HotSpot 虚拟机中，monitor 是由 ObjectMonitor 实现的。其源码是用 c++ 来实现的，位于 HotSpot 虚拟机源码 ObjectMonitor.hpp 文件中(src/share/vm/runtime/objectMonitor.hpp)。ObjectMonitor 主要数据结构如下：
 
@@ -450,7 +434,7 @@ ObjectMonitor的数据结构中包含：_owner、_WaitSet和_EntryList，它们�
 
 <img src="synchronized.assets/image-20200919105228023.png" alt="image-20200919105228023" style="zoom: 50%;" />
 
-#### 3.3.2 monitor 竞争
+#### 3.2.2 monitor 竞争
 
 1. 执行monitorenter时，会调用InterpreterRuntime.cpp(位于：src/share/vm/interpreter/interpreterRuntime.cpp) 的 InterpreterRuntime::monitorenter函数。具体代码可参见HotSpot源码。
 
@@ -553,7 +537,7 @@ ObjectMonitor的数据结构中包含：_owner、_WaitSet和_EntryList，它们�
 
    4. 如果获取锁失败，则等待锁的释放。
 
-#### 3.3.3 monitor 等待
+#### 3.2.3 monitor 等待
 
 竞争失败等待调用的是ObjectMonitor对象的EnterI方法（位于：src/share/vm/runtime/objectMonitor.cpp），源码如下所示：
 
@@ -641,7 +625,7 @@ void ATTR ObjectMonitor::EnterI (TRAPS) {
 
 4. 当该线程被唤醒时，会从挂起的点继续执行，通过 ObjectMonitor::TryLock 尝试获取锁。
 
-#### 3.3.4 monitor 释放
+#### 3.2.4 monitor 释放
 
 当某个持有锁的线程执行完同步代码块时，会进行锁的释放，给其它线程机会执行同步代码，在HotSpot中，通过退出monitor的方式实现锁的释放，并通知被阻塞的线程，具体实现位于ObjectMonitor的exit方法中。（位于：src/share/vm/runtime/objectMonitor.cpp），源码如下所示：
 
@@ -895,7 +879,7 @@ void ATTR ObjectMonitor::exit(bool not_suspended, TRAPS) {
    if (TryLock(Self) > 0) break ;
    ```
 
-#### 3.3.5 monitor 重量级锁
+#### 3.2.5 monitor 重量级锁
 
 可以看到ObjectMonitor的函数调用中会涉及到Atomic::cmpxchg_ptr，Atomic::inc_ptr等内核函数，执行同步代码块，没有竞争到锁的对象会park()被挂起，竞争到锁的线程会unpark()唤醒。这个时候就会存在操作系统用户态和内核态的转换，这种切换会消耗大量的系统资源。所以synchronized是Java语言中是一个重量级(Heavyweight)的操作。
 
@@ -1318,7 +1302,7 @@ Space losses: 0 bytes internal + 4 bytes external = 4 bytes total
 
 偏向锁使用了一种`等到竞争出现才释放锁`的机制，所以当其他线程尝试竞争偏向锁时，持有偏向锁的线程才会释放锁。
 
-1. 偏向锁的撤销动作必须等待全局安全点
+1. 偏向锁的撤销动作必须等待`全局安全点`
 2. 暂停拥有偏向锁的线程，检查`持有偏向锁的线程是否活着`
 3. 如果线程不处于活动状态，则将对象头设置为无锁状态；如果线程仍然活着，拥有偏向锁的栈会被执行，遍历偏向对象的锁记录和对象头的 Mark Word 要么重新偏向于其他线程，要么恢复到无锁或标记对象不适合作为偏向锁
 4. 最后唤醒暂停的线程

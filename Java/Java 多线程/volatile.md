@@ -489,7 +489,7 @@ public class Lazy {
 
 ``双重检查的优点：线程安全，延迟加载，效率较高！``
 
-现在我们分析一下为什么为什么要在变量 lazy 之间加上 volatile 关键字。
+现在我们分析一下为什么要在变量 lazy 之间加上 volatile 关键字。
 
 #### 禁止指令重排
 
@@ -643,7 +643,7 @@ volatile 可以作为刷新之前变量的触发器。我们可以将某个变�
 
 ## 8 volatile 与 synchronized 区别
 
-* volatile 只能修饰实例变量和类变量，而 synchronized 可以修饰方法，以及代码块
+* volatile 只能修饰实例变量和类变量，而 synchronized 可以修饰方法以及代码块
 
 * volatile 保证数据的可见性，但是不保证原子性(多线程进行写操作，不保证线程安全)，而 synchronized 是一种排他（互斥）的机制
 
