@@ -407,9 +407,10 @@ JConsole 工具是 JDK 自带的可视化监控、管理工具。查看 java 应
 
 ## 3.2 jvisualvm
 
-可以监控本地的 Java 进程的 CPU，类，线程等
+VisualVM 除了常规的运行监视本地的 Java 进程的 CPU，类，线程等与故障处理外，还将提供其他方面的能力，譬如性能分析，它还具备通过插件扩展功能的能力。
 
 ```markdown
+# All-in-One Java Troubleshooting Tool
 # 命令行中输入
 	jvisualvm
 ```

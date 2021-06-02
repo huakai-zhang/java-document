@@ -22,6 +22,11 @@ Reference -> Developer Guides -> 定位到 https://docs.oracle.com/javase/8/docs
 
 ## 1.3 类文件(Class文件)
 
+Class 文件是一组以 8 个字节为基础单位的二进制流，紧凑排列，中间没有任何分隔符。Class 文件格式采用一种类似 C 语言结构体的伪代码存储数据，只有两种数据类型：`无符号数`和`表`：
+
+* 无符号数属于`基本的数据类型`，以 u1、u2、u4、u8 分别代表 1 个字节、2 个字节、4 个字节、8 个字节，可以用来描述数字、索引引用、数量值或者按照 UTF-8 编码构成字符串值
+* 表是由多个无符号数或其他表作为数据项构成的`复合数据类型`，习惯性以 "_info" 结尾（整个 Class 文件本质上也可以视作一张表，这张表的数据项按照`严格的顺序`排列构成）
+
 官网 The class File Format https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-4.html
 
 ```java
@@ -32,9 +37,9 @@ ClassFile {
     u2             constant_pool_count;  // 常量池
     cp_info        constant_pool[constant_pool_count-1];
     u2             access_flags;		// 访问标志
-    u2             this_class;		// 类索引、父类索引、接口索引
-    u2             super_class;
-    u2             interfaces_count;
+    u2             this_class;		// 类索引
+    u2             super_class;		// 父类索引
+    u2             interfaces_count;// 接口索引
     u2             interfaces[interfaces_count];
     u2             fields_count;		// 字段表集合
     field_info     fields[fields_count];
@@ -48,12 +53,24 @@ ClassFile {
 ```markdown
 # vi -b Test.class
 # :%!xxd
-# magic(魔数) 标识类文件格式的幻数，它的值为 0xCAFEBABE
+# 1. magic(魔数) 标识类文件格式的幻数，它的值为 0xCAFEBABE，确定这个文件是否为一个能被虚拟机接受的 Class 文件
 	cafe babe
-# minor_version, major_version 
-	0000 0034 对应10进制的52，代表JDK 8中的一个版本
-# constant_pool_count
-	001d 对应十进制29，代表常量池中29个常量
+	# minor_version 次版本号, major_version 主版本号
+		0000 0034 对应10进制的52，代表JDK 8中的一个版本
+# 2. constant_pool_count
+	javap -verbose Test 可以输出 Test.class 文件字节码内容
+	001d 对应十进制 29，这个容量技术是从 1 而不是 0 开始，所以代表常量池中 28 个常量
+
+# 3. access_flags 访问标志，这个标志用于识别一些类或接口层次的访问信息，包括这个 Class 是类还是接口，是否定义为 public，是否定义为 abstract，是否声明为 final 等等。
+
+# 4. this_class 类索引、super_class 父类索引、interfaces 接口索引集合
+	类索引，确定这个类的全限定名
+	父类索引，确定这个类的父类的全限定名，java 不允许多重继承，所以父类索引只有一个，除了 Object 外，所有的 Java 类的父类索引都不为 0
+	接口索引，从左到右排列在接口索引集合中
+	它们各自指向一个类型为 CONSTANT_Class_info 的类描述常量
+
+# 5. field_info 字段表集合，用于描述接口或类中声明的变量，Java 语言中字段包括类级(static)变量以及实例级变量，但不包括方法内部声明的局部变量
+
 00000000: cafe babe 0000 0034 001d 0a00 0600 0f09  .......4........
 00000010: 0010 0011 0800 120a 0013 0014 0700 1507  ................
 00000020: 0016 0100 063c 696e 6974 3e01 0003 2829  .....<init>...()
@@ -82,15 +99,24 @@ ClassFile {
 
 ## 2.2 链接(Link)
 
-> 验证(Verify) 保证被加载类的正确性
+> `验证(Verify)` 确保 Class 文件的字节流中包含的信息符合《Java 虚拟机规范》的全部约束要求，保证这些信息被当做代码运行后不会危害虚拟机自身的安全
 >
-> 准备(Prepare) 为类的静态变量分配内存，并将其初始化为默认值
+> `准备(Prepare)` 正式为`类中定义的变量(即静态变量)`分配内存并设置类变量初始值，从概念上讲，这些变量所使用的内存应当在方法区进行分配(方法区本身是一个逻辑上的区域)，JDK 7 及以前，HotSpot 使用`永久代`来实现方法去；而在 JDK 8 及以后，类变量则会随着 Class 对象一起存放在 `Java 堆`中
 >
-> 解析(Resolve) 把类中的符号引用转换为直接引用，String str  = XXX符号引用 --> String str = 真实的引用地址
+> *注，此时的内存分配仅包括类变量，不包括实例变量，实例变量将会在对象实例化时随对象一起分配在 Java 堆中
+>
+> `解析(Resolve)` 将常量池内的符号引用转换为直接引用，String str  = XXX符号引用 --> String str = 真实的引用地址
 
 ## 2.3 初始化(Initialize)
 
- 对类的静态变量，静态代码块执行初始化操作
+在准备阶段，变量已经赋过一次系统要求的初始零值，而在初始化阶段，则会根据程序员通过程序编码制定的主观计划区`初始化类变量`和其他资源。
+
+更直接的形式来表达：初始化阶段就是执行类构造器 `<clinit>() 方法` 的过程。`<clinit>()` 并不是程序员在 Java 代码中直接编写的方法，而是 Javac 编译器的自动生成物：
+
+* 由编译器自动收集类中的所有类变量的赋值动作和静态语句块中的语句合并产生的，顺序是由语句在源文件中出现的顺序决定，静态语句块只能访问在静态语句块之前的变量
+* Java 虚拟机会保证在子类的 `<clinit>() 方法`执行前，父类的 `<clinit>() 方法`已经执行完毕
+* `<clinit>() 方法` 对于类或接口来说并不是必须的，如果一个类没有静态代码块，也没有对类变量的赋值操作，编译器就不会为这个类生产 `<clinit>() 方法`
+* 多线程环境中，Java 虚拟机必须保证 `<clinit>() 方法` 被正确的加锁同步
 
 > **对象的创建**
 >
