@@ -375,6 +375,14 @@ private void grow(int minCapacity) {
     // 进行扩容的数组复制
     elementData = Arrays.copyOf(elementData, newCapacity);
 }
+public static int[] copyOf(int[] original, int newLength) {
+    // 申请一个新的数组
+    int[] copy = new int[newLength];
+    // 调用System.arraycopy,将源数组中的数据进行拷贝,并返回新的数组
+    System.arraycopy(original, 0, copy, 0,
+                     Math.min(original.length, newLength));
+    return copy;
+}
 ```
 
 可以看到，只要 ArrayList 的当前容量足够大，add() 操作的效率非常高的。只有当 ArrayList 对容量的需求`超出当前数组大小`时，才需要进行扩容。``扩容的过程中，会进行大量的数组复制操作``。而数组复制时，最终将调用``System.arraycopy()``方法，因此 add() 操作的效率还是相当高的。
@@ -852,6 +860,38 @@ if ((p = tab[i = (n - 1) & hash]) == null)
 (n - 1) & hash 这个操作如果在 n 为 `2 的 N 次幂`的情况下是等同于 hash % n 取余数的值，至于为什么要使用与（&）运算呢？``因为与运算的效率要高于hash % n取余的运算。``
 
 同时，length为2的整数次幂的话，length-1的二进制结尾总是1111，这样便保证了散列的均匀。
+
+#### HashMap 的遍历方式
+
+##### 性能
+
+```markdown
+// HashMapCycle.java
+	Benchmark                        Mode  Cnt  Score   Error   Units
+	HashMapCycle.forEachEntrySet    thrpt    5  2.165 ± 0.327  ops/ms
+	HashMapCycle.forEachKeySet      thrpt    5  4.339 ± 0.201  ops/ms
+	HashMapCycle.iteratorEntrySet   thrpt    5  2.214 ± 0.093  ops/ms
+	HashMapCycle.iteratorKeySet     thrpt    5  4.307 ± 0.387  ops/ms
+	HashMapCycle.lambda             thrpt    5  2.246 ± 0.096  ops/ms
+	HashMapCycle.parallelStreamApi  thrpt    5  1.689 ± 0.054  ops/ms
+	HashMapCycle.streamApi          thrpt    5  2.375 ± 0.296  ops/ms
+```
+
+除了并行循环的 `parallelStream` 性能比极高之外（多线程方式性能肯定比较高），其他方式的遍历方法在性能方面几乎没有任何差别。使用 `EntrySet` 和 `KeySet` 代码有差别？？？？？？，而且`从代码的优雅型和可读性`来说，还是推荐使用 `EntrySet`。`从简洁性和优雅性上`来看，Lambda 和 Stream 无疑是最适合的遍历方式。
+
+把所有遍历代码通过 `javac`，编译成字节码来看具体的原因：
+
+从结果可以看出，通过`迭代器`循环和 `for` 循环的遍历的最终生成的代码`是一样的`，都是在循环中创建了一个遍历对象 `Entry` 。
+
+##### 安全性
+
+* 迭代器中循环删除数据安全
+
+* For 循环中删除数据非安全
+
+* Lambda 循环中删除数据非安全，可以先使用 `Lambda` 的 `removeIf` 删除多余的数据
+
+* Stream 循环中删除数据非安全，可以使用 `Stream` 中的 `filter` 过滤掉无用的数据
 
 ### 更新映射项
 

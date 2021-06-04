@@ -37,7 +37,7 @@ public class AtomicityTest {
 
 **synchronized 保证原子性的原理**
 
-对 number++ 增加同步代码块后，保证同一时间只有一个线程拿到锁能够进入同步代码块操作 number++，就不会出现安全问题。
+对 number++ 增加 synchronized 同步后，`保证被它修饰的方法或者代码块在任意时刻只能有一个线程`进入同步代码操作 number++，就不会出现安全问题。
 
 ### 1.2 synchronized 与可见性
 
@@ -79,7 +79,7 @@ synchronized 保证可见性的原理，执行 synchronized 时，会对应 lock
 
 ### 1.3 synchronized 与有序性
 
-synchronized 保证有序性的原理，我们加 synchronized 后，依然会发生重排序，只不过，我们有同步代码块，可以保证只有一个线程执行同步代码中的代码，保证有序性。
+synchronized 保证有序性的原理，我们加 synchronized 后，依然会发生重排序，只不过，我们有同步代码块，可以`保证只有一个线程执行同步代码中的代码`，保证有序性。
 
 ## 2 synchronized 的特性
 
