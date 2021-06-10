@@ -1,8 +1,8 @@
 # 1 Spring 核心之 IOC 容器
 
-`IOC(Inversion of Control) 控制反转` 所谓控制反转，就是把原先我们代码里面需要实现的对象创建、依赖的代码，反转给容器来帮忙实现。那么必然的我们需要创建一个容器，同时需要一种描述来让 容器知道需要创建的对象与对象的关系。这个描述最具体表现就是我们所看到的配置文件。 
+`IOC(Inversion of Control) 控制反转` 所谓控制反转，就是把原先我们代码里面需要实现的对象创建、依赖的代码，反转给容器来帮忙实现。那么必然的我们需要创建一个容器，同时需要一种描述来让容器知道需要创建的对象与对象的关系。这个描述最具体表现就是我们所看到的配置文件。 
 
-``DI(Dependency Injection) 依赖注入`` 就是指对象是被动接受依赖类而不是自己主动去找，换句话说就 是指对象不是从容器中查找它依赖的类，而是在容器实例化对象的时候主动将它依赖的类注入给它。 
+``DI(Dependency Injection) 依赖注入`` 就是指对象是被动接受依赖类而不是自己主动去找，换句话说就是指对象不是从容器中查找它依赖的类，而是在容器实例化对象的时候主动将它依赖的类注入给它。 
 
 先从我们自己设计这样一个视角来考虑： 
 
@@ -80,9 +80,9 @@ public interface BeanFactory {
 
 在 BeanFactory 里只对 IOC 容器的基本行为作了定义，根本不关心你的 Bean 是如何定义怎样加载的。 正如我们只关心工厂里得到什么的产品对象，至于工厂是怎么生产这些对象的，这个基本的接口不关心。
 
-而要知道工厂是如何产生对象的，我们需要看具体的 IOC 容器实现，Spring 提供了许多 IOC 容器 的实现。比如 XmlBeanFactory，ClasspathXmlApplicationContext 等。
+而要知道工厂是如何产生对象的，我们需要看具体的 IOC 容器实现，Spring 提供了许多 IOC 容器的实现。比如 XmlBeanFactory，ClasspathXmlApplicationContext 等。
 
-其中 XmlBeanFactory 就 是针对最基本的 IOC 容器的实现，这个 IOC 容器可以读取 XML 文件定义的 BeanDefinition（XML 文件中对 bean 的描述）,如果说 XmlBeanFactory 是容器中的屌丝，ApplicationContext 应该算容器中 的高帅富.
+其中 XmlBeanFactory 就是针对最基本的 IOC 容器的实现，这个 IOC 容器可以读取 XML 文件定义的 BeanDefinition（XML 文件中对 bean 的描述），如果说 XmlBeanFactory 是容器中的屌丝，ApplicationContext 应该算容器中的高帅富.
 
 ``ApplcationContext`` 是Spring提供的一个高级 IOC 容器，除了提供 IOC 容器的基本功能外，还为用户提供以下附加服务：
 
@@ -139,7 +139,7 @@ public class XmlBeanFactory extends DefaultListableBeanFactory {
 
 ```java
 //根据Xml配置文件创建Resource资源对象，该对象中包含了BeanDefinition的信息
-ClassPathResource resource =new ClassPathResource("application-context.xm1");
+ClassPathResource resource =new ClassPathResource("application-context.xml");
 //创建DefaultListableBeanFactory
 DefaultListableBeanFactorx factory =new DefaultlistableBeanFactory();
 //创建XmlBeanDefinitionReader读取器，用于载入BeanDefinition。之所以需要BeanFactory作为参数，是因为会将读取的信息回调配置给factory
@@ -184,7 +184,7 @@ public FileSystemXmlApplicationContext(String[] configLocations, boolean refresh
 
 ### 3.2.2 获得资源路径
 
-``FileSystemXmlApplicationContext`` 首先调用父类容器的构造方法(super(parent))为容器设置好Bean资源加载器。 然后，再调用父类``AbstractApplicationContext`` 的 setConfigLocations方法来设置Bean定义资源文件的定位路径。 追踪其父类发现：
+``FileSystemXmlApplicationContext`` 首先调用父类容器的构造方法 super(parent) 为容器设置好 `Bean 资源加载器`。 然后，再调用父类``AbstractApplicationContext`` 的 setConfigLocations() 方法来设置 Bean 定义资源文件的定位路径。 追踪其父类发现：
 
 ```java
 public abstract class AbstractApplicationContext extends DefaultResourceLoader
@@ -226,7 +226,7 @@ public PathMatchingResourcePatternResolver(ResourceLoader resourceLoader) {
 }
 ```
 
-在设置容器的资源记载器之后，接下来 FileSystemXmlApplicationContext 执行 setConfigLocations 方法通过调用其父类``AbstractRefreshableConfigApplicationContext``的方法进行对Bean定义资源文件的定义：
+在设置容器的资源加载器之后，接下来 FileSystemXmlApplicationContext 执行 setConfigLocations 方法通过调用其父类``AbstractRefreshableConfigApplicationContext`` 的方法进行对Bean定义资源文件的定义：
 
 ```java
 //处理单个资源文件为一个字符串的情况
@@ -256,9 +256,9 @@ public void setConfigLocations(String[] locations) {
 
 ### 3.2.3 开始启动
 
-Spring IOC 容器对Bean定义资源的载入是从refresh()函数开始的，refresh是一个模版方法，refresh方法的作用是：在创建IOC容器前，如果已有容器存在，则需要把已有的容器销毁和关闭，以保证在refresh之后使用的是新建立起来的IOC容器。refresh的作用类似于对IOC容器的重启，在新建立好的容器中对容器进行初始化，对Bean定义资源进行载入。
+Spring IOC 容器对Bean定义资源的`载入是从 refresh() 函数开始的`，refresh 是一个`模版方法`，refresh 方法的作用是：在创建 IOC 容器前，如果已有容器存在，则需要把已有的容器销毁和关闭，以保证在 refresh 之后使用的是新建立起来的 IOC 容器。refresh 的作用类似于对 IOC 容器的重启，在新建立好的容器中对容器进行初始化，对 Bean 定义资源进行载入。
 
-FileSystemXmlApplicationContext调用其父类的AbstractApplicationContext的refresh函数启动整个IOC容器对Bean定义的载入过程：
+FileSystemXmlApplicationContext 调用其父类的 AbstractApplicationContext 的 refresh 函数启动整个 IOC 容器对 Bean 定义的载入过程：
 
 ```java
 //容器初始化的过程，读入Bean定义资源，并且解析注册
@@ -337,17 +337,15 @@ public void refresh() throws BeansException, IllegalStateException {
 }
 ```
 
-refresh()方法主要为IOC容器Bean的生命周期管理提供条件，Spring IOC容器载入Bean定义资源文件从其子类容器的``refreshBeanFactory()``方法启动，所以整个refresh()中ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory()这句代码以后的都是注册容器的信息源和生命周期事件，载入过程就是从这句代码启动。
-
-refresh()方法的主要作用是：在创建IOC容器之前，如果已经容器已经存在，则需要把已有的容器销毁和关闭，以保证在refresh之后使用的是新建立起来的IOC容器。它类似于对IOC容器的重启，在新建立好的容器中对容器进行初始化，对 Bean 配置资源进行载入。
+refresh()方法主要为IOC容器Bean的生命周期管理提供条件，Spring IOC容器载入Bean定义资源文件从其子类容器的``refreshBeanFactory()``方法启动，所以整个 refresh() 中 `ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory()` 这句代码以后的都是注册容器的信息源和生命周期事件，载入过程就是从这句代码启动。
 
 ### 3.2.4 创建容器
 
-AbstractApplicationContext的obtainFreshBeanFactory()方法调用子类容器的refreshBeanFactory方法，启动容器载入Bean定义资源文件的过程：
+AbstractApplicationContext 的 obtainFreshBeanFactory() 方法调用子类容器的 refreshBeanFactory 方法，`启动容器载入Bean 定义资源文件`的过程：
 
 ```java
 protected ConfigurableListableBeanFactory obtainFreshBeanFactory() {
-   // 使用了委派模式，父类定义了抽象的refreshBeanFactory()方法，具体实现调用子类容器的refreshBeanFactory
+   // 使用了委派模式，父类定义了抽象的 refreshBeanFactory() 方法，具体实现调用子类容器的 refreshBeanFactory
    refreshBeanFactory();
    ConfigurableListableBeanFactory beanFactory = getBeanFactory();
    if (logger.isDebugEnabled()) {
@@ -357,7 +355,7 @@ protected ConfigurableListableBeanFactory obtainFreshBeanFactory() {
 }
 ```
 
-AbstractApplicationContext 类中只抽象定义了 refreshBeanFactory()方法，容器真正调用的是其子类 AbstractRefreshableApplicationContext 实现的 refreshBeanFactory()方法，方法的源码如下：
+AbstractApplicationContext 类中只抽象定义了 refreshBeanFactory()方法，容器真正调用的是其子类 `AbstractRefreshableApplicationContext` 实现的 refreshBeanFactory() 方法，方法的源码如下：
 
 ```java
 @Override
@@ -368,7 +366,7 @@ protected final void refreshBeanFactory() throws BeansException {
       closeBeanFactory();
    }
    try {
-      //创建IOC容器
+      //创建 IOC 容器
       DefaultListableBeanFactory beanFactory = createBeanFactory();
       beanFactory.setSerializationId(getId());
       // 对IOC容器进行定制化，如设置启动参数，开启注解的自动装配等
@@ -385,13 +383,11 @@ protected final void refreshBeanFactory() throws BeansException {
 }
 ```
 
-这个方法中，先判断BeanFactory是否存在，如果存在则先销毁beans并关闭beanFactory，接着创建DefaultListableBeanFactory，并调用loadBeanDefinitions装载bean定义。
+这个方法中，先判断 BeanFactory 是否存在，如果存在则先销毁 beans 并关闭 beanFactory，接着创建`DefaultListableBeanFactory`，并调用 loadBeanDefinitions 装载 bean 定义。
 
 ### 3.2.5 载入配置路径
 
-AbstractRefreshableApplicationContext中只定义了抽象的loadBeanDefinition方法，容器真正调用的是其子类AbstractXmlApplicationContext对该方法的实现： 
-
-loadBeanDefinitions方法同样是抽象方法，是有其子类实现的，也即在AbstractXmlApplicationContext中。
+AbstractRefreshableApplicationContext 中只定义了抽象的 loadBeanDefinitions 方法，容器真正调用的是其子类 AbstractXmlApplicationContext 对该方法的实现：
 
 ```java
 public abstract class AbstractXmlApplicationContext 
@@ -409,6 +405,8 @@ protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) throw
    beanDefinitionReader.setEnvironment(this.getEnvironment());
    // 为Bean读取器设置Spring资源加载器，AbstractXmlApplicationContext的
    //祖先父类AbstractApplicationContext继承DefaultResourceLoader，因此，容器本身也是一个资源加载器
+   // resourceLoader == this
+   // 即是 FileSystemXmlApplicationContext
    beanDefinitionReader.setResourceLoader(this);
    //为Bean读取器设置SAX xml解析器DOM4J
    beanDefinitionReader.setEntityResolver(new ResourceEntityResolver(this));
@@ -435,7 +433,7 @@ protected void loadBeanDefinitions(XmlBeanDefinitionReader reader) throws BeansE
    //如果子类中获取的Bean定义资源定位为空，则获取FileSystemXmlApplicationContext构造方法中setConfigLocations方法设置的资源
    String[] configLocations = getConfigLocations();
    if (configLocations != null) {
-      //Xml Bean读取器调用器父类AbstractBeanDefinitionReader读取定位
+      //Xml Bean读取器调用器父类 AbstractBeanDefinitionReader 读取定位
       reader.loadBeanDefinitions(configLocations);
    }
 }
@@ -453,9 +451,9 @@ Xml Bean读取器(XmlBeanDefinitionReader)调用其父类AbstractBeanDefinitionR
 
 ### 3.2.6 分配路径处理策略
 
-org.springframework.beans.factory.support的BeanDefinitionReader在其抽象父类AbstractBeanDefinitionReader中定义了载入过程。
+org.springframework.beans.factory.support 的 BeanDefinitionReader 在其抽象父类 AbstractBeanDefinitionReader 中定义了载入过程。
 
-AbstractBeanDefinitionReader 的 loadBeanDefinitions()方法源码如下： 
+AbstractBeanDefinitionReader 的 loadBeanDefinitions() 方法源码如下： 
 
 ```java
 //重载方法，调用下面的loadBeanDefinitions(String, Set<Resource>);方法 
@@ -470,12 +468,14 @@ public int loadBeanDefinitions(String location, Set<Resource> actualResources) t
       throw new BeanDefinitionStoreException(
             "Cannot import bean definitions from location [" + location + "]: no ResourceLoader available");
    }
-
+   // resourceLoader == this == FileSystemXmlApplicationContext
+   // ApplicationContext extends ResourcePatternResolver
+   // 条件成立
    if (resourceLoader instanceof ResourcePatternResolver) {
       // Resource pattern matching available.
       try {
-         //将指定位置的Bean定义资源文件解析为Spring IOC容器封装的资源  
-         //加载多个指定位置的Bean定义资源文件  
+         // 将指定位置的Bean定义资源文件解析为Spring IOC容器封装的资源  
+         // 加载多个指定位置的Bean定义资源文件  
          Resource[] resources = ((ResourcePatternResolver) resourceLoader).getResources(location);
          //委派调用其子类XmlBeanDefinitionReader的方法，实现加载功能 
          int loadCount = loadBeanDefinitions(resources);
@@ -495,19 +495,7 @@ public int loadBeanDefinitions(String location, Set<Resource> actualResources) t
       }
    }
    else {
-      // Can only load single resources by absolute URL.
-      //将指定位置的Bean定义资源文件解析为Spring IOC容器封装的资源  
-        //加载单个指定位置的Bean定义资源文件
-      Resource resource = resourceLoader.getResource(location);
-      //委派调用其子类XmlBeanDefinitionReader的方法，实现加载功能
-      int loadCount = loadBeanDefinitions(resource);
-      if (actualResources != null) {
-         actualResources.add(resource);
-      }
-      if (logger.isDebugEnabled()) {
-         logger.debug("Loaded " + loadCount + " bean definitions from location [" + location + "]");
-      }
-      return loadCount;
+      ...
    }
 }
 
@@ -523,21 +511,47 @@ public int loadBeanDefinitions(String... locations) throws BeanDefinitionStoreEx
 }
 ```
 
-loadBeanDefinitions(Resource… resources)方法和上面分析的3个方法类似，同样也是调用XmlBeanDefinitionReader的loadBeanDefinitions方法。 从对AbstractBeanDefinitionReader的loadBeanDefinitions方法源码分析可以看出该方法做了一下两件事： 
+loadBeanDefinitions(Resource… resources) 方法和上面分析的3个方法类似，同样也是调用 XmlBeanDefinitionReader 的loadBeanDefinitions 方法。 从对 AbstractBeanDefinitionReader 的 loadBeanDefinitions 方法源码分析可以看出该方法做了一下两件事： 
 
-首先，调用资源加载器的获取资源方法resourceLoader.getResource(location)，获取要加载的资源。(上方代码else中的getResource) 
+首先，调用资源加载器的获取资源方法 `resourceLoader.getResource(location)` 获取要加载的资源
 
-其次，真正执行加载功能是其子类XmlBeanDefinitionReader的loadBeanDefinitions方法。在 loadBeanDefinitions()方法中调用了 AbstractApplicationContext 的 getResources()方法，跟进去之后发现 getResources()方法其实定义在 ResourcePatternResolver 中，此时，我们有必要来看一下 ResourcePatternResolver 的全类图：  
+其次，真正执行加载功能是其子类 XmlBeanDefinitionReader 的 loadBeanDefinitions 方法。在 loadBeanDefinitions() 方法中调用了类型为 `ResourcePatternResolver` 的 getResources() 方法，有必要来看一下 ResourcePatternResolver 的全类图：  
 
-![20200331104926782](Spring IOC 源码分析.assets/20200331104926782.png)
+![image-20210609175449095](Spring IOC 源码分析.assets/image-20210609175449095.png)
 
- ![20200331104941767](Spring IOC 源码分析.assets/20200331104941767.png) 
+结合上面的继承图，可以知道此时调用的是 `AbstractApplicationContext 的 getResource() 方法`定位 Resource：
 
-结合上面的ResourceLoader于ApplicationContext的继承图，可以知道此时调用的是DefaultResourceLoader的getResource方法定位Resource，因为FileSystemXmlApplicationContext本身就是DefaultResourceLoader的实现类，所以此时又回到了FileSystemXmlApplicationContext中来。
+```java
+// AbstractApplicationContext.java
+// resourcePatternResolver 的定义上面有解析，即是 PathMatchingResourcePatternResolver
+public Resource[] getResources(String locationPattern) throws IOException {
+   return this.resourcePatternResolver.getResources(locationPattern);
+}
+// PathMatchingResourcePatternResolver.java
+public Resource[] getResources(String locationPattern) throws IOException {
+	if (locationPattern.startsWith(CLASSPATH_ALL_URL_PREFIX)) {
+		// a class path resource (multiple resources for same name possible)
+		if (getPathMatcher().isPattern(locationPattern.substring(CLASSPATH_ALL_URL_PREFIX.length()))) {
+			// a class path resource pattern
+			return findPathMatchingResources(locationPattern);
+		}
+		else {
+			// all class path resources with the given name
+			return findAllClassPathResources(locationPattern.substring(CLASSPATH_ALL_URL_PREFIX.length()));
+		}
+	}
+	else {
+    	// 最终调用的是 getResourceLoader()，其返回的是 this.resourceLoader
+    	// resourceLoader 为 AbstractApplication 实例化时候传入的 this
+    	// 实际为 FileSystemXmlApplicationContext
+    	return new Resource[] {getResourceLoader().getResource(locationPattern)};
+    }
+}
+```
 
 ### 3.2.7 解析配置文件路径
 
-XmlBeanDefinitionReader通过调用其父类DefaultResourceLoader的getResource方法获取要加载的资源：
+通过调用 `FileSystemXmlApplicationContext` 父类 `DefaultResourceLoader` 的 getResource() 方法获取要加载的资源：
 
 ```java
 //获取Resource的具体实现方法
@@ -564,7 +578,7 @@ public Resource getResource(String location) {
 }
 ```
 
-FileSystemXmlApplicationContext容器提供了getResourceByPath方法的实现，就是为了处理既不是classpath标识，又不是Url标识的Resouce定位这种情况。
+FileSystemXmlApplicationContext 容器提供了 getResourceByPath 方法的实现，就是为了处理既不是 classpath 标识，又不是 Url 标识的 Resouce 定位这种情况。
 
 ```java
 FileSystemXmlApplicationContext：
@@ -577,11 +591,13 @@ protected Resource getResourceByPath(String path) {
 }
 ```
 
-代码回到了FileSystemXmlApplicaitonContext中来，它提供了FileSystemResource来完成从文件系统得到配置文件的资源定义。 这样就可以从文件系统路径上对IOC配置文件进行加载——当然可以按照这个逻辑从任何地方加载，在Spring中提供的各种资源抽象，比如ClassPathResource，URLResouce，FileSystemResource等来供我们使用。上面是定位Resource的一个过程，而这只是加载过程的一部分。
+代码回到了 FileSystemXmlApplicaitonContext 中来，它提供了 `FileSystemResource` 来完成`从文件系统得到配置文件的资源定义`。 这样就可以从文件系统路径上对 IOC 配置文件进行加载——当然可以按照这个逻辑从任何地方加载，在 Spring 中提供的各种资源抽象，比如 ClassPathResource，URLResouce，FileSystemResource 等来供我们使用。
+
+> 上面是 <font color=red>定位</font> Resource 的一个过程，而这只是加载过程的一部分。
 
 ### 3.2.8 开始读取配置内容
 
-Bean定义了Resource得到了，继续回到XmlBeanDefinitionReader的loadBeanDefinitions(Resource …)方法看到代表bean文件的资源定义以后的载入过程。
+Bean 定义了 Resource 得到了，继续回到 XmlBeanDefinitionReader 的 loadBeanDefinitions(Resource …) 方法看到代表bean 文件的资源定义以后的 <font color=red>载入</font> 过程。
 
 ```java
 //这里是载入XML形式Bean定义资源文件方法
@@ -632,41 +648,15 @@ public int loadBeanDefinitions(EncodedResource encodedResource) throws BeanDefin
 //从特定XML文件中实际载入Bean定义资源的方法
 protected int doLoadBeanDefinitions(InputSource inputSource, Resource resource)
       throws BeanDefinitionStoreException {
-   try {
-      int validationMode = getValidationModeForResource(resource);
-      //将XML文件转换为DOM对象，解析过程由documentLoader实现
-      Document doc = this.documentLoader.loadDocument(
-            inputSource, getEntityResolver(), this.errorHandler, validationMode, isNamespaceAware());
-      //这里是启动对Bean定义解析的详细过程，该解析过程会用到Spring的Bean配置规则
-      return registerBeanDefinitions(doc, resource);
-   }
-   catch (BeanDefinitionStoreException ex) {
-      throw ex;
-   }
-   catch (SAXParseException ex) {
-      throw new XmlBeanDefinitionStoreException(resource.getDescription(),
-            "Line " + ex.getLineNumber() + " in XML document from " + resource + " is invalid", ex);
-   }
-   catch (SAXException ex) {
-      throw new XmlBeanDefinitionStoreException(resource.getDescription(),
-            "XML document from " + resource + " is invalid", ex);
-   }
-   catch (ParserConfigurationException ex) {
-      throw new BeanDefinitionStoreException(resource.getDescription(),
-            "Parser configuration exception parsing XML from " + resource, ex);
-   }
-   catch (IOException ex) {
-      throw new BeanDefinitionStoreException(resource.getDescription(),
-            "IOException parsing XML document from " + resource, ex);
-   }
-   catch (Throwable ex) {
-      throw new BeanDefinitionStoreException(resource.getDescription(),
-            "Unexpected exception parsing XML document from " + resource, ex);
-   }
+  int validationMode = getValidationModeForResource(resource);
+  //将XML文件转换为DOM对象，解析过程由documentLoader实现
+  Document doc = this.documentLoader.loadDocument(inputSource, getEntityResolver(), this.errorHandler, validationMode, isNamespaceAware());
+  //这里是启动对Bean定义解析的详细过程，该解析过程会用到Spring的Bean配置规则
+  return registerBeanDefinitions(doc, resource);
 }
 ```
 
-通过源码分析，载入Bean定义资源文件的最后一步是将Bean定义资源转换为Document对象，该过程有documentLoader实现。
+通过源码分析，载入 Bean 定义资源文件的最后一步是将 `Bean 定义资源转换为 Document 对象`，该过程有 documentLoader 实现。
 
 ### 3.2.9 准备文档对象
 
@@ -719,11 +709,11 @@ protected DocumentBuilderFactory createDocumentBuilderFactory(int validationMode
 }
 ```
 
-该解析过程调用JavaEE标准的JAXP标准进行处理。 至此Spring IOC 容器根据定位的Bean定义资源文件，将其加载读入并转化为Document对象过程完成。 接下来分析Spring IOC 将载入的Bean定义资源文件转换为Document之后，是如何将其解析为SpringIOC管理的Bean对象并将其注册到容器中的。
+该解析过程调用 JavaEE 标准的 `JAXP 标准`进行处理。 至此 Spring IOC 容器根据定位的 Bean 定义资源文件，将其`加载读入并转化为 Document 对象`过程完成。 接下来分析Spring IOC 将载入的 Bean 定义资源文件转换为 Document 之后，是如何将其解析为 SpringIOC 管理的 Bean 对象并将其注册到容器中的。
 
 ### 3.2.10 分配解析策略
 
-XmlBeanDefinitionReader类中的doLoadBeanDefinitions方法是从特定XML文件中实际载入Bean定义资源的方法，该方法在载入Bean资源之后将其转换为Document对象，接下来调用registerBeanDefinitions启动Spring IOC容器对Bean定义的解析过程：
+XmlBeanDefinitionReader 类中的 doLoadBeanDefinitions 方法是从特定XML文件中实际载入Bean定义资源的方法，该方法在载入Bean 资源之后将其转换为 Document 对象，接下来调用 registerBeanDefinitions 启动Spring IOC容器对Bean定义的解析过程：
 
 ```java
 //按照Spring的Bean语义要求将Bean定义资源解析并转换为容器内部数据结构
@@ -735,14 +725,19 @@ public int registerBeanDefinitions(Document doc, Resource resource) throws BeanD
    int countBefore = getRegistry().getBeanDefinitionCount();
    //解析过程入口，这里使用了委派模式，BeanDefinitionDocumentReader只是个接口，
    //具体的解析实现过程有实现类DefaultBeanDefinitionDocumentReader完成
+    // createReaderContext 返回的是 XmlReaderContext
    documentReader.registerBeanDefinitions(doc, createReaderContext(resource));
    //统计解析的Bean数量
    return getRegistry().getBeanDefinitionCount() - countBefore;
 }
-
 //创建BeanDefinitionDocumentReader对象，解析Document对象
 protected BeanDefinitionDocumentReader createBeanDefinitionDocumentReader() {
    return BeanDefinitionDocumentReader.class.cast(BeanUtils.instantiateClass(this.documentReaderClass));
+}
+// 创建 XmlReaderContext 其中 reader 为 this 即 XmlBeanDefinitionReader
+public XmlReaderContext createReaderContext(Resource resource) {
+	return new XmlReaderContext(resource, this.problemReporter, this.eventListener,
+			this.sourceExtractor, this, getNamespaceHandlerResolver());
 }
 ```
 
@@ -754,10 +749,11 @@ Bean定义资源的载入解析分为以下两个过程：
 
 ### 3.2.11 将配置载入内存
 
-BeanDefinitionDocumentReader接口通过registerBeanDefinitions方法调用其实现类DefaultBeanDefinitionDocumentReader对Document对象进行解析：
+BeanDefinitionDocumentReader接口通过 `registerBeanDefinitions` 方法调用其实现类DefaultBeanDefinitionDocumentReader对Document对象进行解析：
 
 ```java
 //根据Spring DTD对Bean的定义规则解析Bean定义Document对象
+// readerContext 来自于 XmlBeanDefinitionReader 的 createReaderContext
 public void registerBeanDefinitions(Document doc, XmlReaderContext readerContext) {
    //获得XML描述符
    this.readerContext = readerContext;
@@ -776,7 +772,7 @@ protected void doRegisterBeanDefinitions(Element root) {
    // this behavior emulates a stack of delegates without actually necessitating one.
    //具体的解析过程由BeanDefinitionParserDelegate实现，  
     //BeanDefinitionParserDelegate中定义了Spring Bean定义XML文件的各种元素 
-   BeanDefinitionParserDelegate parent = this.delegate;
+   BeanDefinitionParserDelegate parent = this.delegate; // this.delegate == null
    this.delegate = createDelegate(this.readerContext, root, parent);
    if (this.delegate.isDefaultNamespace(root)) {
 		String profileSpec = root.getAttribute(PROFILE_ATTRIBUTE);
@@ -988,7 +984,7 @@ protected void processBeanDefinition(Element ele, BeanDefinitionParserDelegate d
 
 对于既不是``<Import>``元素，又不是``<Alias>``元素的元素，即Spring配置文件中普通的``<Bean>``元素的解析是BeanDefinitionParserDelegate类的parseBeanDefinitionElement方法来实现。
 
-### 3.2.12 载入 `<bean>` 元素
+#### 载入 `<bean>` 元素
 
 Bean 配置信息中的`<import>`和`<alias>`元素解析在 DefaultBeanDefinitionDocumentReader 中已经完成，对 Bean 配置信息中使用最多的`<bean>`元素交由 BeanDefinitionParserDelegate 来解析，其解析实现的源码如下： 
 
@@ -1149,9 +1145,9 @@ public AbstractBeanDefinition parseBeanDefinitionElement(
 
 使用Spring的``<Bean>``元素时，配置最多的是``<property>``属性，因此下面了解Bean的属性在解析时是如何设置的。
 
-### 3.2.13 载入``<property>``元素
+#### 载入``<property>``元素
 
-BeanDefinitionParserDelegate在解析``<Bean>``调用parsePropertyElements方法解析``&lt;Bean>``元素中的``<property>``属性子元素：
+BeanDefinitionParserDelegate在解析``<Bean>``调用parsePropertyElements方法解析``<Bean>``元素中的``<property>``属性子元素：
 
 ```java
 //解析<Bean>元素中的<property>子元素
@@ -1273,7 +1269,7 @@ public Object parsePropertyValue(Element ele, BeanDefinition bd, String property
 
 在方法的最后对于``<property>``元素的子元素通过parsePropertySubElement方法解析。
 
-### 3.2.14 载入 ``<property>`` 的子元素
+#### 载入 ``<property>`` 的子元素
 
 在BeanDefinitionPaserDelegate类中的parsePropertySubElement方法对``<property>``中的子元素解析：
 
@@ -1375,7 +1371,7 @@ public Object parsePropertySubElement(Element ele, BeanDefinition bd, String def
 
 在Spring配置文件中，对``<property>``元素中配置的Array，List，Set，Map，Prop等各种集合子元素都通过上述方法解析，生产对应的数据对象，比如ManagedList，ManagedArray等，这些Managed类是Spring对象BeanDefinition的数据封装，对集合数据类型的具体解析有各自的解析方法实现，解析方法的命名非常规范，一目了然。
 
-### 3.2.15 载入 ``<list>`` 子元素
+#### 载入 ``<list>`` 子元素
 
 在BeanDefinitionParserDelegate类中的parseListElement方法具体实现解析``<property>``元素中的``<list>``集合子元素：
 
@@ -1415,11 +1411,17 @@ protected void parseCollectionElements(
 
 通过SpringIOC容器对Bean定义资源的解析后，IOC容器大致完成了管理Bean对象的准备工作，即初始化过程，但是最为重要的依赖注入还没有发生，现在在IOC容器中BeanFefinition存储的只是一些静态信息，接下来需要向容器注册Bean定义信息才能全部完成IOC容器的初始化过程。
 
-### 3.2.16 分配注册策略
+### 3.2.12 分配注册策略
 
 DefaultBeanDefinitionDocumentReader对Bean定义转换的Document对象解析流程中，在其parseDefaultElement方法中完成对Document对象的解析后得到封装BeanDefinition的BeanDefinitionHold对象，然后调用BeanDefinitionReaderUtils的resisterBeanDefinition方法向IOC容器注册解析的Bean：
 
 ```java
+/**
+* 方法传入的 BeanDefinitionRegistry 来源于  XmlReaderContext.reader.getRegistry() 方法
+* 即 XmlBeanDefinitionReader.getRegistry()
+* 在最早的 AbstractRefreshableApplicationContext 的 refreshBeanFactory() 方法中创建了 DefaultListableBeanFactory 并传入到了 XmlBeanDefinitionReader 中
+* 所以此处的 registry 即是 DefaultListableBeanFactory
+*/
 //将解析的BeanDefinitionHold注册到容器中
 public static void registerBeanDefinition(
       BeanDefinitionHolder definitionHolder, BeanDefinitionRegistry registry)
@@ -1442,34 +1444,13 @@ public static void registerBeanDefinition(
 }
 ```
 
-当调用DeanDefinitionReaderUtils向IOC容器注册解析的BeanDefinition时，真正完成注册功能的是DefaultListableBeanFactory。
+当调用 DeanDefinitionReaderUtils 向IOC容器注册解析的 BeanDefinition 时，真正完成注册功能的是`DefaultListableBeanFactory`。
 
-### 3.2.17 向容器注册
+### 3.2.13 向容器注册
 
-DefaultListableBeanFactory中使用HashMap的集合对象存放IOC容器中注册解析的BeanDefinition，向IOC容器注册：
+DefaultListableBeanFactory 中使用 HashMap 的集合对象存放IOC容器中注册解析的 BeanDefinition，向 IOC 容器注册：
 
 ```java
-//将解析的BeanDefinitionHold注册到容器中
-public static void registerBeanDefinition(
-      BeanDefinitionHolder definitionHolder, BeanDefinitionRegistry registry)
-      throws BeanDefinitionStoreException {
-
-   // Register bean definition under primary name.
-   //获取解析的BeanDefinition的名称
-   String beanName = definitionHolder.getBeanName();
-   //向IOC容器注册BeanDefinition
-   registry.registerBeanDefinition(beanName, definitionHolder.getBeanDefinition());
-
-   // Register aliases for bean name, if any.
-   //如果解析的BeanDefinition有别名，向容器为其注册别名
-   String[] aliases = definitionHolder.getAliases();
-   if (aliases != null) {
-      for (String aliase : aliases) {
-         registry.registerAlias(beanName, aliase);
-      }
-   }
-}
-
 //向IoC容器注册解析的BeanDefinito
 public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition)
       throws BeanDefinitionStoreException {
@@ -1714,7 +1695,7 @@ d、通过 BeanDefinitionReaderUtils 向容器注册 Bean。
 
 2)、AnnotationScopeMetadataResolver 解析作用域元数据
 
-AnnotationScopeMetadataResolver 通过 resolveScopeMetadata()方法解析注解 Bean 定义类的作 用域元信息，即判断注册的 Bean 是原生类型(prototype)还是单态(singleton)类型，其源码如下：
+AnnotationScopeMetadataResolver 通过 resolveScopeMetadata() 方法解析注解 Bean 定义类的`作用域元信息`，即判断注册的 Bean 是原生类型(prototype)还是单态(singleton)类型，其源码如下：
 
 ```java
 protected Class<? extends Annotation> scopeAnnotationType = Scope.class;
@@ -1771,7 +1752,7 @@ static void processCommonDefinitionAnnotations(AnnotatedBeanDefinition abd, Anno
 	if (metadata.isAnnotated(Primary.class.getName())) {
 		abd.setPrimary(true);
 	}
-	//如果 Bean 定义中有@ DependsOn 注解，则为该 Bean 设置所依赖的 Bean 名称，
+	//如果 Bean 定义中有 @DependsOn 注解，则为该 Bean 设置所依赖的 Bean 名称，
 	//容器将确保在实例化该 Bean 之前首先实例化所依赖的 Bean
 	AnnotationAttributes dependsOn = attributesFor(metadata, DependsOn.class);
 	if (dependsOn != null) {
@@ -1914,7 +1895,7 @@ public class ClassPathBeanDefinitionScanner extends ClassPathScanningCandidateCo
 
 2)、ClassPathScanningCandidateComponentProvider 扫描给定包及其子包的类
 
-ClassPathScanningCandidateComponentProvider 类的 findCandidateComponents()方法具体实 现扫描给定类路径包的功能，主要源码如下：
+ClassPathScanningCandidateComponentProvider 类的 findCandidateComponents() 方法具体实现`扫描给定类路径包`的功能，主要源码如下：
 
 ```java
 public class ClassPathScanningCandidateComponentProvider implements EnvironmentCapable, ResourceLoaderAware {
@@ -1969,68 +1950,58 @@ public class ClassPathScanningCandidateComponentProvider implements EnvironmentC
 			return scanCandidateComponents(basePackage);
 		}
 	}
-	private Set<BeanDefinition> addCandidateComponentsFromIndex(CandidateComponentsIndex index, String basePackage) {
-		//创建存储扫描到的类的集合
+	private Set<BeanDefinition> scanCandidateComponents(String basePackage) {
 		Set<BeanDefinition> candidates = new LinkedHashSet<>();
 		try {
-			Set<String> types = new HashSet<>();
-			for (TypeFilter filter : this.includeFilters) {
-				String stereotype = extractStereotype(filter);
-				if (stereotype == null) {
-					throw new IllegalArgumentException("Failed to extract stereotype from "+ filter);
-				}
-				types.addAll(index.getCandidateTypes(basePackage, stereotype));
-			}
+			String packageSearchPath = ResourcePatternResolver.CLASSPATH_ALL_URL_PREFIX +
+					resolveBasePackage(basePackage) + '/' + this.resourcePattern;
+            // AnnotationConfigApplicationContext 实例化时，会出初始化 ClassPathBeanDefinitionScanner
+            // 其构造器会调用 setResourceLoader 
+            // this.resourcePatternResolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
+            // getResourcePatternResolver 返回的是 AnnotationConfigApplicationContext 本身
+            // AnnotationConfigApplicationContext 实现了 ResourcePatternResolver 接口
+			Resource[] resources = getResourcePatternResolver().getResources(packageSearchPath);
 			boolean traceEnabled = logger.isTraceEnabled();
 			boolean debugEnabled = logger.isDebugEnabled();
-			for (String type : types) {
-				//为指定资源获取元数据读取器，元信息读取器通过汇编(ASM)读//取资源元信息
-				MetadataReader metadataReader = getMetadataReaderFactory().getMetadataReader(type);
-				//如果扫描到的类符合容器配置的过滤规则
-				if (isCandidateComponent(metadataReader)) {
-					//通过汇编(ASM)读取资源字节码中的 Bean 定义元信息
-					AnnotatedGenericBeanDefinition sbd = new AnnotatedGenericBeanDefinition(metadataReader.getAnnotationMetadata());
-					if (isCandidateComponent(sbd)) {
-						if (debugEnabled) {
-							logger.debug("Using candidate component class from index: " + type);
-						}
-						candidates.add(sbd);
-					}
-					else {
-						if (debugEnabled) {
-							logger.debug("Ignored because not a concrete top-level class: " + type);
-						}
-					}
-				}
-				else {
-					if (traceEnabled) {
-						logger.trace("Ignored because matching an exclude filter: " + type);
-					}
-				}
-			}
-		}
-		catch (IOException ex) {
-			throw new BeanDefinitionStoreException("I/O failure during classpath scanning", ex);
-		}
+			for (Resource resource : resources) {
+				MetadataReader metadataReader = getMetadataReaderFactory().getMetadataReader(resource);
+				ScannedGenericBeanDefinition sbd = new ScannedGenericBeanDefinition(metadataReader);
+				sbd.setResource(resource);
+				sbd.setSource(resource);
+				candidates.add(sbd);
+            }				
 		return candidates;
+	}	
+}
+```
+
+getResources() 方法调用的是 AnnotationConfigApplicationContext 的父类 AbstractApplicationContext，这里和 FileSystemXml 分析时一样，调用了 PathMatchingResourcePatternResolver 的 getResources()，不同的是这里调用了 findPathMatchingResources() 方法：
+
+```java
+protected Resource[] findPathMatchingResources(String locationPattern) throws IOException {
+   String rootDirPath = determineRootDir(locationPattern);
+   String subPattern = locationPattern.substring(rootDirPath.length());
+   Resource[] rootDirResources = getResources(rootDirPath);
+   Set<Resource> result = new LinkedHashSet<>(16);
+   for (Resource rootDirResource : rootDirResources) {
+      // ...
+      result.addAll(doFindPathMatchingFileResources(rootDirResource, subPattern));
+   }
+   if (logger.isTraceEnabled()) {
+      logger.trace("Resolved location pattern [" + locationPattern + "] to resources " + result);
+   }
+   return result.toArray(new Resource[0]);
+}
+// rootDir 绝对路径
+// rootDir = rootDirResource.getFile().getAbsoluteFile();
+protected Set<Resource> doFindMatchingFileSystemResources(File rootDir, String subPattern) {
+	// 根据绝对路径，获取所有的文件路径的 File
+    Set<File> matchingFiles = retrieveMatchingFiles(rootDir, subPattern);
+	Set<Resource> result = new LinkedHashSet<>(matchingFiles.size());
+	for (File file : matchingFiles) {
+		result.add(new FileSystemResource(file));
 	}
-	//判断元信息读取器读取的类是否符合容器定义的注解过滤规则
-	protected boolean isCandidateComponent(MetadataReader metadataReader) throws IOException {
-		//如果读取的类的注解在排除注解过滤规则中，返回 false
-		for (TypeFilter tf : this.excludeFilters) {
-			if (tf.match(metadataReader, getMetadataReaderFactory())) {
-				return false;
-			}
-		}
-		//如果读取的类的注解在包含的注解的过滤规则中，则返回 ture
-		for (TypeFilter tf : this.includeFilters) {
-			if (tf.match(metadataReader, getMetadataReaderFactory())) {
-				return isConditionMatch(metadataReader);
-			}
-		}
-		//如果读取的类的注解既不在排除规则，也不在包含规则中，则返回 false
-		return false;
-	}
+	return result;
 }
 ```
 
@@ -2114,7 +2085,7 @@ protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) {
 
 1.初始化的入口在容器实现中的refresh()调用来完成 
 
-2.对bean定义载入IOC容器使用的方法是loadBeanDefinition，其中的大致过程如下:通过ResourceLoader来完成资源文件位置的定位，DefaultResourceLoader是默认的实现，同时上下文本身就给出了ResourceLoader的实现，可以从类路径、文件系统、URL等方式来定为资源位置。如果是XmlBeanFactory作为IOC容器，那么需要为它指定bean定义的资源，也就是说bean定义文件时通过抽象成Resource 来被IOC容器处理的，容器通过BeanDefinitionReader来完成定义信息的解析和Bean信息的注册,往往使用的是XmlBeanDefinitionReader来解析bean的xml定义文件，实际的处理过程是委托给BeanDefinitionParserDelegate来完成的,从而得到bean的定义信息，这些信息在Spring中使用BeanDefinition对象来表示，这个名字可以让我们想到loadBeanDefinition, RegisterBeanDefinition这些相关方法，他们都是为处理BeanDefinitin服务的，容器解析得到BeanDefinitionIoC以后，需要把它在IOC容器中注册，这由IOC实现BeanDefinitionRegistry 接口来实现。注册过程就是在IOC容器内部维护的一个HashMap来保存得到的BeanDefinition的过程。这个HashMap是IOC容器持有bean信息的场所，以后对bean的操作都是围绕这个HashMap来实现的 
+2.对 bean 定义载入 IOC 容器使用的方法是 loadBeanDefinition，其中的大致过程如下：通过 `ResourceLoader 来完成资源文件位置的定位`，DefaultResourceLoader 是默认的实现，同时上下文本身就给出了 ResourceLoader 的实现，可以从类路径、文件系统、URL等方式来定为资源位置。如果是 XmlBeanFactory 作为IOC容器，那么需要为它指定bean定义的资源，也就是说bean定义文件时通过抽象成 Resource 来被IOC容器处理的，容器通过 `BeanDefinitionReader 来完成定义信息的解析和Bean 信息的注册`，往往使用的是 XmlBeanDefinitionReader 来解析 bean 的 xml 定义文件，实际的处理过程是`委托给BeanDefinitionParserDelegate 来完成`的，从而得到 bean 的定义信息，这些信息在Spring中使用 `BeanDefinition 对象来表示`，这个名字可以让我们想到 loadBeanDefinition, RegisterBeanDefinition 这些相关方法，他们都是为处理 BeanDefinitin 服务的，容器解析得到 BeanDefinition 以后，由 IOC 容器实现 `BeanDefinitionRegistry 接口来把它在 IOC 容器中注册`。注册过程就是在IOC容器内部维护的一个HashMap来保存得到的BeanDefinition的过程。这个HashMap是IOC容器持有bean信息的场所，以后对bean的操作都是围绕这个HashMap来实现的 
 
 3.然后我们就可以通过BeanFactory和ApplicationContext来享受到SpringIoC的服务了,在使用IoC容器的时候，我们注意到除了少量粘合代码，绝大多数以正确IOC风格编写的应用程序代码完全不用关心如何到达工厂，因为容器将把这些对象与容器管理的其他对象钩在一起。基本的策略是把工厂放到己知的地方，最好是放在对预期使用的上下文有意义的地方，以及代码将实际需要访问工厂的地方。Spring本身提供了对声明式载入web应用程序用法的应用程序上下文,并将其存储在ServletContext中的框架实现。
 
