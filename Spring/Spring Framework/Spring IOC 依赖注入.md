@@ -11,7 +11,7 @@
 >
 >lazy-init=“true”，那么bean将不会在ApplicationContext启动时提前被实例化，而是在第一次向容器通过getBean索取bean时实例化的。
 >
->lazy-init尽在scope属性为singleton时，才会有效，如果scope的属性值为pototype，那么及时设置了lazy-init=“false”,容器启动时也不会被实例化，而是调用getBean方法实例化。
+>`lazy-init 仅在 scope 属性为 singleton 时才会有效`，如果 scope 的属性值为 pototype，那么即使设置了 lazy-init=“false”，容器启动时也不会被实例化，而是调用getBean方法实例化。
 
 BeanFactory接口定义了Spring IOC容器的基本功能规范，是Spring IOC容器所应遵守的最底层和最基本的编程规范。BeanFactory接口中定义了几个getBean方法，就是用户向IOC容器索取管理的Bean的方法，通过分析其子类的具体实现，理解Spring IOC容器在用户索取Bean时如何完成依赖注入。 
 
@@ -52,20 +52,24 @@ protected <T> T doGetBean(
       final String name, final Class<T> requiredType, final Object[] args, boolean typeCheckOnly)
       throws BeansException {
 
-   //根据指定的名称获取被管理Bean的名称，剥离指定名称中对容器的相关依赖  
-    //如果指定的是别名，将别名转换为规范的Bean名称
+   // 根据指定的名称获取被管理Bean的名称，剥离指定名称中对容器的相关依赖
+   // 如果是 FactoryBean，以 & 开头，做特殊处理
+   // 如果指定的是别名，将别名转换为规范的Bean名称
    final String beanName = transformedBeanName(name);
    Object bean;
 
    // Eagerly check singleton cache for manually registered singletons.
    //先从缓存中取是否已经有被创建过的单态类型的Bean
-    //对于单例模式的Bean整个IOC容器中只创建一次，不需要重复创建
+   //对于单例模式的Bean整个IOC容器中只创建一次，不需要重复创建
+   // 循环依赖三 getSingleton 的逻辑：
+   // 如果 singletonsCurrentlyInCreation 中存在，则从 earlySingletonObjects 获取提前暴露的引用
+   // 如果 earlySingletonObjects 中没有，就从 singletonFactories 获取
    Object sharedInstance = getSingleton(beanName);
     //IOC容器创建单例模式Bean实例对象
    if (sharedInstance != null && args == null) {
       if (logger.isDebugEnabled()) {
          //如果指定名称的Bean在容器中已有单例模式的Bean被创建
-            //直接返回已经创建的Bean
+         //直接返回已经创建的Bean
          if (isSingletonCurrentlyInCreation(beanName)) {
             logger.debug("Returning eagerly cached instance of singleton bean '" + beanName +
                   "' that is not fully initialized yet - a consequence of a circular reference");
@@ -74,9 +78,9 @@ protected <T> T doGetBean(
             logger.debug("Returning cached instance of singleton bean '" + beanName + "'");
          }
       }
-       //获取给定Bean的实例对象，主要是完成FactoryBean的相关处理  
-           //注意：BeanFactory是管理容器中Bean的工厂，而FactoryBean是  
-           //创建创建对象的工厂Bean，两者之间有区别
+      //获取给定Bean的实例对象，主要是完成FactoryBean的相关处理  
+      //注意：BeanFactory是管理容器中Bean的工厂，而FactoryBean是  
+      //创建创建对象的工厂Bean，两者之间有区别
       bean = getObjectForBeanInstance(sharedInstance, name, beanName, null);
    }
 
@@ -84,16 +88,16 @@ protected <T> T doGetBean(
       // Fail if we're already creating this bean instance:
       // We're assumably within a circular reference.
       //缓存没有正在创建的单例模式Bean  
-        //缓存中已经有已经创建的原型模式Bean
-        //但是由于循环引用的问题导致实 例化对象失败
+      //缓存中已经有已经创建的原型模式Bean
+      //但是由于循环引用的问题导致实例化对象失败
       if (isPrototypeCurrentlyInCreation(beanName)) {
          throw new BeanCurrentlyInCreationException(beanName);
       }
 
       // Check if bean definition exists in this factory.
       //对IOC容器中是否存在指定名称的BeanDefinition进行检查，首先检查是否  
-        //能在当前的BeanFactory中获取的所需要的Bean，如果不能则委托当前容器  
-        //的父级容器去查找，如果还是找不到则沿着容器的继承体系向父级容器查找
+      //能在当前的BeanFactory中获取的所需要的Bean，如果不能则委托当前容器  
+      //的父级容器去查找，如果还是找不到则沿着容器的继承体系向父级容器查找
       BeanFactory parentBeanFactory = getParentBeanFactory();
       //当前容器的父级容器存在，且当前容器中不存在指定名称的Bean
       if (parentBeanFactory != null && !containsBeanDefinition(beanName)) {
@@ -120,7 +124,7 @@ protected <T> T doGetBean(
 
       try {
          //根据指定Bean名称获取其父级的Bean定义
-           //主要解决Bean继承时子类合并父类公共属性问题 
+         //主要解决Bean继承时子类合并父类公共属性问题 
          final RootBeanDefinition mbd = getMergedLocalBeanDefinition(beanName);
          checkMergedBeanDefinition(mbd, beanName, args);
 
@@ -140,7 +144,11 @@ protected <T> T doGetBean(
          // Create bean instance.
          //创建单例模式Bean的实例对象
          if (mbd.isSingleton()) {
-            //这里使用了一个匿名内部类，创建Bean实例对象，并且注册给所依赖的对象
+            // 这里使用了一个匿名内部类，创建Bean实例对象，并且注册给所依赖的对象
+            // getSingleton 中的 beforeSingletonCreation(String beanName) 方法，会事先将 beanName
+            // 添加到一个 singletonsCurrentlyInCreation 的 Set 中
+            // 循环依赖一
+            // getSingleton 会先执行 beforeSingletonCreation 方法，然后调用 ObjectFactory<?> singletonFactory.getObject() 方法，已启动 createBean 方法
             sharedInstance = getSingleton(beanName, new ObjectFactory<Object>() {
                public Object getObject() throws BeansException {
                   try {
@@ -238,13 +246,13 @@ protected <T> T doGetBean(
 }
 ```
 
-通过上面对IOC容器获取Bean方法的分析，可以看到在Spring中，如果Bean定义的单例模式Singleton，则容器在创建之前先从缓存中查找，以确保整个容器中只存在一个实例对象。如果Bean定义的是原型模式Prototype，则容器每次都会创建一个新的实例对象。除此之外，Bean定义还可以扩展为指定其生命周期范围。 
+通过上面对 IOC 容器获取 Bean 方法的分析，可以看到在 Spring 中，如果 Bean 定义的单例模式 Singleton，则容器在创建之前`先从缓存中查找`，以确保整个容器中只存在一个实例对象。如果 Bean 定义的是原型模式 Prototype，则容器每次都会创建一个新的实例对象。除此之外，Bean 定义还可以扩展为指定其生命周期范围。 
 
-上面源码只是定义了根据Bean定义的模式，采取的不同创建Bean实例对象的策略，具体的Bean实现对象的创建过程由实现了ObjectFactory接口的匿名内部类的createBean方法完成，ObjectFactory使用委派模式，具体的Bean实例创建过程交由其实现类AbstractAutowireCapableBeanFactory完成，继续分析AbstractAutowireCapableBeanFactory的createBean方法的源码，理解其创建Bean实例的具体实现。
+上面源码只是定义了根据 Bean 定义的模式，采取的不同创建 Bean 实例对象的策略，具体的 Bean 实现对象的创建过程由实现了 ObjectFactory 接口的匿名内部类的 createBean 方法完成，ObjectFactory 使用`委派模式`，具体的 `Bean 实例创建过程交由其实现类 AbstractAutowireCapableBeanFactory 完成`，继续分析 AbstractAutowireCapableBeanFactory 的 createBean 方法的源码，理解其创建 Bean 实例的具体实现。
 
 ## 1.3 开始实例化
 
-AbstractAutowireCapableBeanFactory类实现了ObjectFactory接口，创建容器指定的Bean实例对象，同时还对创建的Bean实例对象进行初始化处理。其创建Bean实例对象的方法源码：
+AbstractAutowireCapableBeanFactory 类实现了 ObjectFactory 接口，创建容器指定的 Bean 实例对象，同时还对创建的 Bean 实例对象进行初始化处理。其创建 Bean 实例对象的方法源码：
 
 ```java
 //创建Bean实例对象
@@ -257,7 +265,11 @@ protected Object createBean(final String beanName, final RootBeanDefinition mbd,
    }
    // Make sure bean class is actually resolved at this point.
    //判断需要创建的Bean是否可以实例化，即是否可以通过当前的类加载器加载
-   resolveBeanClass(mbd, beanName);
+   Class<?> resolvedClass = resolveBeanClass(mbd, beanName);
+   if (resolvedClass != null && !mbd.hasBeanClass() && mbd.getBeanClassName() != null) {
+	    mbdToUse = new RootBeanDefinition(mbd);
+	    mbdToUse.setBeanClass(resolvedClass);
+	}
 
    // Prepare method overrides.
    //校验和准备Bean中的方法覆盖
@@ -272,6 +284,8 @@ protected Object createBean(final String beanName, final RootBeanDefinition mbd,
    try {
       // Give BeanPostProcessors a chance to return a proxy instead of the target bean instance.
       //如果Bean配置了初始化前和初始化后的处理器，则试图返回一个需要创建Bean的代理对象
+      // 处理 InstantiationAwareBeanPostProcessor接口
+      // 其主要作用在于目标对象的实例化过程中需要处理的事情，包括实例化对象的前后过程以及实例的属性设置
       Object bean = resolveBeforeInstantiation(beanName, mbd);
       if (bean != null) {
          return bean;
@@ -324,7 +338,8 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
          logger.debug("Eagerly caching bean '" + beanName +
                "' to allow for resolving potential circular references");
       }
-      //这里是一个匿名内部类，为了防止循环引用，尽早持有对象的引用
+      // 这里是一个匿名内部类，为了防止循环依赖二，尽早持有对象的引用
+      // addSingletonFactory ==》 this.singletonFactories.put(beanName, singletonFactory);
       addSingletonFactory(beanName, new ObjectFactory<Object>() {
          public Object getObject() throws BeansException {
             return getEarlyBeanReference(beanName, mbd, bean);
@@ -405,11 +420,11 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
 通过对方法源码的分析，看到具体的依赖注入实现在以下两个方法中：
 
 - createBeanInstance：生成 Bean 所包含的 Java 对象实例 
-- populateBean：对 Bean 属性的依赖注入进行处理
+- populateBean：对 Bean 属性的`依赖注入`进行处理
 
 ## 1.4 选择 Bean 实例化策略
 
-在 createBeanInstance 方法中，根据指定的初始化策略，使用静态工厂，工厂方法或容器的自动装配特性生成java实例对象，创建对象的源码如下：
+在 createBeanInstance 方法中，根据指定的初始化策略，使用静态工厂，工厂方法或容器的自动装配特性生成 java 实例对象，创建对象的源码如下：
 
 ```java
 //创建Bean的实例对象
@@ -495,11 +510,11 @@ protected BeanWrapper instantiateBean(final String beanName, final RootBeanDefin
 }
 ```
 
-经过对上面的代码分析，可以看出对使用工厂方法和自动装配特性的Bean的实例化相当清楚，调用相应的工厂方法或参数匹配的构造方法即可完成实例化对象的工作，但是对于最常使用的默认无参构造方法就需要使用相应的初始化策略(`JDK的反射机制`或者`CGLib`)来初始化，在方法getInstantiationStrategy().instantiate中就具体实现类使用初始策略实例化对象。
+经过对上面的代码分析，可以看出对使用工厂方法和自动装配特性的 Bean 的实例化相当清楚，调用相应的`工厂方法或参数匹配的构造方法即可完成实例化对象`的工作，但是对于最常使用的`默认无参构造方法`就需要使用相应的初始化策略(`JDK的反射机制`或者`CGLib`)来初始化，在方法 getInstantiationStrategy().instantiate 中就具体实现类使用初始策略实例化对象。
 
 ## 1.5 执行 Bean 实例化
 
-在使用默认的无参构造方法创建Bean的实例化对象时，方法getInstantiationStratrgy().instantiate调用了SimpleInstantiationStrategy类中的实例化Bean的方法：
+在使用默认的无参构造方法创建 Bean 的实例化对象时，方法 getInstantiationStratrgy().instantiate 调用了SimpleInstantiationStrategy 类中的实例化 Bean 的方法：
 
 ```java
 //使用初始化策略实例化Bean对象
@@ -557,7 +572,7 @@ public Object instantiate(RootBeanDefinition beanDefinition, String beanName, Be
 
 其实就是用户没有使用 replace 或者 lookup 的配置方法(Spring配置文件中的 `lookup-method` 和 `replace-method`)，这是两个方法级别的注入，和一般的属性(Property)注入是不一样的，它们注入的是方法(Method)。
 
-instantiateWithMethodInjection方法调用了SimpleInstantiationStrategy的子类CglibSubclassingInstantiationStrategy使用CGLIB来进行初始化：
+instantiateWithMethodInjection 方法调用了 SimpleInstantiationStrategy 的子类 CglibSubclassingInstantiationStrategy 使用CGLIB 来进行初始化：
 
 ```java
 //使用CGLIB进行Bean对象实例化
@@ -580,16 +595,11 @@ public Object instantiate(Constructor ctor, Object[] args) {
 }
 ```
 
-CGLIB是一个常用的字节码生成器的类库，它提供了一系列API实现java字节码的生成和转换功能。
+CGLIB 是一个常用的字节码生成器的类库，它提供了一系列 API 实现 java 字节码的生成和转换功能。
 
 ## 1.6 准备依赖注入
 
-Bean的依赖注入分为两个过程：
-
-- createBeanInstance：生成Bean所包含的Java对象实例 
-- populateBean：对Bean属性的依赖注入进行处理
-
-上面我们已经分析了容器初始化生成 Bean 所包含的 Java 实例对象的过程，现在我们继续分析生成对象后，Spring IOC 容器是如何将 Bean 的属性依赖关系注入 Bean 实例对象中并设置好的，回到 AbstractAutowireCapableBeanFactory 的 populateBean()方法，对属性依赖注入的代码如下： 
+上面我们已经分析了容器初始化生成 Bean 所包含的 Java 实例对象的过程，现在我们继续分析生成对象后，Spring IOC 容器是如何将 Bean 的属性依赖关系注入 Bean 实例对象中并设置好的，回到 AbstractAutowireCapableBeanFactory 的 populateBean() 方法，对属性依赖注入的代码如下： 
 
 ```java
 //将Bean属性设置到生成的实例对象上
