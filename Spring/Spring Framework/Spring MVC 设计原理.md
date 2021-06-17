@@ -43,13 +43,121 @@ springmvc提供了两种request参数与方法形参的绑定方法：
 ## 3 Spring MVC 源码分析
 
 
-根据工作机制中三部分来分析springmvc的源代码：
+根据工作机制中三部分来分析 Spring MVC 的源代码：
 
-- ApplicationContext初始化时建立所有url和controller类的对应关系(用Map保存) 
-- 根据请求url找到对应的controller,并从controller中找到处理请求的方法 
-- request参数绑定到方法的形参,执行方法处理请求,并返回结果视图
+- ApplicationContext 初始化时建立所有 url 和 controller 类的对应关系(用 Map 保存) 
+- 根据请求 url 找到对应的 controller 并从 controller 中找到处理请求的方法 
+- request 参数绑定到方法的形参，执行方法处理请求，并返回结果视图
 
 ### 3.1 初始化阶段
+
+查看方法注释可知 HandlerMapping 默认使用的是``RequestMappingHandlerMapping``，第一部分的入口类即为其继承关系中的``AbstractHandlerMethodMapping``（其实现了接口 InitializingBean），所以 AbstractHandlerMethodMapping 的 ``afterPropertiesSet`` 方法中核心部分就是 ``initHandlerMethods``，该方法继续调用了 `detectHandlerMethods`：
+
+```java
+// 建立当前 ApplicationContext 中的所有 controller 和 url 的对应关系
+protected void initHandlerMethods() {
+   if (logger.isDebugEnabled()) {
+      logger.debug("Looking for request mappings in application context: " + getApplicationContext());
+   }
+   // 获取 ApplicationContext 容器中所有 bean 的 Name
+   String[] beanNames = (this.detectHandlerMethodsInAncestorContexts ?
+         BeanFactoryUtils.beanNamesForTypeIncludingAncestors(obtainApplicationContext(), Object.class) :
+         obtainApplicationContext().getBeanNamesForType(Object.class));
+   for (String beanName : beanNames) {
+      if (!beanName.startsWith(SCOPED_TARGET_NAME_PREFIX)) {
+         Class<?> beanType = null;
+         try {
+            beanType = obtainApplicationContext().getType(beanName);
+         }
+         catch (Throwable ex) {
+            // An unresolvable bean type, probably from a lazy bean - let's ignore it.
+            if (logger.isDebugEnabled()) {
+               logger.debug("Could not resolve target class for bean with name '" + beanName + "'", ex);
+            }
+         }
+         if (beanType != null && isHandler(beanType)) {
+            detectHandlerMethods(beanName);
+         }
+      }
+   }
+   handlerMethodsInitialized(getHandlerMethods());
+}
+// RequestMappingHandlerMapping 实现
+// 是否是含有 Controller 与 RequestMapping 注解的 bean
+protected boolean isHandler(Class<?> beanType) {
+	return (AnnotatedElementUtils.hasAnnotation(beanType, Controller.class) ||
+			AnnotatedElementUtils.hasAnnotation(beanType, RequestMapping.class));
+}
+
+protected void detectHandlerMethods(final Object handler) {
+	Class<?> handlerType = (handler instanceof String ?
+			obtainApplicationContext().getType((String) handler) : handler.getClass());
+	if (handlerType != null) {
+		final Class<?> userType = ClassUtils.getUserClass(handlerType);
+		Map<Method, T> methods = MethodIntrospector.selectMethods(userType,
+				(MethodIntrospector.MetadataLookup<T>) method -> {
+					try {
+						return getMappingForMethod(method, userType);
+					}
+					catch (Throwable ex) {
+						throw new IllegalStateException("Invalid mapping on handler class [" +
+								userType.getName() + "]: " + method, ex);
+					}
+				});
+		if (logger.isDebugEnabled()) {
+			logger.debug(methods.size() + " request handler methods found on " + userType + ": " + methods);
+		}
+		for (Map.Entry<Method, T> entry : methods.entrySet()) {
+			Method invocableMethod = AopUtils.selectInvocableMethod(entry.getKey(), userType);
+			T mapping = entry.getValue();
+			registerHandlerMethod(handler, invocableMethod, mapping);
+		}
+	}
+}
+protected void registerHandlerMethod(Object handler, Method method, T mapping) {
+	this.mappingRegistry.register(mapping, handler, method);
+}
+```
+
+MappingRegistry 是 AbstractHandlerMethodMapping 的一个内部类，其中存储了 Map<urls,controller> 关系：
+
+```java
+private final Map<T, HandlerMethod> mappingLookup = new LinkedHashMap<>();
+private final MultiValueMap<String, T> urlLookup = new LinkedMultiValueMap<>();
+public void register(T mapping, Object handler, Method method) {
+   this.readWriteLock.writeLock().lock();
+   try {
+      HandlerMethod handlerMethod = createHandlerMethod(handler, method);
+      assertUniqueMethodMapping(handlerMethod, mapping);
+      this.mappingLookup.put(mapping, handlerMethod);
+      List<String> directUrls = getDirectUrls(mapping);
+      for (String url : directUrls) {
+         this.urlLookup.add(url, mapping);
+      }
+      String name = null;
+      if (getNamingStrategy() != null) {
+         name = getNamingStrategy().getName(handlerMethod, mapping);
+         addMappingName(name, handlerMethod);
+      }
+      CorsConfiguration corsConfig = initCorsConfiguration(handler, method, mapping);
+      if (corsConfig != null) {
+         this.corsLookup.put(handlerMethod, corsConfig);
+      }
+      this.registry.put(mapping, new MappingRegistration<>(mapping, handlerMethod, directUrls, name));
+   }
+   finally {
+      this.readWriteLock.writeLock().unlock();
+   }
+}
+// HandlerMethod 封装了 handler.class、方法和参数
+public HandlerMethod(String beanName, BeanFactory beanFactory, Method method) {
+	// ...
+	this.beanType = ClassUtils.getUserClass(beanType);
+	this.method = method;
+	this.bridgedMethod = BridgeMethodResolver.findBridgedMethod(method);
+	this.parameters = initMethodParameters();
+}
+```
 
 根据 DispatcherServlet 的继承关系可知，``DispatcherServlet  -> FrameworkServlet -> HttpServletBean -> javax.servlet.http.HttpServlet``，其接口 HttpServlet 的 init() 方法最终由 HttpServletBean 实现。
 
@@ -82,161 +190,40 @@ protected void initStrategies(ApplicationContext context) {
    //FlashMap 管理器
    initFlashMapManager(context);
 }
-```
-
-#### 建立Map<urls,controller>的关系
-
-初始化过程中首先看建立Map<url,controller>关系的部分。
-
-DispatcherServlet的初始化策略中，初始化HandlerMapping的方法 initHandlerMappings() ：
-
-```java
-/**
-* Initialize the HandlerMappings used by this class.
-* <p>If no HandlerMapping beans are defined in the BeanFactory for this namespace,
-* we default to BeanNameUrlHandlerMapping.
-*/
 private void initHandlerMappings(ApplicationContext context) {
-   this.handlerMappings = null;
-
-   if (this.detectAllHandlerMappings) {
-      // Find all HandlerMappings in the ApplicationContext, including ancestor contexts.
-      // 从ApplicationContext获取所有的HandlerMappings
-      Map<String, HandlerMapping> matchingBeans =
-            BeanFactoryUtils.beansOfTypeIncludingAncestors(context, HandlerMapping.class, true, false);
-      if (!matchingBeans.isEmpty()) {
-         // Map转换为List
-         this.handlerMappings = new ArrayList<HandlerMapping>(matchingBeans.values());
-         // We keep HandlerMappings in sorted order.
-         OrderComparator.sort(this.handlerMappings);
-      }
-   }
-   else {
-      try {
-         HandlerMapping hm = context.getBean(HANDLER_MAPPING_BEAN_NAME, HandlerMapping.class);
-         this.handlerMappings = Collections.singletonList(hm);
-      }
-      catch (NoSuchBeanDefinitionException ex) {
-         // Ignore, we'll add a default HandlerMapping later.
-      }
-   }
-
-   // Ensure we have at least one HandlerMapping, by registering
-   // a default HandlerMapping if no other mappings are found.
-   if (this.handlerMappings == null) {
-      this.handlerMappings = getDefaultStrategies(context, HandlerMapping.class);
-      if (logger.isDebugEnabled()) {
-         logger.debug("No HandlerMappings found in servlet '" + getServletName() + "': using default");
-      }
-   }
+	this.handlerMappings = null;
+	if (this.detectAllHandlerMappings) {
+		// Find all HandlerMappings in the ApplicationContext, including ancestor contexts.
+        // 在 ApplicationContext 中查找所有 HandlerMapping
+        // 包括 RequestMappingHandlerMapping
+		Map<String, HandlerMapping> matchingBeans =
+				BeanFactoryUtils.beansOfTypeIncludingAncestors(context, HandlerMapping.class, true, false);
+		if (!matchingBeans.isEmpty()) {
+            // 传递给 handlerMappings
+			this.handlerMappings = new ArrayList<>(matchingBeans.values());
+			// We keep HandlerMappings in sorted order.
+			AnnotationAwareOrderComparator.sort(this.handlerMappings);
+		}
+	}
+	else {
+		try {
+			HandlerMapping hm = context.getBean(HANDLER_MAPPING_BEAN_NAME, HandlerMapping.class);
+			this.handlerMappings = Collections.singletonList(hm);
+		}
+		catch (NoSuchBeanDefinitionException ex) {
+			// Ignore, we'll add a default HandlerMapping later.
+		}
+	}
+	// Ensure we have at least one HandlerMapping, by registering
+	// a default HandlerMapping if no other mappings are found.
+	if (this.handlerMappings == null) {
+		this.handlerMappings = getDefaultStrategies(context, HandlerMapping.class);
+		if (logger.isDebugEnabled()) {
+			logger.debug("No HandlerMappings found in servlet '" + getServletName() + "': using default");
+		}
+	}
 }
 ```
-
-查看方法注释可知HandlerMapping 默认使用的是``BeanNameUrlHandlerMapping``，第一部分的入口类即为其继承关系中的``ApplicationObjectSupport``（其实现了接口ApplicationContextAware），所以 ApplicationObjectSupport 的 ``setApplicationContext``方法中核心部分就是初始化容器``initApplicationContext(context)``，子类``AbstractDetectingUrlHandlerMapping``实现了该方法,所以我们直接看子类中的初始化容器方法：
-
-```java
-@Override
-public void initApplicationContext() throws ApplicationContextException {
-   super.initApplicationContext();
-   detectHandlers();
-}
-// 建立当前ApplicationContext中的所有controller和url的对应关系
-protected void detectHandlers() throws BeansException {
-   if (logger.isDebugEnabled()) {
-      logger.debug("Looking for URL mappings in application context: " + getApplicationContext());
-   }
-   // 获取ApplicationContext容器中所有bean的Name
-   String[] beanNames = (this.detectHandlersInAncestorContexts ?
-         BeanFactoryUtils.beanNamesForTypeIncludingAncestors(getApplicationContext(), Object.class) :
-         getApplicationContext().getBeanNamesForType(Object.class));
-
-   // Take any bean name that we can determine URLs for.
-   // 遍历beanNames，并找到这些bean对应的url
-   for (String beanName : beanNames) {
-      // 找bean上的所有url(controller上url+方法上的url)，该方法由对应的子类实现
-      String[] urls = determineUrlsForHandler(beanName);
-      if (!ObjectUtils.isEmpty(urls)) {
-         // URL paths found: Let's consider it a handler.
-         // 保存urls和beanName的对应关系，put it to Map<urls, beanName>，该方法
-         // 在父类AbstractUrlHandlerMapping中实现
-         registerHandler(urls, beanName);
-      }
-      else {
-         if (logger.isDebugEnabled()) {
-            logger.debug("Rejected bean name '" + beanName + "': no URL paths identified");
-         }
-      }
-   }
-}
-// 获取controller中所有方法的url，由子类实现，典型的模版模式
-protected abstract String[] determineUrlsForHandler(String beanName);
-```
-
-`determineUrlsForHandler(String beanName)`方法的作用是获取每个controller中的url，不同的子类有不同的实现，这是一个典型的模版设计模式。因为开发中我们用的最多的就是注解来配置controller中的url，DefaultAnnotationHandlerMapping是AbstractDetectingUrlHandlerMapping的子类，处理注解形式的url映射，所以这里以DefaultAnnotationHandlerMapping来进行分析：
-
-```java
-// 获取controller中的所有url
-protected String[] determineUrlsForHandler(String beanName) {
-   // 获取ApplicationContext容器
-   ApplicationContext context = getApplicationContext();
-   // 从容器中获取controller
-   Class<?> handlerType = context.getType(beanName);
-   // 获取controller上的@RequestMapping注解
-   RequestMapping mapping = context.findAnnotationOnBean(beanName, RequestMapping.class);
-   // controller上有注解
-   if (mapping != null) {
-      // @RequestMapping found at type level
-      this.cachedMappings.put(handlerType, mapping);
-      // 返回结果集
-      Set<String> urls = new LinkedHashSet<String>();
-      // controller的映射url
-      String[] typeLevelPatterns = mapping.value();
-      if (typeLevelPatterns.length > 0) {
-         // @RequestMapping specifies paths at type level
-         // 获取controller中所有方法及方法的映射url
-         String[] methodLevelPatterns = determineUrlsForHandlerMethods(handlerType, true);
-         for (String typeLevelPattern : typeLevelPatterns) {
-            if (!typeLevelPattern.startsWith("/")) {
-               typeLevelPattern = "/" + typeLevelPattern;
-            }
-            boolean hasEmptyMethodLevelMappings = false;
-            for (String methodLevelPattern : methodLevelPatterns) {
-               if (methodLevelPattern == null) {
-                  hasEmptyMethodLevelMappings = true;
-               }
-               else {
-                  // controller的映射url+方法映射的url
-                  String combinedPattern = getPathMatcher().combine(typeLevelPattern, methodLevelPattern);
-                  // 保存到set集合中
-                  addUrlsForPath(urls, combinedPattern);
-               }
-            }
-            if (hasEmptyMethodLevelMappings ||
-                  org.springframework.web.servlet.mvc.Controller.class.isAssignableFrom(handlerType)) {
-               addUrlsForPath(urls, typeLevelPattern);
-            }
-         }
-         // 以数组星矢返回controller上的所有url
-         return StringUtils.toStringArray(urls);
-      }
-      else {
-         // actual paths specified by @RequestMapping at method level
-         // controller上的@RequestMapping映射url为空串，直接找方法的映射url
-         return determineUrlsForHandlerMethods(handlerType, false);
-      }
-   }//controller上没有@RequestMapping注解
-   else if (AnnotationUtils.findAnnotation(handlerType, Controller.class) != null) {
-      // @RequestMapping to be introspected at method level
-      // 获取controller中方法上的映射url
-      return determineUrlsForHandlerMethods(handlerType, false);
-   }
-   else {
-      return null;
-   }
-}
-```
-
-到这里HandlerMapping组件就已经建立所有url和controller的对应关系。
 
 ### 3.2 调用阶段
 
@@ -265,7 +252,10 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
          // Determine handler for the current request.
          // 取得处理当前请求的controller,这里也称为hanlder处理器
          // 第一个步骤的意义就在这里体现了.这里并不是直接返回controller
-         // 而是返回的HandlerExecutionChain请求处理器链对象,该对象封装了handler和interceptors.
+         // 而是返回的 HandlerExecutionChain 请求处理器链对象,该对象封装了 handler 和 interceptor 列表
+         // 基本逻辑：
+		 // 遍历 handlerMappings 所有的 HandlerMapping，找到能匹配请求的 Handler(HandlerMethod) 和其对应的 HandlerMapping 所包含的 interceptor 列表
+		 // 封装成 HandlerExecutionChain 返回
          mappedHandler = getHandler(processedRequest, false);
          // 如果handler为空,则返回404
          if (mappedHandler == null || mappedHandler.getHandler() == null) {
@@ -274,7 +264,7 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
          }
 
          // Determine handler adapter for the current request.
-         //3. 获取处理request的处理器适配器handler adapter
+         //3. 获取处理 request 的处理器适配器 handler adapter
          HandlerAdapter ha = getHandlerAdapter(mappedHandler.getHandler());
 
          // Process last-modified header, if supported by the handler.
@@ -349,7 +339,7 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
 
 在第2步中我们可以知道处理request的controller，第5步就是要根据url确定controller中处理请求的方法，经过拦截器的预处理方法，然后通过反射获取该方法上的注解和参数，解析方法和参数上的注解,最后反射调用方法获取ModelAndView结果视图。因为上面采用注解url形式说明的,所以我们这里继续以注解处理器适配器来说明。
 
-第5步调用的就是实现了 `HandlerAdapter` 的 `AbstractHandlerMethodAdapter` 的handle。最后，调用的就是 `RequestMappingHandlerAdapter` 的 handle()中的核心逻辑由 handleInternal(request, response, handler)实现。 
+第5步调用的就是实现了 `HandlerAdapter` 的 `AbstractHandlerMethodAdapter` 的handle。最后，调用的就是 `RequestMappingHandlerAdapter` 的 handle() 中的核心逻辑由 handleInternal(request, response, handler) 实现。 
 
 ```java
 @Override
@@ -469,7 +459,7 @@ protected ModelAndView invokeHandlerMethod(HttpServletRequest request,
 
 ```
 
-`invocableMethod.invokeAndHandle()` 最终要实现的目的就是：完成request中的参数和方法参数上数据的绑定。springmvc中提供两种request参数到方法中参数的绑定方式（前面已有介绍）。
+`invocableMethod.invokeAndHandle()` 最终要实现的目的就是：`完成request中的参数和方法参数上数据的绑定`。springmvc中提供两种request参数到方法中参数的绑定方式（前面已有介绍）。
 
 最终调用 doDispatch() 中的 processDispatchResult() 对最终结果进行渲染，将 mv 渲染（根据 ModelAndView 使用 ViewResolver 进行解析得到 View）从response可以输出的结果：
 
@@ -563,7 +553,9 @@ protected View resolveViewName(String viewName, @Nullable Map<String, Object> mo
 }
 ```
 
-到这里,方法的参数值列表也获取到了,就可以直接进行方法的调用了。整个请求过程 中最复杂的一步就是在这里了。到这里整个请求处理过程的关键步骤都已了解。理解了Spring MVC 中的请求处理流程,整个代码还是比较清晰的。最后我们再来梳理一下 Spring MVC 核心组件的关联关系（如下图）：
+到这里整个请求处理过程的关键步骤都已了解。
+
+理解了Spring MVC 中的请求处理流程,整个代码还是比较清晰的，最后我们再来梳理一下 Spring MVC 核心组件的关联关系（如下图）：
 
 ![img](Spring MVC 设计原理.assets/20200401100000571.png)
 

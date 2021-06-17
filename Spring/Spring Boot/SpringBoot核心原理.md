@@ -62,7 +62,7 @@ ComponentScan 这个注解是大家接触得最多的了，相当于 xml 配置�
 
 标识需要装配的类的形式主要是： @Component 、 @Repository、@Service、@Controller 这类的注解标识的类。
 
-ComponentScan 默认会扫描当前 package 下的的所有加了相关注解标识的类到 IoC 容器中；
+ComponentScan 默认会扫描当前 package 下的所有加了相关注解标识的类到 IoC 容器中；
 
 ```java
 @ComponentScan(basePackages = "com.spring.core.firstDemo")
@@ -99,11 +99,11 @@ public class DemoClass {
 
 仍然是在 spring3.1 版本中，提供了一系列的@Enable 开头的注解，Enable 主机应该是在 JavaConfig 框架上更进一 步的完善，是的用户在使用 spring 相关的框架是，避免配置大量的代码从而降低使用的难度。
 
-比如常见的一些 Enable 注解：EnableWebMvc，（这个注 解引入了 MVC 框架在 Spring 应用中需要用到的所有 bean）； 
+比如常见的一些 Enable 注解：EnableWebMvc，（这个注解引入了 MVC 框架在 Spring 应用中需要用到的所有 bean）； 
 
 比如说@EnableScheduling，开启计划任务的支持； 
 
-找到 EnableAutoConfiguration，我们可以看到每一个涉及 到 Enable 开头的注解，都会带有一个@Import 的注解。 
+找到 EnableAutoConfiguration，我们可以看到每一个涉及到 Enable 开头的注解，都会带有一个@Import 的注解。 
 
 ```java
 @Import(AutoConfigurationImportSelector.class)
@@ -114,7 +114,7 @@ public @interface EnableAutoConfiguration {
 
 ### 3.3.2 Import 注解
 
-import 注解是什么意思呢？ 联想到 xml 形式下有一个形式的注解，就明白它的作用了。 import 就是把多个分来的容器配置合并在一个配置中。在 JavaConfig 中所表达的意义是一样的。
+import 注解是什么意思呢？ 联想到 xml 形式下有一个形式的注解，就明白它的作用了。 import 就是`把多个分来的容器配置合并在一个配置中`。在 JavaConfig 中所表达的意义是一样的。
 
 ```java
 public class SecondMain {
@@ -161,7 +161,7 @@ EnableAutoConfiguration 的主要作用其实就是帮助 springboot 应用把�
 Enable 注解不仅仅可以像前面演示的案例一样很简单的实现多个 Configuration 的整合，还可以实现一些复杂的场景，比如可以根据上下文来激活不同类型的 bean， @Import 注解可以配置三种不同的 class：
 
 1. 第一种就是前面演示过的，基于普通 bean 或者带有 @Configuration 的 bean 进行注入
-2. 实现 ImportSelector 接口进行动态注入 
+2. 实现 `ImportSelector 接口`进行动态注入 
 3. 实现 ImportBeanDefinitionRegistrar 接口进行动态注入
 
 ```java

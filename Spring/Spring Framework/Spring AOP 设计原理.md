@@ -2,7 +2,7 @@
 
 ## 1.1 Spring AOP 应用场景
 
-AOP是OOP的延续，是Aspect Oriented Programming的缩写，意思是面向切面编程。可以通过预编译方式和运行期动态代理实现在不修改源代码的情况下给程序动态统一添加功能的一种技术。AOP实际是GoF设计模式的延续，设计模式孜孜不倦追求的是调用者和被调用者之间的解耦，AOP可以说也是这种目标的一种实现。 现在做的一些非业务，如：日志、事务、安全等都会写在业务代码中(也即是说，这些非业务类横切于业务类)，但这些代码往往是重复，复制——粘贴式的代码会给程序的维护带来不便，AOP就实现了把这些业务需求与系统需求分开来做。这种解决的方式也称代理机制。AOP的核心构造是切面，它将那些影响多个类的行为(有一定的规则，可以单独把一定规律的规则单独分离出来)封装到可重用的模块中。
+AOP是OOP的延续，是 `Aspect Oriented Programming` 的缩写，意思是`面向切面编程`。可以通过预编译方式和运行期动态代理实现在不修改源代码的情况下给程序动态统一添加功能的一种技术。AOP实际是GoF设计模式的延续，设计模式孜孜不倦追求的是调用者和被调用者之间的解耦，AOP可以说也是这种目标的一种实现。 现在做的一些非业务，如：日志、事务、安全等都会写在业务代码中(也即是说，这些非业务类横切于业务类)，但这些代码往往是重复，复制——粘贴式的代码会给程序的维护带来不便，AOP就实现了把这些业务需求与系统需求分开来做。这种解决的方式也称代理机制。AOP的核心构造是切面，它将那些影响多个类的行为(有一定的规则，可以单独把一定规律的规则单独分离出来)封装到可重用的模块中。
 
 ## 1.2 AOP 中必须明白的几个概念
 
@@ -18,7 +18,7 @@ AOP是OOP的延续，是Aspect Oriented Programming的缩写，意思是面向�
 
 ### 切入点(Pointcut)
 
-`切入点(Pointcut) ` 匹配连接点的断言，在AOP中通知和一个切入点表达式关联。切面中所有通知所关注的连接点，都由切入点表达式execution(* com spring service. *.* (. ))来决定。 
+`切入点(Pointcut) ` 匹配连接点的断言，在AOP中通知和一个切入点表达式关联。`切面中所有通知所关注的连接点，都由切入点表达式execution(* com spring service. *.* (. ))来决定`。 
 
 ### 目标对象(Target Object)
 
@@ -303,7 +303,7 @@ public interface BeanPostProcessor {
 
 **2、AbstractAutowireCapableBeanFactory 类对容器生成的 Bean 添加后置处理器** 
 
-BeanPostProcessor 后置处理器的调用发生在 Spring IOC 容器完成对 Bean 实例对象的创建和属性的 依赖注入完成之后，在对Spring依赖注入的源码分析过程中我们知道，当应用程序第一次调用 getBean() 方法(lazy-init 预实例化除外)向 Spring IOC 容器索取指定 Bean 时触发 Spring IOC 容器创建 Bean 实例对象并进行依赖注入的过程，其中真正实现创建 Bean 对象并进行依赖注入的方法是 AbstractAutowireCapableBeanFactory 类的 doCreateBean()方法，主要源码如下：
+BeanPostProcessor 后置处理器的调用发生在 Spring IOC 容器完成对 Bean 实例对象的创建和属性的依赖注入完成之后，在对Spring依赖注入的源码分析过程中我们知道，当应用程序第一次调用 getBean() 方法(lazy-init 预实例化除外)向 Spring IOC 容器索取指定 Bean 时触发 Spring IOC 容器创建 Bean 实例对象并进行依赖注入的过程，其中真正实现创建 Bean 对象并进行依赖注入的方法是 AbstractAutowireCapableBeanFactory 类的 doCreateBean()方法，主要源码如下：
 
 ```java
 protected Object doCreateBean(final String beanName, final RootBeanDefinition mbd, final @Nullable Object[] args)
@@ -636,7 +636,7 @@ public Object invoke(Object proxy, Method method, Object[] args) throws Throwabl
 }
 ```
 
-主流程可以简述为：获取可以应用到此方法上的通知链(Interceptor Chain)，如果有，则应用通知，并执行joinpoint；如果没有，则直接反射调用 method.invoke。而这里的关键是通知链是如何获取的以及它又是如何执行的。 首先，从上面代码可以看到，通知链是通过Advised.getInterceptorAndDynamicInterceptionAdvice()这个方法来获取的：
+主流程可以简述为：获取可以应用到此方法上的通知链(Interceptor Chain)，如果有，则应用通知，并执行joinpoint；如果没有，则直接反射调用 method.invoke。而这里的关键是`通知链是如何获取的`以及它又是`如何执行`的。 首先，从上面代码可以看到，通知链是`通过 Advised.getInterceptorAndDynamicInterceptionAdvice() 这个方法来获取的`：
 
 ```java
 public List<Object> getInterceptorsAndDynamicInterceptionAdvice(Method method, Class targetClass) {
@@ -807,7 +807,7 @@ Spring AOP 源码就分析到这儿，相信小伙伴们应该有了基本思路
 
 ## 3.5 触发通知
 
-在为 AopProxy 代理对象配置拦截器的实现中，有一个取得拦截器的配置过程，这个过程是由 DefaultAdvisorChainFactory 实现的，这个工厂类负责生成拦截器链，在它的 getInterceptorsAndDynamicInterceptionAdvice 方法中，有一个适配器和注册过程，通过配置 Spring 预先设计好的拦截器，Spring 加入了它对 AOP 实现的处理。
+在为 AopProxy 代理对象配置拦截器的实现中，有一个取得拦截器的配置过程，这个过程是由 DefaultAdvisorChainFactory 实现的，这个工厂类负责`生成拦截器链`，在它的 getInterceptorsAndDynamicInterceptionAdvice 方法中，有一个适配器和注册过程，通过配置 Spring 预先设计好的拦截器，Spring 加入了它对 AOP 实现的处理。
 
 ```java
 public List<Object> getInterceptorsAndDynamicInterceptionAdvice(
@@ -820,7 +820,9 @@ public List<Object> getInterceptorsAndDynamicInterceptionAdvice(
    boolean hasIntroductions = hasMatchingIntroductions(config, targetClass);
    // 这里实际上注册一系列AdvisorAdapter，用于将Advisor转化成MethodInterceptor
    AdvisorAdapterRegistry registry = GlobalAdvisorAdapterRegistry.getInstance();
-   ...
+   for (Advisor advisor : config.getAdvisors()) {
+    ...
+   }     
    return interceptorList;
 }
 ```
@@ -850,13 +852,11 @@ public abstract class GlobalAdvisorAdapterRegistry {
 }
 ```
 
-而 GlobalAdvisorAdapterRegistry 起到了适配器和单例模式的作用，提供了一个 DefaultAdvisorAdapterRegistry，它用来完成各种通知的适配和注册过程。 
+而 GlobalAdvisorAdapterRegistry 起到了适配器和单例模式的作用，提供了一个 `DefaultAdvisorAdapterRegistry`，它用来`完成各种通知的适配和注册过程`。 
 
 ```java
 public class DefaultAdvisorAdapterRegistry implements AdvisorAdapterRegistry, Serializable {
-
 	private final List<AdvisorAdapter> adapters = new ArrayList<>(3);
-
 
 	/**
 	 * Create a new DefaultAdvisorAdapterRegistry, registering well-known adapters.
@@ -864,30 +864,8 @@ public class DefaultAdvisorAdapterRegistry implements AdvisorAdapterRegistry, Se
 	public DefaultAdvisorAdapterRegistry() {
 		registerAdvisorAdapter(new MethodBeforeAdviceAdapter());
 		registerAdvisorAdapter(new AfterReturningAdviceAdapter());
+        // 暂未有实现
 		registerAdvisorAdapter(new ThrowsAdviceAdapter());
-	}
-
-
-	@Override
-	public Advisor wrap(Object adviceObject) throws UnknownAdviceTypeException {
-		if (adviceObject instanceof Advisor) {
-			return (Advisor) adviceObject;
-		}
-		if (!(adviceObject instanceof Advice)) {
-			throw new UnknownAdviceTypeException(adviceObject);
-		}
-		Advice advice = (Advice) adviceObject;
-		if (advice instanceof MethodInterceptor) {
-			// So well-known it doesn't even need an adapter.
-			return new DefaultPointcutAdvisor(advice);
-		}
-		for (AdvisorAdapter adapter : this.adapters) {
-			// Check that it is supported.
-			if (adapter.supportsAdvice(advice)) {
-				return new DefaultPointcutAdvisor(advice);
-			}
-		}
-		throw new UnknownAdviceTypeException(advice);
 	}
 
 	@Override
@@ -912,7 +890,6 @@ public class DefaultAdvisorAdapterRegistry implements AdvisorAdapterRegistry, Se
 	public void registerAdvisorAdapter(AdvisorAdapter adapter) {
 		this.adapters.add(adapter);
 	}
-
 }
 ```
 
@@ -961,9 +938,31 @@ public class MethodBeforeAdviceInterceptor implements MethodInterceptor, Seriali
 }
 ```
 
-可以看到，invoke 方法中，首先触发了 advice 的 before 回调，然后才是 proceed。 AfterReturningAdviceInterceptor 的源码： 
+可以看到，invoke 方法中，首先触发了 advice 的 `before 回调`，然后才是 proceed。proceed() 方法调用的还是 ReflectiveMethodInvocation，此时所有的 interceptor 遍历完毕，`执行 invokeJoinpoint() 方法`：
 
-至此，我们知道了对目标对象的增强是通过拦截器实现的。
+```java
+protected Object invokeJoinpoint() throws Throwable {
+    // 与 Interceptor 链为空时执行方法一致，即调用反射执行原始方法
+   return AopUtils.invokeJoinpointUsingReflection(this.target, this.method, this.arguments);
+}
+```
+
+执行完 invokeJoinpoint() 返回，同时 MethodBeforeAdviceInterceptor 的 invoke 方法也返回，该 invoke 方法是由 ReflectiveMethodInvocation 的遍历 Interceptor 链调用，上一层为 AspectJAfterAdvice invoke 方法：
+
+```java
+public Object invoke(MethodInvocation mi) throws Throwable {
+   try {
+      return mi.proceed();
+   }
+   finally {
+       // mi.proceed() 返回后，invokeAdviceMethod 会触发了 advice 的 after 回调
+       // 以此类推，向上推论
+      invokeAdviceMethod(getJoinPointMatch(), null, null);
+   }
+}
+```
+
+至此，我们知道了对目标对象的增强是`通过拦截器实现`的。
 
 ------
 
