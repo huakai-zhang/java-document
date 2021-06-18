@@ -4,6 +4,10 @@ Docker 将任何应用以轻量级的形式来打包，发布和运行，可以�
 
 Docker 利用 Host OS 里面的 namespace，controlgroup 来做到将应用程序分离，因为 Docker 没有 hypervisor 虚拟层，它会比虚拟机轻量很多，包括程序的启动速度以及存储的需求等等。
 
+> 虚拟机和容器都是在硬件和操作系统以上的，虚拟机有 Hypervisor 层，Hypervisor 是整个虚拟机的核心所在。它为虚拟机提供了虚拟的运行平台，管理虚拟机的操作系统运行。每个虚拟机都有自己的系统和系统库以及应用。
+>
+> 容器没有 Hypervisor 这一层，并且每个容器是和宿主机共享硬件资源及操作系统，那么由 Hypervisor 带来性能的损耗，在 linux 容器这边是不存在的。
+
 容器是一个标准的软件单元，它将代码及其所有依赖项打包起来，以便应用程序从一个计算环境快速可靠地运行到另一个计算环境。Docker 容器镜像是一个轻量级的、独立的、可执行的软件包，包括运行应用程序所需的一切：代码、运行时、系统工具、系统库和设置。
 
 ![img](Docker基础.assets/docker-containerized-appliction-blue-border_2.png)

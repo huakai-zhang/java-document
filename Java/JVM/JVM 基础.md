@@ -1,4 +1,4 @@
-# ThresholdJVM
+# JVM
 
 <img src="JVM 基础.assets/image-20200903203452939.png" style="zoom:50%;" />
 

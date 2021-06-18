@@ -546,7 +546,15 @@ ping：测试主机之间网络的连通性。
 
 ifconfig：查看、配置、启用或禁用网络接口的命令。
 
-netstat：查看网络状态。
+### netstat
+
+查看网络状态
+
+- `-a(--all)` 显示所有连线中的Socket
+- `-n(--numeric)` 直接使用IP地址，而不通过域名服务器
+- `-p(--programs)` 显示正在使用Socket的程序识别码和程序名称
+
+lsof(list open files)
 
 ## 系统权限及用户授权相关命令
 
