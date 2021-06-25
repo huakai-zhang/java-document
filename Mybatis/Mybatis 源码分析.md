@@ -227,11 +227,11 @@ sqlSession1.close();
 
 思考一个问题：如果开启了二级缓存，二级缓存应该是工作在一级缓存之前，还是在一级缓存之后呢？二级缓存是在哪里维护的呢？ 
 
-作为一个作用范围更广的缓存，它肯定是在 SqlSession 的外层，否则不可能被多个 SqlSession 共享。而一级缓存是在 SqlSession 内部的，所以第一个问题，肯定是工作在一级缓存之前，也就是只有取不到二级缓存的情况下才到一个会话中去取一级缓存。 
+作为一个作用范围更广的缓存，它肯定是在 SqlSession 的外层，否则不可能被多个 SqlSession 共享。而一级缓存是在 SqlSession 内部的，所以第一个问题，肯定是工作`在一级缓存之前`，也就是只有取不到二级缓存的情况下才到一个会话中去取一级缓存。 
 
-第二个问题，二级缓存放在哪个对象中维护呢？ 要跨会话共享的话，SqlSession 本 身和它里面的 BaseExecutor 已经满足不了需求了，那我们应该在 BaseExecutor 之外创建一个对象。 
+第二个问题，二级缓存放在哪个对象中维护呢？ 要跨会话共享的话，SqlSession 本身和它里面的 BaseExecutor 已经满足不了需求了，那我们应该在 BaseExecutor 之外创建一个对象。 
 
-实际上 MyBatis 用了一个装饰器的类来维护，就是 CachingExecutor。如果启用了二级缓存，MyBatis 在创建 Executor 对象的时候会对 Executor 进行装饰。 CachingExecutor 对于查询请求，会判断二级缓存是否有缓存结果，如果有就直接返回，如果没有委派交给真正的查询器 Executor 实现类，比如 SimpleExecutor 来执行查询，再走到一级缓存的流程。最后会把结果缓存起来，并且返回给用户。
+实际上 MyBatis 用了一个`装饰器的类`来维护，就是 `CachingExecutor`。如果启用了二级缓存，MyBatis 在创建 Executor 对象的时候会对 Executor 进行装饰。 CachingExecutor 对于查询请求，会判断二级缓存是否有缓存结果，如果有就直接返回，如果没有委派交给真正的查询器 Executor 实现类，比如 SimpleExecutor 来执行查询，再走到一级缓存的流程。最后会把结果缓存起来，并且返回给用户。
 
 ![image-20201210132318837](Mybatis 源码分析.assets/image-20201210132318837.png)
 
