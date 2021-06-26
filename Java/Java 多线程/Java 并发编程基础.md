@@ -1226,5 +1226,34 @@ A h-b B ， B h-b C 那么可以得到 A h-b C
 
 线程t1写入的所有变量，在任意其它线程t2调用t1.join()，或者t1.isAlive() 成功返回后，都对t2可见
 
+# 4 Java 语言的线程安全
+
+## 4.1 不可变
+
+一个基本数据类型只要使用 final 关键字就可以保证它是不可变的。如果共享数据是一个对象，Java 暂时没有提供值类型的支持，需要对象自行保证其行为不会对其状态产生任何影响，最典型的不可变对象就是 String 实例，调用 substring()、replace() 和 concat() 都不会影响它原来的值，只会返回一个新构造的字符串对象。
+
+保证对象不可变，最简单的一种就是把对象里面带有状态的变量都生命为 final。例如 Integer：
+
+```java
+private final int value;
+
+public Integer(int value) {
+    this.value = value;
+}
+// 还有枚举类，包装类型，大数据类型等
+```
+
+## 4.2 线程安全的实现方法
+
+### 互斥同步
+
+synchronized
+
+重入锁 ReentrantLock
+
+### 非阻塞同步
+
+CAS Unsafe（ABA，J.U.C 提供了一个带有标记的原子引用类 AtomicStampedReference）
+
 ------
 

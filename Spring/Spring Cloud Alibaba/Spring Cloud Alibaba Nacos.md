@@ -1166,7 +1166,7 @@ class BeatTask implements Runnable {
 
 ![image-20210317192943277](Spring Cloud Alibaba Nacos.assets/image-20210317192943277.png)
 
-4.2 服务发现
+## 4.2 服务发现
 
 服务发现由 NacosWatch 完成，它实现了 Spring 的 Lifecycle 接口，容器启动和销毁时会调用对应的 start() 和 stop() 方法：
 

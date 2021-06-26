@@ -6,6 +6,10 @@ JVM 是运行在操作系统之上的，它与硬件没有直接的交互。
 
 ![image-20200903204633755](JVM 基础.assets/image-20200903204633755.png)
 
+> `Execution Engine 执行引擎`负责解释命令，提交操作系统执行。 
+>
+> Java 虚拟机的执行引擎输入输出都是一致的：输入的是字节码二进制流，处理过程是字节码解析执行的等效过程，输出的是执行结果。
+
 # 1 源码到类文件
 
 ## 1.1 The relation of JDK/JRE/JVM
@@ -196,8 +200,6 @@ public class String {
 当一个类收到了类加载请求，他首先不会尝试自己去加载这个类，而是把这个请求委派给父类去完成，每一个层次类加载器都是如此，因此所有的加载请求都应该传送到启动类加载其中，只有当父类加载器反馈自己无法完成这个请求的时候（在它的加载路径下没有找到所需加载的Class），子类加载器才会尝试自己去加载。 
 采用双亲委派的一个好处是比如加载位于 rt.jar 包中的类 java.lang.Object，不管是哪个加载器加载这个类，最终都是委托给顶层的启动类加载器进行加载，这样就保证了使用不同的类加载器最终得到的都是同样一个 Object对象。
 
-> Execution Engine执行引擎负责解释命令，提交操作系统执行。 
-
 ### 沙箱安全
 
 它防止了恶意代码去干涉善意的代码，这是通过为不同的类加载器装入的类提供了不同的命名空间来实现的，命名空间互相独立。
@@ -374,7 +376,7 @@ B 方法又调用了 C 方法，于是产生栈帧 F3 也被压入栈
 
 ``局部变量表（Local Variables）`` 输入参数和输出参数以及方法内的变量，局部变量表中的变量不可直接使用，如需要使用的话，必须通过相关指令将其加载至操作数栈中作为操作数使用
 
-``操作数栈（Operand Stack）`` 记录出栈、入栈的操作
+``操作数栈（Operand Stack）`` 记录出栈、入栈的操作，后入先出
 
 `指向运行时常量池的引用(A reference to the run-time constant pool)` 每个栈帧都包含一个指向运行时常量池中该栈帧所属方法的引用，持有这个引用是为了支持方法调用过程中的动态连接(Dynamic Linking)
 
@@ -436,6 +438,155 @@ public class Test {
 ```java
 private static Object obj = new Object();
 ```
+
+### 4.3.4 方法调用
+
+`方法调用`并不等于方法中的代码被执行，方法调用阶段唯一的任务是确定被调用方法的版本（即调用哪一个方法）。
+
+#### 解析
+
+所有方法调用的`目标方法`在 Class 方法里面都是一个常量池中的符号引用，类加载的解析阶段会将其中一部分符号引用转化为直接引用。
+
+> 方法在程序真正执行之前就有一个可确定的调用版本，并且这方法的调用版本在运行期是不可改变的（编译期可知，运行期不可变），这类方法的调用被称为`解析（Resolution）`。
+>
+> Java 中符合这个要求的方法，主要是`静态方法`(与类型直接关联)和`私有方法`(外部不可访问)两大类，它们各自的特点决定了不可能通过继承或者别的方式重写出其他版本，因此都适合在类加载阶段进行解析。
+
+调用不同的方法，字节码指令集有不同的指令，Java 虚拟机支持 5 条方法的字节码指令：
+
+* invokestatic 用于调用静态方法
+* invokespecial 用于调用实例构造器方法、私有方法和父类中的方法
+* invokevirtual 用于调用所有的虚方法
+* invokeinterface 用于调用接口方法，会在运行时确定一个实现该接口的对象
+* invokedynamic 运行时动态解析出调用点限制符所引用的方法，然后再执行方法
+
+前 4 条调用逻辑，分派逻辑固化在 Java 虚拟机内部，而 invokedynamic 的分派逻辑是由用户设定的引导方法来决定的。
+
+只有被 invokestatic 和 invokespecial 指令调用的方法，可以在解析阶段中确定唯一的调用版本。
+
+静态方法、私有方法、实例构造器、父类方法和被 final 修饰的方法这5种方法会在类加载的时候把符号引用解析为该方法直接引用，称为`非虚方法`，与之相反的就是`虚方法`。
+
+> 被 final 修饰的方法由于历史原因，使用 invokevirtual 调用，但因为它也无法被覆盖，没有其他版本的可能，所以也无须对方法接受者进行多态选择，也或者说多态选择的结果肯定是唯一的。
+
+```java
+public class Test {
+    public static void main(String[] args) {
+        Test.sayHello();
+    }
+
+    public static void sayHello() {
+        System.out.println("hello world");
+    }
+}
+// javap -verbose Test
+ Code:
+      stack=0, locals=1, args_size=1
+         0: invokestatic  #5                  // Method sayHello:()V
+         3: return
+```
+
+#### 分派
+
+**静态分派**
+
+```java
+public class Test {
+    static abstract class Human {}  // 静态类型或者叫外观类型，编译期可知
+    static class Man extends Human {} // 实际类型或者叫运行时类型，运行期才可确定
+    static class Woman extends Human {}
+    
+    public void sayHello(Human guy) {
+        System.out.println("hello guy");
+    }
+
+    public void sayHello(Man man) {
+        System.out.println("hello man");
+    }
+
+    public void sayHello(Woman woman) {
+        System.out.println("hello woman");
+    }
+    
+    public static void main(String[] args) {
+        Human man = new Man();
+        Human woman = new Woman();
+        Test test = new Test();
+        test.sayHello(man);
+        test.sayHello(woman);
+    }
+}
+// hello guy
+// hello guy
+```
+
+由于静态类型在编译期可知，所以在编译阶段，Javac 解析器就根据参数的静态类型决定了会使用哪个重载版本，并把这方法的符号引用写到 main() 方法里的两条 invokevirtual 指令参数中。
+
+所有依赖静态类型来决定方法执行版本的分派动作，被称为`静态分配`，最典型的应用表现就是方法`重载(Overload)`(静态分配发生在编译期而不是由虚拟机来执行，有些资料会把它归入解析)。
+
+Javac 编译器确定的方法的重载版本，只能是一个`“相对更合适的”版本`。
+
+> char -> int -> long -> float -> double -> Character -> Serializable -> Object
+>
+> 自定类型转换 -> 自动装箱 -> 接口类型 -> 父类(从下往上，越上层优先级越低)
+
+**动态分派**
+
+`动态分派`的实现过程，与多态性的另一个重要体现`重写(Override)`有着密切的关联。
+
+```java
+public class Test {
+    static abstract class Human {
+        protected abstract void sayHello();
+    }
+
+    static class Man extends Human {
+        @Override
+        protected void sayHello() {
+            System.out.println("hello man");
+        }
+    }
+
+    static class Woman extends Human {
+        @Override
+        protected void sayHello() {
+            System.out.println("hello woman");
+        }
+    }
+
+    public static void main(String[] args) {
+        Human man = new Man();
+        Human woman = new Woman();
+        man.sayHello();
+        woman.sayHello();
+    }
+}
+// hello man
+// hello woman
+16: aload_1							  // 把创建的对象引用压到栈顶
+17: invokevirtual #6                  // Method Test$Human.sayHello:()V
+20: aload_2
+21: invokevirtual #6                  // Method Test$Human.sayHello:()V
+```
+
+17 和 21 行的调用指令，无论是 invokevirtual 指令还是参数都完全一样，但指令最终执行的目标方法却完全不同。
+
+invokevirtual 运行时解析过程：
+
+1. 找到操作数栈顶的第一个元素所指向的对象的`实际类型`，记做 C
+2. 如果 C 中找到与常量中的描述符和简单名称都相符的方法，则进行访问权限校验，如果通过则返回这方法的直接引用，查找过程结束；不通过这返回 java.lang.IllegalAccessError 异常
+3. 否则，按照继承关系从下到上依次对 C 的各个父类进行第二步搜索和验证过程
+4. 如果始终没有找到合适的方法，则抛出 java.lang.AbstarctMethodError 异常
+
+所以两次调用 invokevirtual 指令并不是把常量池中方法的符号引用解析到直接引用上就结束了，还会根据方法接收者的实际类型来`选择方法版本`，这就是方法重写的本质。这种在运行期根据实际类型确定方法执行版本的分派过程称为`动态分派`。
+
+动态分派只会对方法有效，对字段无效，因为字段不使用 invokevirtual 指令。
+
+**单分派与多分派**
+
+方法的接收者与方法的参数统称为方法的`宗量`，根据分派基于多少中宗量，单分派是根据一个宗量对目标方法进行选择，多分派是根据多于一个宗量对目标方法进行选择。
+
+编译期的选择过程依据有两点：一是静态类型，二是方法参数，根据两个宗量进行选择，所以`静态分派属于多分派类型`。
+
+运行期唯一影响虚拟机选择的是该方法的接收者的实现类型，只有一个宗量作为选择依据，`所以动态分派属于单分派类型`。
 
 ## 4.4 本地方法栈 Native Method Stack
 
