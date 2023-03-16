@@ -280,14 +280,13 @@ public enum State {
 
   - LockSupport.park 分析：既有可能进入等待队列，也有可能进入其他阻塞的阻塞状态
 * `TIMED_WAITING`场景：某一线程因为调用以下带有指定正等待时间的方法之一而处于定时等待状态：
-- Thread.sleep(long millis)
-  
-  - 带有超时值的 Object.wait()
-  
-  - 带有超时值的 Thread.join()
-  
-  - LockSupport.parkNanos()
-  - LockSupport.parkUntil() 分析：既有可能进入等待队列，也有可能进入其他阻塞的阻塞状态。和WAITING区别在于是否指定时间
+  * Thread.sleep(long millis)
+  * 带有超时值的 Object.wait()
+
+  * 带有超时值的 Thread.join()
+
+  * LockSupport.parkNanos()
+  * LockSupport.parkUntil() 分析：既有可能进入等待队列，也有可能进入其他阻塞的阻塞状态。和WAITING区别在于是否指定时间
 
 <img src="Java 并发编程基础.assets/image-20210410153309138.png" alt="image-20210410153309138" style="zoom:50%;" />
 

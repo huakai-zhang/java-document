@@ -1,0 +1,15 @@
+tomcat：
+日志 配置 logging.properties java.util.logging.ConsoleHandler.encoding = GBK
+	jsp：
+		js 文件乱码 catalina.bat  set "JAVA_OPTS=%JAVA_OPTS% -Dfile.encoding=UTF-8"
+
+		java.lang.NoClassDefFoundError: javax/servlet/jsp/jstl/core/Config
+			maven：
+		<dependency>
+			<groupId>javax.servlet</groupId>
+			<artifactId>jstl</artifactId>
+			<scope>provided</scope>
+		</dependency>
+		防止各个版本tomcat有所不同，使用 provided 保证编译通过但不打包，需要保证tomcat的lib文件夹有 jstl jar包
+
+logback -Dlogback.configurationFile=file:E:\gitignore\csc-logback\logback.xml 版本不同写法不同
