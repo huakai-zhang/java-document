@@ -1,6 +1,0 @@
-ClassName#Method(ParamVO) failed and no fallback available.
-
-对于failed and no fallback available.这种异常信息，是因为项目开启了熔断：
-feign.hystrix.enabled: true
-
-当调用服务时抛出了异常，却没有定义fallback方法，就会抛出上述异常。
