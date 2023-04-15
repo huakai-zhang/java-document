@@ -33,6 +33,10 @@ CREATE INDEX index_name ON my_table_name (my_column_name);
 DROP INDEX index_name;
 -- 查看单张表有哪些索引
 SELECT * FROM pg_indexes WHERE tablename = 'table_name';
+-- 查询所有表的总大小，包括其索引大小
+select relname, pg_size_pretty(pg_total_relation_size(relid)) as size from pg_stat_user_tables;
+-- 查询单个索引大小
+select pg_size_pretty(pg_relation_size('index_name')) as size;
 ```
 
 

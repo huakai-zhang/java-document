@@ -164,6 +164,8 @@ public interface Stream<T> extends BaseStream<T, Stream<T>> {
 
 ![image-20201103104736571](Java核心技术 Java SE 8的流库.assets/image-20201103104736571.png)
 
+> ``谓语(Predicate)``是对主语动作状态或特征的陈述或说明，指出"做什么(what to do)" , "是什么(what is this)"。
+
 filter转换会产生一个流，它的元素与某种条件想匹配，将符合条件的元素提取出来的操作。filter通常要配合collect（收集），将筛选结果收集成一个新的集合。
 
 filter的引元(函数式接口，参考最下方扩展)是Predicate&lt; T &gt;，即从T到boolean的函数：

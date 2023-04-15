@@ -205,7 +205,7 @@ Set接口等同于Collection接口，不过其方法的行为有更严谨的定�
 数组在连续的存储位置上存放对象引用。而链表（linked list）将每个对象存放在独立的结点中。每个结点还存放着序列中下一个结点的引用。在Java中，所有链表实际上都是双向链接的（doubly linked），即每个结点还存放着指向前驱结点的引用。
 
 
-![img](https://img-blog.csdnimg.cn/20191205203446887.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
+![img](Java核心技术 集合.assets\watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70)
 
 从链表中删除元素，只需要更新被删除元素附近的链接。
 

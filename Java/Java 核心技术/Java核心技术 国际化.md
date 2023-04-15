@@ -1,0 +1,695 @@
+---
+layout:  post
+title:   Java核心技术 国际化
+date:   2020-01-04 17:44:57
+author:  'zhangtao'
+header-img: 'img/post-bg-2015.jpg'
+catalog:   false
+tags:
+-Java核心技术
+
+---
+
+
+
+
+
+
+对于日期、数字等的显示不同国家有不同，又若干个专门负责格式处理的类。为了对格式化进行控制，可以使用Locale类。 locale由多达5个部分构成： 1.一种语言，由2个或3个小写字母表示： ![img](https://img-blog.csdnimg.cn/20200103131219193.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) 2.可选的一段脚本，由首字母大写的四个字母表示。例如Hant(繁体中文字符) 3.可选的一个国家或地区，由2个大写字母或3个数字表示，例如US(美国) ![img](https://img-blog.csdnimg.cn/20200103132304925.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) 4.可选的一个变体，用于指定各种杂项特性，例如方言和拼写规则 5.可选的一个扩展，扩展描述了日历和数字等内容的本地偏好。例如，u-nu-thai表示使用泰语数字。 locale的规则在Internet Engineering Task Force的 [“Best Current Practices”备忘录BCP47](https://tools.ietf.org/html/bcp47)进行了明确阐述。也可以在 [https://www.w3.org/International/articles/language-tags/](https://www.w3.org/International/articles/language-tags/)处找到更容易的理解总结。
+
+```java
+// 可以使用标签字符串来构建Locale对象
+Locale usEnglish = Locale.forLanguageTag("en-US");
+toLanguageTag方法可以生成给定的Locale语言标签
+System.out.println(Locale.US.toLanguageTag());
+```
+
+Java SE为各个国家预定义了Locale对象，还预定义了大量的语言Locale，它们只设定了语言而没有设定位置：
+
+```java
+static public final Locale CHINESE = createConstant("zh", "");
+```
+
+静态方法getAvailableLocales()返回由Java虚拟机所能够识别的所有Locale构成的数组。 除了构建Locale或使用预定义Locale外，可以有两种方法获得Locale对象，静态getDefault方法可以获得作为本地操作系统的一部分而存放的Locale。可以调用setDefault方法改变默认JavaLocale，但是这种改变只对程序有效，对操作系统不会产生影响。 对于所有的Locale相关的工具类，可以返回一个他们所支持的Locale数组：
+
+```java
+// 返回所有NumberFormat所能处理的Locale
+NumberFormat.getAvailableLocales();
+```
+
+Locale类中唯一有用的是那些识别语言和国家代码的方法，比如getDisplayName，它返回一个描述Locale的字符串。这个字符串并不包括前面所说的由两个字母组成的代码，而是以一种面向用户的形式体现。
+
+```java
+Locale loc = new Locale("de", "CH");
+System.out.println(loc.getDisplayName(Locale.GERMAN));
+// Deutsch (Schweiz)
+```
+
+
+Java类库提供了一个格式器（formatter）对象的集合，可以对java.text包中的数字值进行格式化和解析。可以通过下面步骤对特定Locale的数字进行格式化： 1.使用上一节的方法，得到Locale对象 2.使用一个工厂方法得到一个格式器对象 3.使用这个格式器对象来完成格式化和解析工作 工厂方法是NumberFormat类的静态方法，它们接受一个Locale类型的参数。总共有3个工厂方法：getNumberInstance、getCurrencyInstance和getPercentInstance，这些方法返回对象可以分别对数字、货币量和百分比进行格式化和解析。
+
+```java
+Locale loc = Locale.US;
+NumberFormat currFmt = NumberFormat.getCurrencyInstance(loc);
+double amt = 123456.78;
+System.out.println(currFmt.format(amt));
+// $123,456.78
+```
+
+使用parse方法，读取一个按照某Locale的惯用法而输入或存储的数字。parse的返回类型是抽象类型的Number。返回的对象是一个Double或Long的包装器类对象，这取决于解析的数字是否是浮点数。如果不关心差异，直接使用Number类的doubleValue方法来读取被包装的数字。 如果数字文本的格式不正确，该方法会抛出一个ParseException异常，例如字符串以空白字符开头（可以用trim方法去掉）。 由getXxxInstance工厂方法返回的类并非是NumberFormat类型，NumberFormat只是一个抽象类，实际得到的是它的子类。
+
+```java
+public class NumberFormatTest {
+    public static void main(String[] args) {
+        EventQueue.invokeLater(() -> {
+            JFrame frame = new NumberFormatFrame();
+            frame.setTitle("NumberFormatTest");
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.setVisible(true);
+        });
+    }
+}
+
+class NumberFormatFrame extends JFrame {
+    private Locale[] locales;
+    private double currentNumber;
+    private JComboBox<String> localeCombo = new JComboBox<>();
+    private JButton parseButton = new JButton("Parse");
+    private JTextField numberText = new JTextField(30);
+    private JRadioButton numberRadioButton = new JRadioButton("Number");
+    private JRadioButton currencyRadioButton = new JRadioButton("Currency");
+    private JRadioButton percentRadioButton = new JRadioButton("Percent");
+    private ButtonGroup rbGroup = new ButtonGroup();
+    private NumberFormat currentNumberFormat;
+
+    public NumberFormatFrame() {
+        setLayout(new GridBagLayout());
+
+        ActionListener listener = event -> updateDisplay();
+
+        JPanel p = new JPanel();
+        addRadioButton(p, numberRadioButton, rbGroup, listener);
+        addRadioButton(p, currencyRadioButton, rbGroup, listener);
+        addRadioButton(p, percentRadioButton, rbGroup, listener);
+
+        add(new JLabel("Locale:"), new GBC(0, 0).setAnchor(GBC.EAST));
+        add(p, new GBC(1, 1));
+        add(parseButton, new GBC(0, 2).setInsets(2));
+        add(localeCombo, new GBC(1, 0).setAnchor(GBC.WEST));
+        add(numberText, new GBC(1, 2).setFill(GBC.HORIZONTAL));
+
+        locales = NumberFormat.getAvailableLocales().clone();
+        Arrays.sort(locales, Comparator.comparing(Locale::getDisplayName));
+        for (Locale loc : locales) {
+            localeCombo.addItem(loc.getDisplayName());
+        }
+        localeCombo.setSelectedItem(Locale.getDefault().getDisplayName());
+        currentNumber = 123456.78;
+        updateDisplay();
+
+        localeCombo.addActionListener(listener);
+
+        parseButton.addActionListener(event -> {
+            String s = numberText.getText().trim();
+            try {
+                Number n = currentNumberFormat.parse(s);
+                if (n != null) {
+                    currentNumber = n.doubleValue();
+                    updateDisplay();
+                } else {
+                    numberText.setText("Parse error: " + s);
+                }
+            } catch (ParseException e) {
+
+            }
+        });
+        pack();
+    }
+
+    public void addRadioButton(Container p, JRadioButton b, ButtonGroup g, ActionListener listener) {
+        b.setSelected(g.getButtonCount() == 0);
+        b.addActionListener(listener);
+        g.add(b);
+        p.add(b);
+    }
+
+    public void updateDisplay() {
+        Locale currentLocale = locales[localeCombo.getSelectedIndex()];
+        currentNumberFormat = null;
+        if (numberRadioButton.isSelected()) {
+            currentNumberFormat = NumberFormat.getNumberInstance(currentLocale);
+        } else if (currencyRadioButton.isSelected()) {
+            currentNumberFormat = NumberFormat.getCurrencyInstance(currentLocale);
+        } else if (percentRadioButton.isSelected()) {
+            currentNumberFormat = NumberFormat.getPercentInstance(currentLocale);
+        }
+        String formatted = currentNumberFormat.format(currentNumber);
+        numberText.setText(formatted);
+    }
+}
+```
+
+
+![img](https://img-blog.csdnimg.cn/20200103165904335.png) GBC源码可参考自 [http://code1.okbase.net/codefile/GBC.java_2012113012759_291.htm](http://code1.okbase.net/codefile/GBC.java_2012113012759_291.htm)
+
+```java
+public class GBC extends GridBagConstraints {
+    public GBC(int gridx, int gridy){
+        this.gridx = gridx;
+        this.gridy = gridy;
+    }
+    public GBC(int gridx, int gridy, int gridwidth, int gridheight){
+        this.gridx = gridx;
+        this.gridy = gridy;
+        this.gridwidth = gridwidth;
+        this.gridheight = gridheight;
+    }
+    public GBC setAnchor(int anchor){
+        this.anchor = anchor;
+        return this;
+    }
+    public GBC setFill(int fill){
+        this.fill = fill;
+        return this;
+    }
+    public GBC setWeight(double weightx, double weighty){
+        this.weightx = weightx;
+        this.weighty = weighty;
+        return this;
+    }
+    public GBC setInsets(int distance){
+        this.insets = new Insets(distance, distance, distance, distance);
+        return this;
+    }
+    public GBC setInsets(int top, int left, int bottom, int right){
+        this.insets = new Insets(top, left, bottom, right);
+        return this;
+    }
+    public GBC setIpad(int ipadx, int ipady){
+        this.ipadx = ipadx;
+        this.ipady = ipady;
+        return this;
+    }
+}
+```
+
+
+NumberFormat.getCurrencyInstance方法灵活性不好，它返回的指示针对一种货币的格式器。 比如为美国客户设置欧元格式，不能去创建两个格式器，应该使用Currency类来控制被格式器所处理的货币。通过将一种货币标识符传给静态的Currency.getInstance方法来得到一个Currency对象，然后对每一个格式器都调用setCurrency方法：
+
+```java
+NumberFormat euroFormatter = NumberFormat.getCurrencyInstance(Locale.US);
+euroFormatter.setCurrency(Currency.getInstance("EUR"));
+```
+
+
+货币标识符有ISO 4217定义： ![img](https://img-blog.csdnimg.cn/20200103164845154.png)
+
+
+
+java.time包中的DateTimeFormatter类，而非java1.1遗留的java.text.DateTimeFormatter(可以操作Date和Calendar)： ![img](https://img-blog.csdnimg.cn/20200103170123989.png)
+
+```java
+// 使用当前Locale
+DateTimeFormatter dateFormatter = DateTimeFormatter.ofLocalizedDate(style).withLocale(locale);
+// 可以格式化LocalDate、LocalDateTime、LocalTime、ZonedDateTime
+ZonedDateTime appointment = ...;
+String formatted = formatter.format(appointment);
+```
+
+可以使用LocalDate、LocalDateTime、LocalTime、ZonedDateTime的静态的parse方法来解析字符串中的时间和日期：
+
+```java
+LocalTime time = LocalTime.parse("9:32 AM", formatter);
+```
+
+这些方法不适合解析人类输入，因为它解析不了9:32AM和9:32 am。 日期格式器可以解析不存在的日期，如November 31，它会将日期调整为给定月的最后一天。
+
+有时候需要显示星期和月份的名字，可调用DayOfWeek和Month枚举的getDisplayName：
+
+```java
+for (Month m : Month.values()) {
+    System.out.println(m.getDisplayName(TextStyle.FULL, Locale.CHINA) + " ");
+}
+for (DayOfWeek d : DayOfWeek.values()) {
+	System.out.println(d.getDisplayName(TextStyle.FULL, Locale.CHINA+ " ");
+}
+```
+
+
+![img](https://img-blog.csdnimg.cn/20200103171254990.png) STANDALONE版本用于格式化日期之外的显示。例如芬兰语中，一月在日期中是“tammikuuta”，但是单独显示是“tammikuu”。 星期的第一天可以是星期六、星期日或星期一，这取决于Locale：
+
+```java
+DayOfWeek first = WeekFields.of(Locale.CHINA).getFirstDayOfWeek();
+```
+
+```java
+public class DateFormatTest {
+    public static void main(String[] args) {
+        EventQueue.invokeLater(() -> {
+            JFrame frame = new DateTimeFormatterFrame();
+            frame.setTitle("DateFormatTest");
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.setVisible(true);
+        });
+    }
+}
+class DateTimeFormatterFrame extends JFrame {
+    private Locale[] locales;
+    private LocalDate currentDate;
+    private LocalTime currentTime;
+    private ZonedDateTime currentDateTime;
+    private DateTimeFormatter currentDateFormat;
+    private DateTimeFormatter currentTimeFormat;
+    private DateTimeFormatter currentDateTimeFormat;
+    private JComboBox<String> localeCombo = new JComboBox<>();
+    private JButton dateParseButton = new JButton("Parse");
+    private JButton timeParseButton = new JButton("Parse");
+    private JButton dateTimeParseButton = new JButton("Parse");
+    private JTextField dateText = new JTextField(30);
+    private JTextField timeText = new JTextField(30);
+    private JTextField dateTimeText = new JTextField(30);
+    private EnumCombo<FormatStyle> dateStyleCombo = new EnumCombo<>(FormatStyle.class, "Short", "Medium", "Long", "Full");
+    private EnumCombo<FormatStyle> timeStyleCombo = new EnumCombo<>(FormatStyle.class, "Short", "Medium");
+    private EnumCombo<FormatStyle> dateTimeStyleCombo = new EnumCombo<>(FormatStyle.class, "Short", "Medium", "Long", "Full");
+    public DateTimeFormatterFrame() {
+        setLayout(new GridBagLayout());
+        add(new JLabel("Locale"), new GBC(0,0).setAnchor(GBC.EAST));
+        add(localeCombo, new GBC(1, 0, 2, 1).setAnchor(GBC.WEST));
+        add(new JLabel("Date"), new GBC(0,1).setAnchor(GBC.EAST));
+        add(dateStyleCombo, new GBC(1, 1).setAnchor(GBC.WEST));
+        add(dateText, new GBC(2, 1, 2,1).setFill(GBC.HORIZONTAL));
+        add(dateParseButton, new GBC(4, 1).setAnchor(GBC.WEST));
+        add(new JLabel("Time"), new GBC(0,2).setAnchor(GBC.EAST));
+        add(timeStyleCombo, new GBC(1, 2).setAnchor(GBC.WEST));
+        add(timeText, new GBC(2, 2, 2,1).setFill(GBC.HORIZONTAL));
+        add(timeParseButton, new GBC(4, 2).setAnchor(GBC.WEST));
+        add(new JLabel("Date and Time"), new GBC(0,3).setAnchor(GBC.EAST));
+        add(dateTimeStyleCombo, new GBC(1, 3).setAnchor(GBC.WEST));
+        add(dateTimeText, new GBC(2, 3, 2,1).setFill(GBC.HORIZONTAL));
+        add(dateTimeParseButton, new GBC(4, 3).setAnchor(GBC.WEST));
+        locales = Locale.getAvailableLocales().clone();
+        Arrays.sort(locales, Comparator.comparing(Locale::getDisplayName));
+        for (Locale loc : locales) {
+            localeCombo.addItem(loc.getDisplayName());
+        }
+        localeCombo.setSelectedItem(Locale.getDefault().getDisplayName());
+        currentDate = LocalDate.now();
+        currentTime = LocalTime.now();
+        currentDateTime = ZonedDateTime.now();
+        updateDisplay();
+        ActionListener listener = event -> updateDisplay();
+        localeCombo.addActionListener(listener);
+        dateStyleCombo.addActionListener(listener);
+        timeStyleCombo.addActionListener(listener);
+        dateTimeStyleCombo.addActionListener(listener);
+        dateParseButton.addActionListener(event -> {
+            String d = dateText.getText().trim();
+            try {
+                currentDate = LocalDate.parse(d, currentDateFormat);
+                updateDisplay();
+            } catch (Exception e) {
+                dateText.setText(e.getMessage());
+            }
+        });
+        timeParseButton.addActionListener(event -> {
+            String t = timeText.getText().trim();
+            try {
+                currentTime = LocalTime.parse(t, currentTimeFormat);
+                updateDisplay();
+            } catch (Exception e) {
+                timeText.setText(e.getMessage());
+            }
+        });
+        dateTimeParseButton.addActionListener(event -> {
+            String t = dateTimeText.getText().trim();
+            try {
+                currentDateTime = ZonedDateTime.parse(t, currentDateTimeFormat);
+                updateDisplay();
+            } catch (Exception e) {
+                dateTimeText.setText(e.getMessage());
+            }
+        });
+        pack();
+    }
+    public void updateDisplay() {
+        Locale currentLocale = locales[localeCombo.getSelectedIndex()];
+        FormatStyle dateStyle = dateStyleCombo.getValue();
+        currentDateFormat = DateTimeFormatter.ofLocalizedDate(
+                dateStyle).withLocale(currentLocale);
+        dateText.setText(currentDateFormat.format(currentDate));
+        FormatStyle timeStyle = timeStyleCombo.getValue();
+        currentTimeFormat = DateTimeFormatter.ofLocalizedTime(
+                timeStyle).withLocale(currentLocale);
+        timeText.setText(currentTimeFormat.format(currentTime));
+        FormatStyle dateTimeStyle = dateTimeStyleCombo.getValue();
+        currentDateTimeFormat = DateTimeFormatter.ofLocalizedDateTime(
+                dateTimeStyle).withLocale(currentLocale);
+        dateTimeText.setText(currentDateTimeFormat.format(currentDateTime));
+    }
+}
+```
+
+
+![img](https://img-blog.csdnimg.cn/20200104105631178.png) 辅助类EnumCombo类，用Short、Medium和Long等值来填充一个组合框（combo），然后自动将用户的选择转换成整数值DateFormat.SHORT、DateFormat.MEDIUM、DateFormat.LONG。并没有编写重复的代码，而是使用了反射：将用户的选择转换成大写字母，所有空格都替换成下划线，然后找到使用这个名字的静态域的值。
+
+```java
+public class EnumCombo<T> extends JComboBox<String> {
+    private Map<String, T> table = new TreeMap<>();
+    public EnumCombo(Class<?> cl, String... labels) {
+        for (String label : labels) {
+            String name = label.toUpperCase().replaceAll(" ", "_");
+            try {
+                java.lang.reflect.Field f = cl.getField(name);
+                @SuppressWarnings("unchecked") T value = (T) f.get(cl);
+                table.put(label, value);
+            } catch (Exception e) {
+                label = "(" + label + ")";
+                table.put(label, null);
+            }
+            addItem(label);
+        }
+        setSelectedItem(labels[0]);
+    }
+    public T getValue() {
+        return table.get(getSelectedItem());
+    }
+}
+```
+
+
+使用String类中的compareTo方法对字符串进行比较，但compareTo方法使用的是字符串的UTF-16编码，即使在英文比较中也是如此。 对于下面的5个字符串进行排序的结果为America、Zulu、able、zebra、Ångstrom，对于英语读者来说期望大小写是等价排序是：able、America、Ångstrom、zebra、Zulu，但是对于瑞典用户字母Å和字母A是不同的，它应该排在字母Z之后：able、America、zebra、Zulu、Ångstrom。 为了获得Locale敏感的比较符，可以调用静态Collator.getInstance方法：
+
+```java
+Collator coll = Collator.getInstance(Locale.getDefault());
+words.sort(coll);
+```
+
+
+
+因为Collator类实现了Comparator接口，因此可以传递一个Collator对象给list.sort(Comparator)方法来对一组字符串进行排序。 排序器有几个高级设置项。字符间的差别可以被分为首要的（primary）、其次的（secondary）和再次的（tertiary）。比如英语中，A和Z之间的差别是首要的，A和Å之间差别是其次的，A和a之间是再次的。 如果排序器的强度设置成Collator.PRIMARY，那么排序器将只关注primary级的差别。如果设置成Collator.SECONDARY，排序器将把secondary级的差别也考虑进去。 ![img](https://img-blog.csdnimg.cn/20200104114703930.png) 如果强度被设置为Collator.IDENTICAL，则不允许有任何差异。这种设置在与排序器的第二种具有相当技术性的设置，即分解模式（decomposition mode），联合使用时，就会非常有用。 Å可以是Unicode字符U+00C5，或者表示成普通的A（U+0065）后跟°（上方组合环，U+030A）。Unicode标准对字符串定义了四种范化形式（normalization form）😄、KD、C和KC。在范化形式C中，重音符号总是组合的。在范化形式D中，重音字符被分解为基字符和组合重音符。 可以选择排序器所使用的范化程度：Collator.NO_DECOMPOSITION表示不对字符串做任何范化，这个选项处理较快，但是对于多形式的文本显得不适用。默认值Collator.CANONICAL_DECOMPOSITION使用范化形式D，这对于包含重音但不包含连字的文本是非常有用的形式；最后是使用范化形式KD的“完全分解”。 ![img](https://img-blog.csdnimg.cn/20200104115848811.png) 让排序器去多次分解一个字符串是很浪费的。如果一个字符串要和其他字符串进行多次比较，可以将分解结果保存在一个排序键对象中。getCollationKey方法返回一个CollationKey对象，可以用它来进行更进一步的、更快捷的比较操作。
+
+```java
+String a = ...;
+CollationKey aKey = coll.getCollationKey(a);
+if (aKey.compareTo(coll.getCollationKey(b)) == 0) //快速比较
+```
+
+最后，可能不需要排序，但也希望将字符串转成它们的范化形式：
+
+```java
+String name = "Ångstrom";
+String normalized = Normalizer.normalize(name, Normalizer.Form.NFD);
+```
+
+范化后包含10个字符，其中Å替换成了A°。 但这通常并非用于存储或传输的最佳形式。范化形式C首先进行分解，然后将重音按照标准化的顺序组合。根据W3C标准，这是用于互联网上进行数据传输的推荐模型。
+
+```java
+public class CollationTest {
+    public static void main(String[] args) {
+        JFrame frame = new CollationFrame();
+        frame.setTitle("CollationTest");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setVisible(true);
+    }
+}
+class CollationFrame extends JFrame {
+    private Collator collator = Collator.getInstance(Locale.getDefault());
+    private List<String> strings = new ArrayList<>();
+    private Collator currentCollator;
+    private Locale[] locales;
+    private JComboBox<String> localeCombo = new JComboBox<>();
+    private JTextField newWords = new JTextField(20);
+    private JTextArea sortedWords = new JTextArea(20, 20);
+    private JButton addButton = new JButton("Add");
+    private EnumCombo<Integer> strengthCombo = new EnumCombo<Integer>(Collator.class, "Primary", "Secondary", "Tertiary", "Identical");
+    private EnumCombo<Integer> decompositionCombo = new EnumCombo<Integer>(Collator.class, "Canonical Decomposition", "Full Decomposition", "No Decomposition");
+
+    public CollationFrame() {
+        setLayout(new GridBagLayout());
+        add(new JLabel("Locale"), new GBC(0, 0).setAnchor(GBC.EAST));
+        add(new JLabel("Strength"), new GBC(0, 1).setAnchor(GBC.EAST));
+        add(new JLabel("Decomposition"), new GBC(0, 2).setAnchor(GBC.EAST));
+        add(addButton, new GBC(0, 3).setAnchor(GBC.EAST));
+        add(localeCombo, new GBC(1, 0).setAnchor(GBC.WEST));
+        add(strengthCombo, new GBC(1, 1).setAnchor(GBC.WEST));
+        add(decompositionCombo, new GBC(1, 2).setAnchor(GBC.WEST));
+        add(newWords, new GBC(1, 3).setFill(GBC.HORIZONTAL));
+        add(new JScrollPane(sortedWords), new GBC(0, 4, 2, 1).setFill(GBC.BOTH));
+
+        locales = Collator.getAvailableLocales().clone();
+        Arrays.sort(locales, (l1, l2) -> collator.compare(l1.getDisplayName(), l2.getDisplayName()));
+        for (Locale loc : locales) {
+            localeCombo.addItem(loc.getDisplayName());
+        }
+        localeCombo.setSelectedItem(Locale.getDefault().getDisplayName());
+
+        strings.add("America");
+        strings.add("able");
+        strings.add("Zulu");
+        strings.add("zebra");
+        strings.add("\u00C5ngstr\u00F6m");
+        strings.add("A\u030angstro\u0308m");
+        strings.add("Angstrom");
+        strings.add("Able");
+        strings.add("office");
+        strings.add("o\uFB03ce");
+        strings.add("Java\u2122");
+        strings.add("JavaTM");
+        updateDisplay();
+
+        addButton.addActionListener(event -> {
+            strings.add(newWords.getText());
+            updateDisplay();
+        });
+
+        ActionListener listener = event -> updateDisplay();
+        localeCombo.addActionListener(listener);
+        strengthCombo.addActionListener(listener);
+        decompositionCombo.addActionListener(listener);
+        pack();
+    }
+
+    public void updateDisplay() {
+        Locale currentLocale = locales[localeCombo.getSelectedIndex()];
+        localeCombo.setLocale(currentLocale);
+
+        currentCollator = Collator.getInstance(currentLocale);
+        currentCollator.setStrength(strengthCombo.getValue());
+        currentCollator.setDecomposition(decompositionCombo.getValue());
+
+        Collections.sort(strings, currentCollator);
+
+        sortedWords.setText("");
+        for (int i = 0; i < strings.size(); i++) {
+            String s = strings.get(i);
+            if (i > 0 && currentCollator.compare(s, strings.get(i -1)) == 0) {
+                sortedWords.append("= ");
+            }
+            sortedWords.append(s + "\n");
+        }
+        pack();
+    }
+}
+```
+
+
+![img](https://img-blog.csdnimg.cn/20200104140313937.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dzemN5MTk5NTAz,size_16,color_FFFFFF,t_70) =号表示这两个词被认为是等同的。 在组合框中的locale名的显示顺序，使用默认locale的排序器进行排序而产生的顺序的。如果用美国英语locale运行这个程序，即使逗号的Unicode值比右括号的Unicode值大，“Norwegian(Norway,Nynorsk)”也会显示在“Norwegian(Norway)”前面。
+
+
+### 格式化数字和日期
+
+下面是一个典型的消息格式化字符串，括号中的数字是占位符，可以用实际的名字和值来替换它们。使用静态方法MessageFormat.format可以用实际的值来替换这些占位符：
+
+```java
+String msg = MessageFormat.format("On {2}, a {0} destroyed {1} houses and caused {3} of damage.",
+        "hurricane", 99, new GregorianCalendar(1999, 0, 1).getTime(), 10.0E8);
+// On 99-1-1 上午12:00, a hurricane destroyed 99 houses and caused 1,000,000,000 of damage.
+```
+
+假如不想需要“上午12:00”，而且将造成的损失量打印出货币值，通过占位符可以提供可选格式：
+
+```java
+On {2,date,long}, a {0} destroyed {1} houses and caused {3,number,currency} of damage.
+//On 1999年1月1日, a hurricane destroyed 99 houses and caused ￥1,000,000,000.00 of damage.
+```
+
+一般占位符索引后面可以跟一个类型（type）和一个风格（style），它们之间用逗号隔开，类型可以是：number、time、date、choice。 类型是number，风格可以是integer、currency、percent或者是可以数字格式模式，就像$,##0。 如果类型是time或date，风格可以是：short、medium、long、full，或者是一个日期格式模式，就像yyyy-MM-dd。 静态的MessageFormat.format方法使用当前的locale对值进行格式化。要想用任意locale进行格式化：
+
+```java
+MessageFormat mf = new MessageFormat("On {2,date,long}, a {0} destroyed {1} houses and caused {3,number,currency} of damage.", Locale.US);
+String s = mf.format(new Object[]{"hurricane", 99, new GregorianCalendar(1999, 0, 1).getTime(), 10.0E8});
+```
+
+### 选择格式
+
+
+a {0} destroyed…，如果用“earthquake”来替换代表灾难的占位符{0}，该语法就不正确。 或者{0} destroyed，就应该用“a hurricane”或“an earthquake”来替换{0}。 但是{1} houses的替换值可能是数字1，消息就会变成 1 houses，希望消息更够随占位符的值而变化，这样就会根据具体的值形成： no houses, one house, 2 houses choice格式化选项就是为了这个目的而设计的。 一个选择格式由一个序列对构成的，每一个对包括： 1.一个下限（lower limit） 2.一个格式字符串（format string） 下限和格式字符串由一个#符号分隔，对与对之间由符号|分隔。 例如，{1,choice,0#no houses|1#one house|2#{1} houses} ![img](https://img-blog.csdnimg.cn/20200104154111940.png) 当消息格式将选择的格式应用于占位符{1}而且替换值是2时，那么选择格式会返回“{1} houses”。 可以使用&lt;符号来表示如果替换值严格小于下限，则选中这个选择项。 也可以使用≤（unicode中的代码是\u2264）来实现和#相同的效果。如果愿意的话，甚至可以将第一个下限的值定义为- ∞（unicode代码是- \u221E）。
+
+```java
+-∞<no houses|0<one house|2≤{1} houses
+// 或者使用Unicode转义字符
+-\u221E<no houses|0<one house|2\u2264{1} houses
+```
+
+
+### 文本文件
+
+如今最好是使用UTF-8来存储和加载文本文件，但是需要操作遗留文件，就要知道遗留文件的字符编码机制：
+
+```java
+PrintWriter out = new PrintWriter(filename, "Windows-1252");
+// 调用下面方法可以获得最佳的编码机制（平台的编码机制）
+Charset platformEncoding = Charset.defaultCharset();
+```
+
+### 行结束符
+
+Windows中每行末尾是\r\n，而UNIX只需要一个\n字符。大多数Windows程序都可以处理一个\n的情况，一个重要例外是记事本。 任何用println方法写入的行都会被正确终止的。唯一的问题是是否打印了包含\n字符的行，它们不会被自动修改为平台的行结束符。与在字符串中使用\n不同，可以使用printf和%n格式说明符来产生平台相关的行结束符：
+
+```java
+System.out.printf("Hello%nWorld%n");
+// Windows产生Hello\r\nWorld\r\n
+// 其他平台产生Hello\nWorld\n
+// Hello
+// World
+```
+
+### 控制台
+
+如果通过System.in/System.out或System.console()与用户交互，那么就不得不对控制台使用字符编码机制与CharSet.defaultCharset()报告的平台编码机制有所差异的可能性。 Windows的美国版本的命令行Shell使用的是陈旧的IBM437编码机制。Charset.defaultCharset()方法将返回Windows-1252字符集，它与IBM437完全不同。在Windows-1252中有欧元符号，但是在IBM437中没有：
+
+```java
+System.out.println("100€");
+// 100?
+```
+
+Windows中可以通过chcp命令切换控制台字符的编码机制：
+
+```java
+# 切换为Windos-1252编码页
+chcp 1252
+# 切换为UTF-8
+chcp 65001
+```
+
+这命令不足以让Java程序在控制台中使用UTF-8，还必须使用非官方的file.encoding系统属性来设置平台的编码机制：
+
+```java
+java -Dfile.encoding=UTF-8 MyProg
+```
+
+### 日志文件
+
+java.util.logging库的日志消息，会使用控制台编码机制书写（上一节）。 但文件中的日志消息会使用FileHandler来处理，它在默认情况下会使用平台编码机制。 修改日志管理器的设置：
+
+```java
+java.util.logging.FileHandler.encoding=UTF-8
+```
+
+### UTF-8字节顺序标志
+
+UTF-8是一种单字节编码机制，因此不需要指定字节的顺序。如果一个文件以0xEF 0xBB 0xBF（U+FEFF的UTF-8编码，字节顺序标志）开头，那么这就是一个强烈的暗示，表示该文件使用了UTF-8。正因为这个原因，Unicode标准鼓励这种实践方式。任何读入器都被认为会丢弃最前面的字节顺序标志。 还有一个美中不足的瑕疵。Oracle的Java实现很固执地因潜在的兼容性问题而拒绝遵循Unicode标准。做为程序员，必须去执行平台并不会执行的操作。在读入文件时，如果开头碰到了U+FEFF，那么就忽略它。 JDK的实现没有遵循这项建议，在想javac编译器传递有效的以字节顺序标志开头的UTF-8源文件时，编译会以产生错误消息“illegal character:\65279”而失败。
+
+### 源文件的字符编码
+
+作为程序员，要牢记需要与Java编译器交互，这种交互需要通过本地系统的工具完成。 比如使用中文版的记事本写Java源代码文件。但这样写出来的源码不是随处可用的，因为它们使用的是本地的字符编码（GB或Big5）。只有编译后的class文件才能随处使用。因为它们会自动使用“modifiedUTF-8”编码来处理标识符和字符串。这意味着即使在程序编译和运行时，依然有3中字符编码参与其中： 1.源文件：本地编码 2.类文件：modified UTF-8 3.虚拟机：UTF-16 可以用-encoding标记来设定源文件的字符编码：
+
+```java
+javac -encoding UTF-8 Myfile.java
+```
+
+为了使源文件到处使用，必须使用普遍的ASCII编码。就是说，需要将所有非ASCII字符转换成等价的Unicode编码。比如，不要使用字符“Häuser”，应该使用“H\u0084user”。JDK包含了一个native2ascii，可以用它将本地字符编码转换成普通的ASCII。这个工具直接将每一个非ASCII字符替换为一个\u加四位十六进制的Unicode值。使用native2ascii时，需要提供输入和输出文件的名字：
+
+```java
+native2ascii Myfile.java Myfile.temp
+```
+
+可以使用-reverse进行逆向转换：
+
+```java
+native2ascii -reverse Myfile.temp Myfile.java
+```
+
+可以使用-encoding选项知道另一种编码：
+
+```java
+native2ascii -encoding UTF-8 Myfile.java Myfile.temp
+```
+
+
+一个本地化程序，会有大量的消息字符串、按钮标签和其他的需要被翻译，为了能够灵活地完成这项任务，会希望在外部定义消息字符串，通常称之为资源（resource）。翻译人员不需要接触程序源代码就可以编辑资源文件。 在Java中，使用属性文件来设定字符串资源，并为其他类型的资源实现相应的类。
+
+### 定位资源包
+
+本地化一个应用时，会产生很多资源包（resource bundle）。 统一的命名规则，使用 包名_语言_国家（包名_de_DE） 来命名所有和国家相关的资源。 使用 包名_语言（包名_de） 来命名所有和国家相关的资源。作为后备，可以把默认资源放在一个没有后缀的文件中。
+
+可以使用下面代码加载一个包：
+
+```java
+ResourceBundle currentResources = ResourceBundle.getBundle(bundleName, currentLocale);
+```
+
+getBundle方法试图加载匹配当前locale定义的语言和国家的包。如果失败，通过依次放弃国家和语言来继续查找，然后同样的查找被应用于默认的locale，最后，如果还不行就去查看默认的包文件，如果失败，就抛出一个MissingResourceException。 一旦getBundle方法定位了一个包。比如，包名_de_DE，它还会继续查找 包名_de 和 包名 这两个包。如果这些包也存在，它们在资源层次中就成为了 包名_de_DE的父包。以后要查找一个资源时，如果当钱包没有，就会去查找父包。
+
+### 属性文件
+
+MyProgramStrings.properties，每行存放一个键-值对的文本文件:
+
+```java
+computeButton=Rechnen
+colorName=black
+defaultPaperSize=210×297
+```
+
+然后： MyProgramStrings.properties MyProgramStrings_en.properties MyProgramStrings_ch.properties 然后直接加载包：
+
+```java
+ResourceBundle currentResources = ResourceBundle.getBundle("MyProgramStrings", Locale.getDefault());
+// 查找具体字符串字符串
+String conputeButtonLabel = currentResources.getString("computeButton");
+```
+
+存储属性的文件都是ASCII文件。如果需要将Unicode字符放到属性文件中，那么请用\uxxxx编码方式进行编码。比如“colorName=Grün”，可以使用“colorName=Gr\uooFCn”。可以使用native2ascii工具来产生这些文件。
+
+### 包类
+
+为了提供字符串以外的资源，需要定义类，它必须扩展自ResourceBundle类。应该使用标准的命名规则来命名类： MyProgramResources.java MyProgramResources_en.java MyProgramResources_ch.java 可以使用与加载属性文件相同的getBundle方法来加载这个类：
+
+```java
+ResourceBundle bundle = ResourceBundle.getBundle("MyProgramResources", Locale.getDefault());
+```
+
+每一个资源包类都实现一个查询表，需要为每一个想定位的设置都提供一个关键字字符串，使用这个字符串来提取相应的设置：
+
+```java
+Color backgroudColor = (Color) bundle.getObject("backgroundColor");
+double[] paperSize = (double[]) bundle.getObject("defaultPaperSize");
+```
+
+实现资源包类的最简单方法是继承ListResourceBundle类。ListResourceBundle让你把所有资源都放到一个对象数组中并提供查找功能： bunleName_language_country.java
+
+```java
+public class MyProgramResources_de extends ListResourceBundle {
+    private static final Object[][] contents = {
+            {"backgroundColor", Color.black},
+            {"defaultPaperSize", new double[]{210, 297}}
+    };
+    @Override
+    protected Object[][] getContents() {
+        return contents;
+    }
+}
+public class MyProgramResources_en_US extends ListResourceBundle {
+    private static final Object[][] contents = {
+            {"backgroundColor", Color.blue},
+            {"defaultPaperSize", new double[]{216, 279}}
+    };
+    @Override
+    protected Object[][] getContents() {
+        return contents;
+    }
+}
+```
+
+或者资源类包扩展ResourceBundle类。然后需要实现两个方法，一个是枚举所有键，二是用给定的键查找相应的值： Object handleGetObject(String key) Enumeration&lt; String &gt; getKeys() ResourceBundle类的getObjecy方法会调用handleGetObject方法。
+
