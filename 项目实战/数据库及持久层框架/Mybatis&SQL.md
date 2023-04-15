@@ -57,6 +57,13 @@ logback-spring.xml：
 
 
 
+### Mybatis if 标签中使用字符判断时
+
+```xml
+<if test="create_name == '无'.toString()">
+</if>
+```
+
 
 
 

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>水印</title>
+    <style>
+        #watermark div {
+            color: rgba(0 , 0, 255, .1);
+            position: absolute;
+            font-size: 18px;
+            white-space: nowrap;
+            transform: rotate(-30deg);
+            -ms-transform: rotate(-30deg);/* IE 9 */
+            -moz-transform: rotate(-30deg);/* Firefox */
+            -webkit-transform: rotate(-30deg);/* Safari 和 Chrome */
+            -o-transform: rotate(-30deg);
+        }
+    </style>
+    <script tyle="text/javascript">
+        window.onload=function() {
+            var watermark = document.querySelector('#watermark');
+            var div;
+            var top, left;
+            for (var i = 0; i < 10; ++i) {
+                for (var j = 0; j < 10; ++j) {
+                    div = document.createElement('div');
+                    div.innerText = '花开不合阳春暮';
+                    top = i * 100 + 'px';
+                    left = 500 * j - 50 - (i % 2 === 0 ? 250 : 0) + 'px';
+                    div.style.setProperty('top', top);
+                    div.style.setProperty('left', left);
+                    watermark.appendChild(div);
+                }
+            }
+        }
+    </script>
+</head>
+<body>
+<div id="watermark" style="position: fixed;top: 0;left: 0;right: 0;bottom: 0;background: transparent;pointer-events: none;z-index: 9999999">
+
+</div>
+</body>
+</html>
