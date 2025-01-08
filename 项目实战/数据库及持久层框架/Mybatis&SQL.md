@@ -1,25 +1,20 @@
-### 解决 Mapper 文件出现黄色提示
+# 1 解决 Mapper 文件出现黄色提示
 
-1. 配置 Database
+## 1.1 配置 Database
 
-<img src="Mybatis&SQL.assets/image-20210810181346424.png" alt="image-20210810181346424" style="zoom: 80%;" />
+![link](https://note.youdao.com/yws/api/personal/file/WEB336e9fcc8be233be90dafd9ea7a34529?method=getImage\&version=1242\&cstk=oo4z5tJt)
 
-2. 配置 SQL 方言
+## 1.2 配置 SQL 方言
 
-<img src="Mybatis&SQL.assets/image-20210810181758449.png" alt="image-20210810181758449" style="zoom: 80%;" />
+![link](https://note.youdao.com/yws/api/personal/file/WEB8aaa4d8b47b477b152e033fcf0c6cb5a?method=getImage\&version=1249\&cstk=oo4z5tJt)
 
+# 2 Mapper 文件 if 数值型不用写 != ''
 
+通过源码了解到，mybatis 在预编译 sql 时，使用 OGNL 表达式来解析 if 标签，对于 Integer 类型属性，在判断==不等于==时，例如 age != ''，OGNL 会返回 '' 的长度，源码：(s.length() == 0) ? 0.0 : Double.parseDouble(s)，因此表达式age != ''被当做==age != 0==来判断，所以当age为0时，if条件判断不通过。
 
-### Mapper 文件 if 数值型不用写 != ''
-
-通过源码了解到，mybatis在预编译sql时，使用OGNL表达式来解析if标签，对于Integer类型属性，在判断`不等于''`时，例如age != ''，OGNL会返回''的长度，源码：(s.length() == 0) ? 0.0 : Double.parseDouble( s )，因此表达式age != ''被当做`age != 0`来判断，所以当age为0时，if条件判断不通过。
-
-
-
-### Mybatis配置日志打印
+# 3 Mybatis 配置日志打印
 
 (SSM) mybatis-config.xml:
-
 
 ```xml
 <settings>
@@ -28,9 +23,9 @@
 </settings>
 ```
 
-| 设置名  | 描述                                                | 有效值                                                       | 默认值  |
-| ------- | --------------------------------------------------- | ------------------------------------------------------------ | ------- |
-| logImpl | 指定 MyBatis 所用日志的具体实现，未指定时将自动查找 | SLF4J、LOG4J、LOG4J2、JDK_LOGGING、COMMONS_LOGGING、STDOUT_LOGGING、NO_LOGGING | Not set |
+| 设置名     | 描述                             | 有效值                                                                          | 默认值     |
+| ------- | ------------------------------ | ---------------------------------------------------------------------------- | ------- |
+| logImpl | 指定 MyBatis 所用日志的具体实现，未指定时将自动查找 | SLF4J、LOG4J、LOG4J2、JDK\_LOGGING、COMMONS\_LOGGING、STDOUT\_LOGGING、NO\_LOGGING | Not set |
 
 (Spring Boot)application.yml：
 
@@ -55,20 +50,10 @@ logback-spring.xml：
 </springProfile>
 ```
 
-
-
-### Mybatis if 标签中使用字符判断时
+# 4 Mybatis if 标签中使用字符判断时
 
 ```xml
 <if test="create_name == '无'.toString()">
 </if>
 ```
-
-
-
-
-
-
-
-
 

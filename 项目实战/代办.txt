@@ -1,0 +1,23 @@
+委外环境部署
+
+注解实现 POI 导入导出Excel
+
+
+objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+
+aop入参打印去除个别字段
+
+@JsonFormat(timezone = "GMT+8", pattern = "yyyy-MM-dd HH:mm:ss") @DateFOr 区别
+
+
+StopWatch
+
+
+掩码工具类
+
+
+
+// 按优先级排序
+ticketUsers.sort(Comparator.comparing(TicketUser::getPriority, Comparator.nullsLast(Comparator.reverseOrder())));
+ticketUsers.sort(Comparator.comparing(TicketUser::getPriority, Comparator.nullsLast(Comparator.naturalOrder())));
