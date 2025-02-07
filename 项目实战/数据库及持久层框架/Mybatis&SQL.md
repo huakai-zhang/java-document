@@ -2,11 +2,11 @@
 
 ## 1.1 配置 Database
 
-![link](https://note.youdao.com/yws/api/personal/file/WEB336e9fcc8be233be90dafd9ea7a34529?method=getImage\&version=1242\&cstk=oo4z5tJt)
+<img src="Mybatis&SQL.assets/image-20210810181346424.png"/>
 
 ## 1.2 配置 SQL 方言
 
-![link](https://note.youdao.com/yws/api/personal/file/WEB8aaa4d8b47b477b152e033fcf0c6cb5a?method=getImage\&version=1249\&cstk=oo4z5tJt)
+<img src="Mybatis&SQL.assets/image-20210810181758449.png"/>
 
 # 2 Mapper 文件 if 数值型不用写 != ''
 

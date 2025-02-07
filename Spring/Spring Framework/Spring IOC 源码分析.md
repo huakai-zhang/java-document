@@ -1526,6 +1526,25 @@ private final Map<String, BeanDefinition> beanDefinitionMap = new ConcurrentHash
 
 ## 4.2 定位 Bean 扫描路径
 
+> SpringBoot 应用在启动过程中，会调用 createApplicationContext() 方法，在该方法中通过 ‌WebApplicationType 枚举指定使用的 ApplicationContext 类型。
+>
+> WebApplicationType 有三种类型：
+>
+> NONE‌：应用程序不应作为Web应用程序运行，也不会启动嵌入式Web服务器
+> ‌SERVLET‌：应用程序应作为基于Servlet的Web应用程序运行，并启动嵌入式Servlet Web服务器
+> ‌REACTIVE‌：应用程序应作为响应式Web应用程序运行，并启动嵌入式响应式Web服务器。响应式应用程序是一种现代的、异步的、非阻塞的方式来处理高并发请求‌
+>
+> WebApplicationType的判断逻辑基于类路径上的类是否存在。具体来说：
+>
+> ‌REACTIVE‌：需要类`org.springframework.web.reactive.DispatcherHandler`，并且不含`org.glassfish.jersey.servlet.ServletContainer`和`org.springframework.web.servlet.DispatcherServlet`
+> ‌NONE‌：不含类`javax.servlet.Servlet`或`org.springframework.web.context.ConfigurableWebApplicationContext`，使用 `AnnotationConfigApplicationContext` 作为容器
+> ‌SERVLET‌：需要包含类`javax.servlet.Servlet`和`org.springframework.web.context.ConfigurableWebApplicationContext‌`，使用`AnnotationConfigWebApplicationContex` 作为容器
+>
+> 应用场景：
+> ‌NONE‌：适用于那些不需要Web服务的应用程序，例如后台任务处理、批处理等。
+> ‌SERVLET‌：适用于传统的基于Servlet的Web应用程序，适用于大多数Web应用场景。
+> ‌REACTIVE‌：适用于需要高并发处理的应用程序，如实时数据分析、高性能Web服务等。
+
 在 Spring 中管理注解 Bean 定义的容器有两个 ： AnnotationConfigApplicationContext 和 AnnotationConfigWebApplicationContex。这两个类是专门处理 Spring 注解方式配置的容器，直接依赖于注解作为容器配置信息来源的 IOC 容器。AnnotationConfigWebApplicationContext 是 AnnotationConfigApplicationContext 的 Web 版本，两者的用法以及对注解的处理方式几乎没有差别。现在我们以 AnnotationConfigApplicationContext 为例看看它的源码：
 
 ```java

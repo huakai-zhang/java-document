@@ -15,7 +15,7 @@ MVC的核心思想是业务数据抽取业务数据呈现相分离 MVC，Model-V
 
 引用 Spring in Action 上的一张图来说明了 SpringMVC 的核心组件和请求处理流程：  
 
-![img](Spring MVC 设计原理.assets/20200401103111107.png) 
+<img src="Spring MVC 设计原理.assets/20200401103111107.png" /> 
 
 (1) `DispatcherServlet`（实现``Awaer``接口，能够得到 ApplicationContext）是 SpringMVC 中的前端控制器(Front Controller)，负责接收 request 并将 request 转发给对应的处理组件，客户端（浏览器）发送请求，直接请求到 `DispatcherServlet`
 
@@ -75,6 +75,7 @@ protected void initHandlerMethods() {
                logger.debug("Could not resolve target class for bean with name '" + beanName + "'", ex);
             }
          }
+         // 判断是Handler的，去发现handler方法
          if (beanType != null && isHandler(beanType)) {
             detectHandlerMethods(beanName);
          }
@@ -82,6 +83,7 @@ protected void initHandlerMethods() {
    }
    handlerMethodsInitialized(getHandlerMethods());
 }
+
 // RequestMappingHandlerMapping 实现
 // 是否是含有 Controller 与 RequestMapping 注解的 bean
 protected boolean isHandler(Class<?> beanType) {
@@ -97,6 +99,7 @@ protected void detectHandlerMethods(final Object handler) {
 		Map<Method, T> methods = MethodIntrospector.selectMethods(userType,
 				(MethodIntrospector.MetadataLookup<T>) method -> {
 					try {
+                        // 提供处理程序方法的映射，将类和方法上的 @RequestMapping 注解结合 combine
 						return getMappingForMethod(method, userType);
 					}
 					catch (Throwable ex) {
@@ -110,6 +113,7 @@ protected void detectHandlerMethods(final Object handler) {
 		for (Map.Entry<Method, T> entry : methods.entrySet()) {
 			Method invocableMethod = AopUtils.selectInvocableMethod(entry.getKey(), userType);
 			T mapping = entry.getValue();
+            // 注册处理器方法
 			registerHandlerMethod(handler, invocableMethod, mapping);
 		}
 	}
@@ -127,8 +131,10 @@ private final MultiValueMap<String, T> urlLookup = new LinkedMultiValueMap<>();
 public void register(T mapping, Object handler, Method method) {
    this.readWriteLock.writeLock().lock();
    try {
+      // 构建 HandlerMethod
       HandlerMethod handlerMethod = createHandlerMethod(handler, method);
-      assertUniqueMethodMapping(handlerMethod, mapping);
+      // 验证 HandlerMethod 与映射地址的唯一性
+       assertUniqueMethodMapping(handlerMethod, mapping);
       this.mappingLookup.put(mapping, handlerMethod);
       List<String> directUrls = getDirectUrls(mapping);
       for (String url : directUrls) {
@@ -149,13 +155,39 @@ public void register(T mapping, Object handler, Method method) {
       this.readWriteLock.writeLock().unlock();
    }
 }
-// HandlerMethod 封装了 handler.class、方法和参数
-public HandlerMethod(String beanName, BeanFactory beanFactory, Method method) {
-	// ...
-	this.beanType = ClassUtils.getUserClass(beanType);
-	this.method = method;
-	this.bridgedMethod = BridgeMethodResolver.findBridgedMethod(method);
-	this.parameters = initMethodParameters();
+
+private void assertUniqueMethodMapping(HandlerMethod newHandlerMethod, T mapping) {
+    HanlerMethod hanlerMethod = this.mappingLookup.get(mapping);
+    // 如果对应映射的处理方法已存在，且和当前不一致则报错，HandlerMethod 重写了 equals 方法
+    if (handlerMethod != null && !handlerMethod.equals(newHandlerMethod)) {
+        throw new IllegalStateException(
+        	"Ambiguous mapping. Cannot map '" + newHandlerMethod.getBean() + "' method \n" +
+            	newHandlerMethod + "\nto " + mappeing + ": There is already '" +
+            	handlerMethod.getBean() + "' bean method\n" + handlerMethod + " mapped.");
+    }
+}
+
+public class HandlerMethod {
+	// HandlerMethod 封装了 handler.class、方法和参数
+	public HandlerMethod(String beanName, BeanFactory beanFactory, Method method) {
+		// ...
+		this.beanType = ClassUtils.getUserClass(beanType);
+		this.method = method;
+		this.bridgedMethod = BridgeMethodResolver.findBridgedMethod(method);
+		this.parameters = initMethodParameters();
+	}
+    
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof HandlerMethod)) {
+            return false;
+        }
+        HandlerMethod otherMethod = (HandlerMethod) other;
+        return (this.bean.equals(otherMethod.bean) && this.method.equals(otherMethod.method));
+    }
 }
 ```
 
